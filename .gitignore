@@ -11,3 +11,6 @@ venv/
 # Real candidate data (PII) - never commit
 /Sample Data/
 *.xlsx
+
+# Local data backups (PII)
+/backups/
