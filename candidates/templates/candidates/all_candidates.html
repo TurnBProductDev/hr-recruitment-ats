@@ -1,0 +1,48 @@
+{% extends "hr_base.html" %}
+{% load candidates_extras %}
+{% block title %}All Candidates{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0">All Candidates <span class="text-muted small">({{ candidates|length }})</span></h3>
+  <a href="{% url 'candidate_repository' %}" class="btn btn-sm btn-outline-app">
+    <i class="bi bi-columns-gap"></i> Back to Repository
+  </a>
+</div>
+
+<div class="card app-card p-3">
+  <div class="table-responsive">
+    <table id="allCandidatesTable" class="table table-hover align-middle w-100">
+      <thead>
+        <tr>
+          <th>Name</th><th>Email</th><th>Job</th><th>Status</th><th>View</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in candidates %}
+        <tr>
+          <td>{{ c.full_name }}</td>
+          <td>{{ c.email }}</td>
+          <td>{{ c.job.title|default:"-" }}</td>
+          <td><span class="{{ c.status|badge_class }}">{{ c.get_status_display }}</span></td>
+          <td><a href="{% url 'candidate_timeline' c.id %}" class="btn btn-sm btn-outline-app">View</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(function () {
+  $('#allCandidatesTable').DataTable({
+    order: [[0, 'asc']],
+    dom: 'Bfrtip',
+    // Export every column except the last (the View button) to Excel
+    buttons: [{ extend: 'excelHtml5', title: 'All Candidates', exportOptions: { columns: [0, 1, 2, 3] } }],
+    pageLength: 25
+  });
+});
+</script>
+{% endblock %}

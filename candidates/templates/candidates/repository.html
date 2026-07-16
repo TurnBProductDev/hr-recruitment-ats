@@ -7,7 +7,10 @@
 
   {# Heading on the left; vacancy + scope on the top-right, staying selected across tabs #}
   <div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-3">
-    <h3 class="mb-0">Candidate Repository</h3>
+    <h3 class="mb-0">
+      <a href="{% url 'candidate_all' %}" class="text-decoration-none" style="color: inherit;"
+         title="Open the full list of all candidates (downloadable to Excel)">Candidate Repository <i class="bi bi-box-arrow-up-right small"></i></a>
+    </h3>
     <div class="d-flex align-items-end gap-3">
       <div>
         <label class="form-label small text-muted mb-0">Job Code</label>
@@ -32,6 +35,19 @@
                name="scope" value="open" {% if scope == 'open' %}checked{% endif %} onchange="this.form.submit()">
         <label class="form-check-label small text-muted" for="scopeSwitch">Open vacancies only</label>
       </div>
+      {% if tab == 'open' %}
+      <div class="form-check form-switch mb-1">
+        <input type="checkbox" class="form-check-input" role="switch" id="hideReapplySwitch"
+               name="hide_reapply" value="1" {% if request.GET.hide_reapply %}checked{% endif %} onchange="this.form.submit()">
+        <label class="form-check-label small text-muted" for="hideReapplySwitch">Hide reapply</label>
+      </div>
+      {% elif tab == 'shortlisted' %}
+      <div class="form-check form-switch mb-1">
+        <input type="checkbox" class="form-check-input" role="switch" id="hideCalledSwitch"
+               name="hide_called" value="1" {% if request.GET.hide_called %}checked{% endif %} onchange="this.form.submit()">
+        <label class="form-check-label small text-muted" for="hideCalledSwitch">Hide already-called</label>
+      </div>
+      {% endif %}
     </div>
   </div>
 
@@ -105,6 +121,7 @@
           <td>{{ c.last_action_at|date:"d M Y"|default:"-" }}</td>
           <td><span class="{{ c.status|badge_class }}">{{ c.get_status_display }}</span>
             {% if c.reapply %}<span class="badge-dup ms-1">Reapply</span>{% endif %}
+            {% if c.called %}<span class="badge-dup ms-1" title="Already called — Unable to connect / Call back logged"><i class="bi bi-telephone-fill"></i></span>{% endif %}
             {% if c.is_blacklisted and c.status != 'BLACKLISTED' %}<span class="badge-status badge-blacklisted ms-1">Blacklisted</span>{% endif %}</td>
           <td class="text-nowrap">
             <a href="{% url 'candidate_timeline' c.id %}" class="btn btn-sm btn-outline-app">View</a>

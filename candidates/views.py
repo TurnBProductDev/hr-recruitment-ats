@@ -21,7 +21,7 @@ from .forms import (
     EducationFormSet,
     ExperienceFormSet,
 )
-from .models import Candidate, CandidateStatusHistory, Note
+from .models import Candidate, CandidateStatusHistory, CommunicationLog, Note
 from .permissions import ANY_STAFF, HIRING_MANAGER, HR_ADMIN, RECRUITER, GroupRequiredMixin
 
 
@@ -137,10 +137,16 @@ class CandidateRepositoryListView(GroupRequiredMixin, ListView):
                           .values('scheduled_date')[:1])
         # 'reapply' = the same email exists on another candidate record
         dup = Candidate.objects.filter(email=OuterRef('email')).exclude(pk=OuterRef('pk'))
+        # 'called' = a phone call was already logged with an inconclusive outcome
+        # (Unable to connect / Call back), so the candidate isn't a fresh, un-called one
+        called = CommunicationLog.objects.filter(
+            candidate=OuterRef('pk'), channel=CommunicationLog.Channel.PHONE,
+            outcome__in=[CommunicationLog.Outcome.UNABLE, CommunicationLog.Outcome.CALLBACK])
         qs = (Candidate.objects.select_related('job')
               .annotate(last_action_at=Subquery(last_action),
                         interview_at=Subquery(next_interview),
-                        reapply=Exists(dup)))
+                        reapply=Exists(dup),
+                        called=Exists(called)))
 
         # A "flow" link (from the dashboard Overview) filters by a derived stage
         # set and overrides the normal current-status tab filter.
@@ -178,6 +184,12 @@ class CandidateRepositoryListView(GroupRequiredMixin, ListView):
         if q:
             qs = qs.filter(Q(full_name__icontains=q) | Q(email__icontains=q))
 
+        # Tab-specific switches: hide reapplicants (Open list) / hide already-called (Shortlisted)
+        if self.request.GET.get('hide_reapply'):
+            qs = qs.filter(reapply=False)
+        if self.request.GET.get('hide_called'):
+            qs = qs.filter(called=False)
+
         return qs
 
     def get_context_data(self, **kwargs):
@@ -196,12 +208,26 @@ class CandidateRepositoryListView(GroupRequiredMixin, ListView):
         ctx['sources'] = (Candidate.objects.exclude(source__isnull=True).exclude(source='')
                           .values_list('source', flat=True).distinct().order_by('source'))
         # every current filter except the tab, so switching tabs keeps the vacancy/scope/search
+        # (the tab-specific switches are dropped so they reset when you leave their tab)
         params = self.request.GET.copy()
-        params.pop('tab', None)
+        for key in ('tab', 'hide_reapply', 'hide_called'):
+            params.pop(key, None)
         ctx['preserved_qs'] = params.urlencode()
         u = self.request.user
         ctx['is_hr_admin'] = u.is_superuser or u.groups.filter(name=HR_ADMIN).exists()
         return ctx
+
+
+class AllCandidatesListView(GroupRequiredMixin, ListView):
+    """Flat, full list of every candidate — Name, Email, Job, Status, View —
+    reached from the 'Candidate Repository' heading and exportable to Excel."""
+    model = Candidate
+    template_name = 'candidates/all_candidates.html'
+    context_object_name = 'candidates'
+    allowed_groups = ANY_STAFF
+
+    def get_queryset(self):
+        return Candidate.objects.select_related('job').order_by('full_name')
 
 
 class CandidateTimelineView(GroupRequiredMixin, DetailView):

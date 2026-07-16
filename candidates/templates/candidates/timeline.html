@@ -228,5 +228,30 @@ document.querySelectorAll('.js-autosave').forEach(function (form) {
   form.addEventListener('input', show);
   form.addEventListener('change', show);
 });
+
+// Communication Log: show only the outcomes that make sense for the chosen channel.
+// Phone -> Unable to connect / Call back / Attended;  Interview -> Attended / Not turned up.
+(function () {
+  var channel = document.getElementById('id_channel');
+  var outcome = document.getElementById('id_outcome');
+  if (!channel || !outcome) return;
+  var MAP = {
+    'PHONE':     [['UNABLE', 'Unable to connect'], ['CALLBACK', 'Call back'], ['ATTENDED', 'Attended']],
+    'INTERVIEW': [['ATTENDED', 'Attended'], ['NOT_TURNED_UP', 'Not turned up']]
+  };
+  function rebuild() {
+    var prev = outcome.value;
+    outcome.innerHTML = '<option value="">— Outcome —</option>';
+    (MAP[channel.value] || []).forEach(function (o) {
+      var el = document.createElement('option');
+      el.value = o[0];
+      el.textContent = o[1];
+      if (o[0] === prev) el.selected = true;
+      outcome.appendChild(el);
+    });
+  }
+  channel.addEventListener('change', rebuild);
+  rebuild();
+})();
 </script>
 {% endblock %}
