@@ -73,7 +73,8 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
         unfit = fc('unfit')
         s_after_call, unable = fc('shortlisted_after_call'), fc('unable_to_connect')
         yet_call, rej_call = fc('call_pending'), fc('rejected_after_call')
-        to_recall, called_pending = fc('to_recall'), fc('called_pending')
+        to_recall, call_dp = fc('to_recall'), fc('call_decision_pending')
+        r1_dp, r2_dp = fc('r1_decision_pending'), fc('r2_decision_pending')
         r1_cleared, r1_sched, r1_ns, r1_yet, rej_r1 = (
             fc('r1_cleared'), fc('r1_scheduled'), fc('r1_no_show'), fc('r1_yet'), fc('rejected_after_round1'))
         r2_cleared, r2_sched, r2_ns, r2_yet, rej_r2 = (
@@ -93,15 +94,17 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
              'cleared': ('Shortlisted After Call', s_after_call, s_after_call + rej_call, 'shortlisted_after_call'),
              'drops': [('Unable to Connect', unable, 'unable_to_connect'),
                        ('To Re-call', to_recall, 'to_recall'),
-                       ('Called, Pending', called_pending, 'called_pending')]},
+                       ('Decision Pending', call_dp, 'call_decision_pending')]},
             {'name': 'Round 1',
              'pending': ('Yet to Schedule', r1_yet, 'r1_yet'),
              'cleared': ('Round 1 Cleared', r1_cleared, r1_cleared + rej_r1, 'r1_cleared'),
-             'drops': [('Scheduled', r1_sched, 'r1_scheduled'), ('Not Turned Up', r1_ns, 'r1_no_show')]},
+             'drops': [('Scheduled', r1_sched, 'r1_scheduled'), ('Not Turned Up', r1_ns, 'r1_no_show'),
+                       ('Decision Pending', r1_dp, 'r1_decision_pending')]},
             {'name': 'Round 2',
              'pending': ('Yet to Schedule', r2_yet, 'r2_yet'),
              'cleared': ('Round 2 Cleared', r2_cleared, r2_cleared + rej_r2, 'r2_cleared'),
-             'drops': [('Scheduled', r2_sched, 'r2_scheduled'), ('Not Turned Up', r2_ns, 'r2_no_show')]},
+             'drops': [('Scheduled', r2_sched, 'r2_scheduled'), ('Not Turned Up', r2_ns, 'r2_no_show'),
+                       ('Decision Pending', r2_dp, 'r2_decision_pending')]},
             {'name': 'Final Decision',
              'pending': ('On Hold', on_hold, 'on_hold'),
              'cleared': ('Hired', hired, hired + rej_r2 + rej_final, 'hired'),

@@ -7,6 +7,7 @@ both places guarantees the dashboard count and the drill-down list always match.
 having cleared a stage even if they were later rejected/hired (funnel view).
 """
 from django.db.models import Q
+from django.utils import timezone
 
 from candidates.models import Candidate, CommunicationLog
 from interviews.models import Interview
@@ -23,8 +24,28 @@ NON_R1 = [t for t, _ in IV.RoundType.choices if t != R1]
 TERMINAL = [S.REJECTED, S.BLACKLISTED]
 
 
+COMPLETED = IV.Status.COMPLETED
+PENDING = IV.Result.PENDING
+
+
 def _reached(stage):
     return Q(history__new_status=stage)
+
+
+def _decision_pending(round_types):
+    """Interviews of `round_types` whose outcome was never recorded: either marked
+    completed with no pass/fail, or the date has passed and it still sits as
+    scheduled. These are the 'we forgot to mark an action' cases."""
+    rt = {'interviews__round_type__in': round_types}
+    return (Q(**rt, interviews__status=COMPLETED, interviews__result=PENDING)
+            | Q(**rt, interviews__status__in=[SCHED, RESCHED], interviews__result=PENDING,
+                interviews__scheduled_date__lt=timezone.now()))
+
+
+def _upcoming(round_types):
+    """Still-to-happen interviews (scheduled and not yet past)."""
+    return Q(interviews__round_type__in=round_types, interviews__status__in=[SCHED, RESCHED],
+             interviews__scheduled_date__gte=timezone.now())
 
 
 def flow_filter(qs, flow):
@@ -53,8 +74,8 @@ def flow_filter(qs, flow):
         'to_recall': (qs.filter(status=S.SHORTLISTED, communication_logs__outcome=OUT.UNABLE)
                       .exclude(communication_logs__outcome__in=[OUT.CALLBACK, OUT.ATTENDED])),
         # Reached on the call but no decision taken yet (never moved on to Round 1)
-        'called_pending': (qs.filter(status=S.SHORTLISTED, communication_logs__outcome=OUT.ATTENDED)
-                           .exclude(communication_logs__outcome=OUT.CALLBACK)),
+        'call_decision_pending': (qs.filter(status=S.SHORTLISTED, communication_logs__outcome=OUT.ATTENDED)
+                                  .exclude(communication_logs__outcome=OUT.CALLBACK)),
         # Rejected after call = terminal, reached shortlist, never reached Round 1
         'rejected_after_call': qs.filter(status__in=TERMINAL).filter(_reached(S.SHORTLISTED)).exclude(_reached(S.ROUND1)),
 
@@ -62,16 +83,18 @@ def flow_filter(qs, flow):
         'r1_yet': qs.filter(status=S.ROUND1).exclude(interviews__round_type=R1),
         # Cleared R1 = a R1 interview passed OR ever reached the Interview (R2) stage
         'r1_cleared': qs.filter(Q(interviews__round_type=R1, interviews__result=PASS) | _reached(S.INTERVIEW)),
-        'r1_scheduled': qs.filter(interviews__round_type=R1, interviews__status__in=[SCHED, RESCHED]),
+        'r1_scheduled': qs.filter(_upcoming([R1])),
         'r1_no_show': qs.filter(interviews__round_type=R1, interviews__status=CANC),
+        'r1_decision_pending': qs.filter(status=S.ROUND1).filter(_decision_pending([R1])),
         'rejected_after_round1': qs.filter(status__in=TERMINAL).filter(_reached(S.ROUND1)).exclude(_reached(S.INTERVIEW)),
 
         # ----- Round 2 (the final interview round) -----
         'r2_yet': qs.filter(status=S.INTERVIEW).exclude(interviews__round_type__in=NON_R1),
         'r2_cleared': qs.filter(Q(interviews__round_type__in=NON_R1, interviews__result=PASS)
                                 | _reached(S.FINAL_SELECTION) | _reached(S.HIRED)),
-        'r2_scheduled': qs.filter(interviews__round_type__in=NON_R1, interviews__status__in=[SCHED, RESCHED]),
+        'r2_scheduled': qs.filter(_upcoming(NON_R1)),
         'r2_no_show': qs.filter(interviews__round_type__in=NON_R1, interviews__status=CANC),
+        'r2_decision_pending': qs.filter(status=S.INTERVIEW).filter(_decision_pending(NON_R1)),
         'rejected_after_round2': qs.filter(status__in=TERMINAL).filter(_reached(S.INTERVIEW)).exclude(_reached(S.FINAL_SELECTION)),
 
         # ----- Final decision / Offer -----
