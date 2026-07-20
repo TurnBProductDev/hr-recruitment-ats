@@ -26,9 +26,14 @@
 .fnl-box { display: block; text-decoration: none; color: inherit; transition: transform .12s ease, box-shadow .12s ease; }
 .fnl-box:hover { transform: translateY(-2px); }
 
+/* Pending cards sit side by side so the big "cleared" card below starts at the
+   same height in every stage column. */
+.fnl-pendrow { display: flex; gap: 8px; align-items: stretch; }
+.fnl-pendrow > .fnl-box { flex: 1; min-width: 0; }
+
 .fnl-pending {
   background: #eaf5f5; border: 1px solid #cfe6e6; border-radius: 10px;
-  padding: 10px 8px; text-align: center;
+  padding: 10px 8px; text-align: center; height: 100%;
 }
 .fnl-pending .n { font-size: 1.5rem; font-weight: 700; color: #0a6b6b; line-height: 1.1; }
 .fnl-pending .t { font-size: .66rem; text-transform: uppercase; letter-spacing: .4px; color: #5f7373; }
@@ -158,15 +163,17 @@
         {% for stage in funnel %}
         <div class="fnl-col">
           <div class="fnl-stage">{{ stage.name }}</div>
-          <a class="fnl-box" href="{% url 'candidate_repository' %}?flow={{ stage.pending.2 }}{% if jobq %}&job={{ jobq }}{% endif %}">
-            <div class="fnl-pending"><div class="n">{{ stage.pending.1 }}</div><div class="t">{{ stage.pending.0 }}</div></div>
-          </a>
-          {% if stage.pending2 %}
-          {# secondary still-to-reach group, shown alongside the main pending card #}
-          <a class="fnl-box" style="margin-top:8px" href="{% url 'candidate_repository' %}?flow={{ stage.pending2.2 }}{% if jobq %}&job={{ jobq }}{% endif %}">
-            <div class="fnl-pending"><div class="n">{{ stage.pending2.1 }}</div><div class="t">{{ stage.pending2.0 }}</div></div>
-          </a>
-          {% endif %}
+          {# pending cards share one row, so every stage's big card stays aligned #}
+          <div class="fnl-pendrow">
+            <a class="fnl-box" href="{% url 'candidate_repository' %}?flow={{ stage.pending.2 }}{% if jobq %}&job={{ jobq }}{% endif %}">
+              <div class="fnl-pending"><div class="n">{{ stage.pending.1 }}</div><div class="t">{{ stage.pending.0 }}</div></div>
+            </a>
+            {% if stage.pending2 %}
+            <a class="fnl-box" href="{% url 'candidate_repository' %}?flow={{ stage.pending2.2 }}{% if jobq %}&job={{ jobq }}{% endif %}">
+              <div class="fnl-pending"><div class="n">{{ stage.pending2.1 }}</div><div class="t">{{ stage.pending2.0 }}</div></div>
+            </a>
+            {% endif %}
+          </div>
           <div class="fnl-link"></div>
           <a class="fnl-box" href="{% url 'candidate_repository' %}?flow={{ stage.cleared.3 }}{% if jobq %}&job={{ jobq }}{% endif %}">
             <div class="fnl-big">
