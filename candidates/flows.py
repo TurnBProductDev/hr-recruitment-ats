@@ -66,7 +66,10 @@ def flow_filter(qs, flow):
             Q(communication_logs__isnull=True) | Q(communication_logs__outcome=OUT.CALLBACK)),
         # Cleared the call = moved on to Round 1 (signalled by the status action)
         'shortlisted_after_call': qs.filter(_reached(S.ROUND1)),
-        'unable_to_connect': qs.filter(communication_logs__outcome=OUT.UNABLE),
+        # Logged "unable to connect" and still in play. Once rejected they drop out,
+        # since they are already counted in the stage's rejected/decided total.
+        'unable_to_connect': (qs.filter(communication_logs__outcome=OUT.UNABLE)
+                              .exclude(status__in=TERMINAL)),
         # Attempted but not reached: still shortlisted with an "Unable to connect"
         # logged and no callback promised or successful call. Without this they fall
         # out of 'call_pending' (which only counts un-attempted / callback) and

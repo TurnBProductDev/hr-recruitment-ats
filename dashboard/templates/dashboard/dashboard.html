@@ -161,6 +161,12 @@
           <a class="fnl-box" href="{% url 'candidate_repository' %}?flow={{ stage.pending.2 }}{% if jobq %}&job={{ jobq }}{% endif %}">
             <div class="fnl-pending"><div class="n">{{ stage.pending.1 }}</div><div class="t">{{ stage.pending.0 }}</div></div>
           </a>
+          {% if stage.pending2 %}
+          {# secondary still-to-reach group, shown alongside the main pending card #}
+          <a class="fnl-box" style="margin-top:8px" href="{% url 'candidate_repository' %}?flow={{ stage.pending2.2 }}{% if jobq %}&job={{ jobq }}{% endif %}">
+            <div class="fnl-pending"><div class="n">{{ stage.pending2.1 }}</div><div class="t">{{ stage.pending2.0 }}</div></div>
+          </a>
+          {% endif %}
           <div class="fnl-link"></div>
           <a class="fnl-box" href="{% url 'candidate_repository' %}?flow={{ stage.cleared.3 }}{% if jobq %}&job={{ jobq }}{% endif %}">
             <div class="fnl-big">

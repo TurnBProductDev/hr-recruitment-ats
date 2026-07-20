@@ -71,7 +71,7 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
 
         shortlisted = fc('ever_shortlisted')
         unfit = fc('unfit')
-        s_after_call = fc('shortlisted_after_call')
+        s_after_call, unable = fc('shortlisted_after_call'), fc('unable_to_connect')
         yet_call, rej_call = fc('call_pending'), fc('rejected_after_call')
         to_recall, call_dp = fc('to_recall'), fc('call_decision_pending')
         r1_dp, r2_dp = fc('r1_decision_pending'), fc('r2_decision_pending')
@@ -92,12 +92,12 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
             {'name': 'Call',
              'pending': ('Yet to Call', yet_call, 'call_pending'),
              'cleared': ('Shortlisted After Call', s_after_call, s_after_call + rej_call, 'shortlisted_after_call'),
-             # Every card here is disjoint: an "unable to connect" candidate shows up
-             # under To Re-call (still active) or Rejected After Call (closed) — never
-             # in two places, so the cards add up to the shortlisted total.
-             'drops': [('To Re-call', to_recall, 'to_recall'),
-                       ('Decision Pending', call_dp, 'call_decision_pending'),
-                       ('Rejected After Call', rej_call, 'rejected_after_call')]},
+             # To Re-call sits beside Yet to Call: both are still-to-reach candidates,
+             # kept separate so Yet to Call stays "never attempted". Rejected-after-call
+             # has no card of its own — it is already inside the "total" corner above.
+             'pending2': ('To Re-call', to_recall, 'to_recall'),
+             'drops': [('Decision Pending', call_dp, 'call_decision_pending'),
+                       ('Unable to Connect', unable, 'unable_to_connect')]},
             {'name': 'Round 1',
              'pending': ('Yet to Schedule', r1_yet, 'r1_yet'),
              'cleared': ('Round 1 Cleared', r1_cleared, r1_cleared + rej_r1, 'r1_cleared'),
