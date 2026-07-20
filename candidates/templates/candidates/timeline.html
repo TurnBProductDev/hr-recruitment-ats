@@ -190,6 +190,16 @@
 
     <div class="card app-card p-4">
       <h5 class="mb-3">Update Status</h5>
+      {% if last_status %}
+      <div class="mb-3 pb-2 border-bottom">
+        <strong>{{ last_status_label }}</strong>
+        {% if last_status.remarks %}<div class="small">{{ last_status.remarks }}</div>{% endif %}
+        <div class="small text-muted">
+          {{ last_status.performed_by|default:last_status.changed_by|default:"Unknown" }}
+          &middot; {{ last_status.changed_at|date:"d M Y H:i" }}
+        </div>
+      </div>
+      {% endif %}
       <form method="post" action="{% url 'candidate_set_status' candidate.pk %}" class="js-autosave">
         {% csrf_token %}
         <div class="row g-2">

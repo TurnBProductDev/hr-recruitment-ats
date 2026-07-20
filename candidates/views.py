@@ -285,6 +285,12 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
         events.sort(key=lambda e: e['when'], reverse=True)
         ctx['activity'] = events
 
+        # Most recent status change, shown above the Update Status form so HR can
+        # see the current state and who set it (history is ordered -changed_at)
+        last = ctx['history'].first()
+        ctx['last_status'] = last
+        ctx['last_status_label'] = labels.get(last.new_status, last.new_status) if last else ''
+
         u = self.request.user
         ctx['is_hr_admin'] = u.is_superuser or u.groups.filter(name=HR_ADMIN).exists()
         ctx['can_revert'] = ctx['is_hr_admin'] or u.groups.filter(name=RECRUITER).exists()
