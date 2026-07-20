@@ -46,6 +46,15 @@ def flow_filter(qs, flow):
         # Cleared the call = moved on to Round 1 (signalled by the status action)
         'shortlisted_after_call': qs.filter(_reached(S.ROUND1)),
         'unable_to_connect': qs.filter(communication_logs__outcome=OUT.UNABLE),
+        # Attempted but not reached: still shortlisted with an "Unable to connect"
+        # logged and no callback promised or successful call. Without this they fall
+        # out of 'call_pending' (which only counts un-attempted / callback) and
+        # disappear from the funnel altogether.
+        'to_recall': (qs.filter(status=S.SHORTLISTED, communication_logs__outcome=OUT.UNABLE)
+                      .exclude(communication_logs__outcome__in=[OUT.CALLBACK, OUT.ATTENDED])),
+        # Reached on the call but no decision taken yet (never moved on to Round 1)
+        'called_pending': (qs.filter(status=S.SHORTLISTED, communication_logs__outcome=OUT.ATTENDED)
+                           .exclude(communication_logs__outcome=OUT.CALLBACK)),
         # Rejected after call = terminal, reached shortlist, never reached Round 1
         'rejected_after_call': qs.filter(status__in=TERMINAL).filter(_reached(S.SHORTLISTED)).exclude(_reached(S.ROUND1)),
 

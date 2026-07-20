@@ -3,7 +3,14 @@ from django.forms import inlineformset_factory
 
 from jobs.models import Job
 
-from .models import Candidate, CandidateEducation, CandidateExperience, CommunicationLog, Note
+from .models import (
+    CANONICAL_SOURCES,
+    Candidate,
+    CandidateEducation,
+    CandidateExperience,
+    CommunicationLog,
+    Note,
+)
 
 
 class BootstrapFormMixin:
@@ -108,10 +115,10 @@ class CommunicationLogForm(BootstrapFormMixin, forms.ModelForm):
 
 class BulkUploadForm(BootstrapFormMixin, forms.Form):
     job = forms.ModelChoiceField(queryset=Job.objects.filter(status=Job.Status.OPEN), label='Vacancy')
-    source = forms.ChoiceField(choices=[
-        ('Careers Portal', 'Careers Portal'), ('Referral', 'Referral'), ('LinkedIn', 'LinkedIn'),
-        ('Naukri', 'Naukri'), ('Agency', 'Agency'), ('Other', 'Other'),
-    ])
+    # Canonical source names — must match the values already in the database and
+    # the Logic App intake proc, otherwise the dashboard splits one source in two
+    # (e.g. 'LinkedIn' vs 'Linked In'). See CANONICAL_SOURCES below.
+    source = forms.ChoiceField(choices=[(s, s) for s in CANONICAL_SOURCES])
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

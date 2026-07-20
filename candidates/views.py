@@ -21,7 +21,7 @@ from .forms import (
     EducationFormSet,
     ExperienceFormSet,
 )
-from .models import Candidate, CandidateStatusHistory, CommunicationLog, Note
+from .models import CAREERS, Candidate, CandidateStatusHistory, CommunicationLog, Note
 from .permissions import ANY_STAFF, HIRING_MANAGER, HR_ADMIN, RECRUITER, GroupRequiredMixin
 
 
@@ -50,6 +50,7 @@ FLOW_TITLES = {
     'all': 'All Candidates', 'open': 'Screening Pending', 'unfit': 'Unfit Resumes',
     'ever_shortlisted': 'Screened & Shortlisted', 'call_pending': 'Yet to Call',
     'shortlisted_after_call': 'Shortlisted After Call', 'unable_to_connect': 'Unable to Connect',
+    'to_recall': 'To Re-call — Attempted, Not Reached', 'called_pending': 'Called — Decision Pending',
     'r1_yet': 'Round 1 — Yet to Schedule', 'r1_cleared': 'Round 1 Cleared',
     'r1_scheduled': 'Round 1 Scheduled', 'r1_no_show': 'Round 1 — Not Turned Up',
     'r2_yet': 'Round 2 — Yet to Schedule', 'r2_cleared': 'Round 2 Cleared',
@@ -84,7 +85,8 @@ class ApplicationCreateView(View):
         if form.is_valid() and education_formset.is_valid() and experience_formset.is_valid():
             candidate = form.save(commit=False)
             candidate.job = job
-            candidate.source = candidate.source or 'Careers Portal'
+            # CAREERS (not 'Careers Portal') so this matches the Logic App intake proc
+            candidate.source = candidate.source or CAREERS
             services.submit_application(candidate)
 
             education_formset.instance = candidate

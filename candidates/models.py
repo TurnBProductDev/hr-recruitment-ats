@@ -6,6 +6,13 @@ from django.utils import timezone
 from jobs.models import Job
 
 
+# Canonical recruitment-source names. Every writer (careers form, bulk upload,
+# the Logic App intake proc, the legacy importer) must use these exact strings —
+# a variant spelling silently splits one source into two on the dashboard.
+CAREERS = 'Careers'
+CANONICAL_SOURCES = [CAREERS, 'Linked In', 'Referral', 'Naukri', 'Agency', 'Other']
+
+
 def generate_candidate_code():
     """Candidate code: ID + current year + 5-digit sequence, resetting per year.
     e.g. ID202600001. Sequence continues from the highest code for this year."""
