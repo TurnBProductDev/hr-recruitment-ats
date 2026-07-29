@@ -12,6 +12,28 @@ from jobs.models import Job
 CAREERS = 'Careers'
 CANONICAL_SOURCES = [CAREERS, 'Linked In', 'Referral', 'Naukri', 'Agency', 'Other']
 
+# Known messy spellings -> canonical. Keyed by the value lowercased with spaces
+# removed, so 'LinkedIn', 'linked in', 'LINKEDIN' all collapse to 'Linked In'.
+# The SQL mirror of this lives in sql/sp_intake_add_candidate.sql — keep them in sync.
+_SOURCE_ALIASES = {
+    'linkedin': 'Linked In',
+    'careers': CAREERS,
+    'careersportal': CAREERS,
+    'referral': 'Referral',
+    'employeereference': 'Referral',
+    'naukri': 'Naukri',
+    'agency': 'Agency',
+}
+
+
+def canonical_source(value):
+    """Map a raw source string onto its canonical name (leaves unknown ones as-is,
+    only trimmed). Applied on every save so the dashboard never splits a source."""
+    if not value:
+        return value
+    s = value.strip()
+    return _SOURCE_ALIASES.get(s.lower().replace(' ', ''), s)
+
 
 def generate_candidate_code():
     """Candidate code: ID + current year + 5-digit sequence, resetting per year.
@@ -94,6 +116,7 @@ class Candidate(models.Model):
     def save(self, *args, **kwargs):
         if not self.candidate_code:
             self.candidate_code = generate_candidate_code()
+        self.source = canonical_source(self.source)
         super().save(*args, **kwargs)
 
     def get_absolute_url(self):

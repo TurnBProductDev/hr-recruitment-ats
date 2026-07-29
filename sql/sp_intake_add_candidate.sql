@@ -29,6 +29,20 @@ BEGIN
     SET NOCOUNT ON;
 
     DECLARE @email_norm nvarchar(254) = LOWER(LTRIM(RTRIM(@email)));
+
+    -- Canonicalise the source so 'LinkedIn'/'Linked In' etc. never split the
+    -- dashboard. Mirror of candidates.models.canonical_source — keep in sync.
+    DECLARE @src nvarchar(255) = LTRIM(RTRIM(ISNULL(@source, 'Careers')));
+    DECLARE @src_key nvarchar(255) = REPLACE(LOWER(@src), ' ', '');
+    SET @src =
+        CASE
+            WHEN @src_key = 'linkedin' THEN 'Linked In'
+            WHEN @src_key IN ('careers', 'careersportal') THEN 'Careers'
+            WHEN @src_key IN ('referral', 'employeereference') THEN 'Referral'
+            WHEN @src_key = 'naukri' THEN 'Naukri'
+            WHEN @src_key = 'agency' THEN 'Agency'
+            ELSE @src
+        END;
     DECLARE @now datetimeoffset(7) = SYSDATETIMEOFFSET();
     DECLARE @created datetimeoffset(7) =
         CASE WHEN @mail_date IS NULL THEN @now
@@ -63,7 +77,7 @@ BEGIN
          created_at, updated_at, job_id, cv_summary)
     VALUES
         (@code, @full_name, @email_norm, @phone, @education, @cv_link,
-         ISNULL(@source, 'Careers'), @status, @is_dup, @is_black, 0,
+         @src, @status, @is_dup, @is_black, 0,
          @created, @now, @job_id, @cv_summary);
     DECLARE @cid bigint = SCOPE_IDENTITY();
 
