@@ -11,8 +11,12 @@
       <form method="post" enctype="multipart/form-data">
         {% csrf_token %}
         <div class="row g-3">
-          <div class="col-md-8"><label class="form-label">Title</label>{{ form.title }}{{ form.title.errors }}</div>
-          <div class="col-md-4"><label class="form-label">Status</label>{{ form.status }}</div>
+          <div class="col-md-4">
+            <label class="form-label">Job Code</label>{{ form.job_code }}{{ form.job_code.errors }}
+            <div class="form-text">{{ form.job_code.help_text }}</div>
+          </div>
+          <div class="col-md-5"><label class="form-label">Title</label>{{ form.title }}{{ form.title.errors }}</div>
+          <div class="col-md-3"><label class="form-label">Status</label>{{ form.status }}</div>
           <div class="col-md-6"><label class="form-label">Location</label>{{ form.location }}</div>
           <div class="col-md-3"><label class="form-label">Openings</label>{{ form.openings }}{{ form.openings.errors }}</div>
           <div class="col-md-3"><label class="form-label">Opening Date</label>{{ form.opening_date }}</div>

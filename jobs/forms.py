@@ -18,9 +18,12 @@ class BootstrapFormMixin:
 class JobForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:
         model = Job
-        fields = ['title', 'location', 'openings', 'description', 'requirements', 'status',
+        fields = ['job_code', 'title', 'location', 'openings', 'description', 'requirements', 'status',
                   'opening_date', 'closing_date', 'jd_file']
+        labels = {'job_code': 'Job Code'}
+        help_texts = {'job_code': 'Leave blank to auto-generate (e.g. JOB-2607-0006).'}
         widgets = {
+            'job_code': forms.TextInput(attrs={'placeholder': 'e.g. HRBP-2026 (auto if blank)'}),
             'description': forms.Textarea(attrs={'rows': 4}),
             'requirements': forms.Textarea(attrs={'rows': 4}),
             'opening_date': forms.DateInput(attrs={'type': 'date'}),
@@ -30,3 +33,16 @@ class JobForm(BootstrapFormMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._add_bootstrap_classes()
+
+    def clean_job_code(self):
+        # Normalise whitespace; blank is allowed and triggers auto-generation on save.
+        code = (self.cleaned_data.get('job_code') or '').strip()
+        if not code:
+            return code
+        # Case-insensitive uniqueness so 'HRBP' and 'hrbp' can't both exist.
+        clash = Job.objects.filter(job_code__iexact=code)
+        if self.instance.pk:
+            clash = clash.exclude(pk=self.instance.pk)
+        if clash.exists():
+            raise forms.ValidationError('This job code is already in use. Choose a different one.')
+        return code
