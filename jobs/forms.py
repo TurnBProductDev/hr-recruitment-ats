@@ -21,7 +21,6 @@ class JobForm(BootstrapFormMixin, forms.ModelForm):
         fields = ['job_code', 'title', 'location', 'openings', 'description', 'requirements', 'status',
                   'opening_date', 'closing_date', 'jd_file']
         labels = {'job_code': 'Job Code'}
-        help_texts = {'job_code': 'Leave blank to auto-generate (e.g. JOB-2607-0006).'}
         widgets = {
             'job_code': forms.TextInput(attrs={'placeholder': 'e.g. HRBP-2026 (auto if blank)'}),
             'description': forms.Textarea(attrs={'rows': 4}),
