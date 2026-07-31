@@ -89,9 +89,19 @@ class InterviewResultView(GroupRequiredMixin, UpdateView):
     template_name = 'interviews/interview_result_form.html'
     allowed_groups = (HR_ADMIN, INTERVIEWER)
 
+    # On Pass, advance the candidate one stage down the pipeline rather than
+    # hiring outright: Round 1 -> Interview (Round 2) -> Final Selection, where HR
+    # makes the actual hire decision. Anything not listed falls back to Hired.
+    PASS_NEXT = {
+        Candidate.Status.SHORTLISTED: Candidate.Status.ROUND1,
+        Candidate.Status.ROUND1: Candidate.Status.INTERVIEW,
+        Candidate.Status.INTERVIEW: Candidate.Status.FINAL_SELECTION,
+        Candidate.Status.FINAL_SELECTION: Candidate.Status.HIRED,
+    }
+
     def form_valid(self, form):
         # Marking a result completes the interview and drives the candidate's
-        # pipeline: Pass -> Hired, Fail -> Rejected.
+        # pipeline: Pass -> next stage, Fail -> Rejected.
         form.instance.status = Interview.Status.COMPLETED
         response = super().form_valid(form)
         interview = self.object
@@ -99,9 +109,10 @@ class InterviewResultView(GroupRequiredMixin, UpdateView):
         performed_by = self.request.user.get_full_name() or self.request.user.get_username()
         round_label = interview.get_round_type_display()
         if interview.result == Interview.Result.PASS_:
-            services.change_status(candidate, Candidate.Status.HIRED, user=self.request.user,
+            next_status = self.PASS_NEXT.get(candidate.status, Candidate.Status.HIRED)
+            services.change_status(candidate, next_status, user=self.request.user,
                                    remarks=f'{round_label} interview passed.', performed_by=performed_by)
-            messages.success(self.request, f'{candidate.full_name} passed and was moved to Hired.')
+            messages.success(self.request, f'{candidate.full_name} passed — moved to "{candidate.get_status_display()}".')
         elif interview.result == Interview.Result.FAIL:
             services.change_status(candidate, Candidate.Status.REJECTED, user=self.request.user,
                                    remarks=f'{round_label} interview failed.', performed_by=performed_by)
