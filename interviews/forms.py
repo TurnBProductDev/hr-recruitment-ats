@@ -1,4 +1,7 @@
 from django import forms
+from django.contrib.auth import get_user_model
+
+from candidates.permissions import INTERVIEWER
 
 from .models import Interview
 
@@ -25,6 +28,13 @@ class InterviewForm(BootstrapFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # Only people in the Interviewer group are assignable, ordered by name.
+        User = get_user_model()
+        self.fields['interviewer'].queryset = (
+            User.objects.filter(groups__name=INTERVIEWER).order_by('first_name', 'last_name'))
+        self.fields['interviewer'].label_from_instance = (
+            lambda u: u.get_full_name() or u.username)
+        self.fields['interviewer'].empty_label = 'Unassigned'
         self._add_bootstrap_classes()
 
 

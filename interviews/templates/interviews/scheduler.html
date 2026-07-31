@@ -2,7 +2,7 @@
 {% block title %}Interviews{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h3 class="mb-0">Interviews <span class="text-muted small">({{ candidates|length }} in interview stage)</span></h3>
+  <h3 class="mb-0">Interviews <span class="text-muted small">({{ interviews|length }} awaiting result)</span></h3>
 </div>
 
 <form method="get" class="row g-2 mb-3 align-items-end">
@@ -18,45 +18,41 @@
     <table class="table table-hover align-middle w-100">
       <thead>
         <tr>
-          <th>Candidate</th><th>Job</th><th>Round</th><th>Interview Date</th><th>State</th><th>Actions</th>
+          <th>Candidate</th><th>Job</th><th>Round</th><th>Interview Date</th>
+          <th>Interviewer</th><th>Status</th><th>Update Status</th><th>Edit</th>
         </tr>
       </thead>
       <tbody>
-        {% for c in candidates %}
-        {% with iv=c.latest_interview %}
+        {% for iv in interviews %}
         <tr>
-          <td><a href="{% url 'candidate_timeline' c.pk %}">{{ c.full_name }}</a></td>
-          <td>{{ c.job.title|default:"-" }}</td>
-          <td>{% if iv %}{{ iv.get_round_type_display }}{% else %}-{% endif %}</td>
-          <td>{% if iv %}{{ iv.scheduled_date|date:"d M Y" }}{% else %}<span class="text-muted">Not scheduled</span>{% endif %}</td>
+          <td><a href="{% url 'candidate_timeline' iv.candidate.pk %}">{{ iv.candidate.full_name }}</a></td>
+          <td>{{ iv.candidate.job.title|default:"-" }}</td>
+          <td>{{ iv.get_round_type_display }}</td>
+          <td>{{ iv.scheduled_date|date:"d M Y H:i" }}</td>
+          <td>{% if iv.interviewer %}{{ iv.interviewer.get_full_name|default:iv.interviewer.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</td>
           <td>
-            {% if not iv %}
-              <span class="badge-status badge-interview">Interview Pending</span>
-            {% elif iv.status == 'SCHEDULED' or iv.status == 'RESCHEDULED' %}
-              <span class="badge-status badge-round1">Scheduled</span>
+            {% if iv.is_upcoming %}
+              <span class="badge-status badge-round1">Interview Upcoming</span>
             {% else %}
               <span class="badge-status badge-final_selection">Result Pending</span>
             {% endif %}
           </td>
           <td class="text-nowrap">
-            {% if not iv %}
-              <a href="{% url 'interview_schedule' c.pk %}" class="btn btn-sm btn-fill-app">Schedule Interview</a>
-            {% else %}
-              <a href="{% url 'interview_result' iv.pk %}" class="btn btn-sm btn-fill-app">Mark Result</a>
-              <a href="{% url 'interview_reschedule' iv.pk %}" class="btn btn-sm btn-outline-app">Reschedule</a>
-              <form method="post" action="{% url 'interview_send_invite' iv.pk %}" class="d-inline">
-                {% csrf_token %}<button class="btn btn-sm btn-outline-app">Send Invite</button>
-              </form>
-            {% endif %}
+            <a href="{% url 'interview_result' iv.pk %}" class="btn btn-sm btn-fill-app">Update Status</a>
+          </td>
+          <td class="text-nowrap">
+            <a href="{% url 'interview_reschedule' iv.pk %}" class="btn btn-sm btn-outline-app" title="Reschedule / change interviewer"><i class="bi bi-pencil"></i> Edit</a>
+            <form method="post" action="{% url 'interview_send_invite' iv.pk %}" class="d-inline">
+              {% csrf_token %}<button class="btn btn-sm btn-outline-app" title="Send invite email"><i class="bi bi-envelope"></i></button>
+            </form>
           </td>
         </tr>
-        {% endwith %}
         {% empty %}
-        <tr><td colspan="6" class="text-muted text-center py-3">No candidates in the interview stage.</td></tr>
+        <tr><td colspan="8" class="text-muted text-center py-3">No scheduled interviews awaiting a result.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
-<p class="small text-muted mt-2">Marking a result as <strong>Pass</strong> moves the candidate to Hired; <strong>Fail</strong> moves them to Rejected.</p>
+<p class="small text-muted mt-2">Marking a result as <strong>Pass</strong> moves the candidate to Hired; <strong>Fail</strong> moves them to Rejected. Schedule new interviews from a candidate's page.</p>
 {% endblock %}

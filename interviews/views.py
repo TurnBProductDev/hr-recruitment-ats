@@ -1,7 +1,9 @@
 from django.contrib import messages
 from django.core.mail import send_mail
+from django.db.models import BooleanField, Case, Value, When
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
+from django.utils import timezone
 from django.views import View
 from django.views.generic import CreateView, ListView, UpdateView
 
@@ -14,21 +16,26 @@ from .models import Interview
 
 
 class InterviewSchedulerListView(GroupRequiredMixin, ListView):
-    """Candidates currently in the Interview stage: interview-pending (not yet
-    scheduled), scheduled, and result-pending. Once a result is marked the
-    candidate moves to Hired/Rejected and drops off this list."""
-    model = Candidate
+    """Scheduled interviews still awaiting a result. Once a result is marked the
+    interview is completed and drops off this list. Overdue-but-unmarked
+    interviews stay listed (shown as 'Result Pending')."""
+    model = Interview
     template_name = 'interviews/scheduler.html'
-    context_object_name = 'candidates'
+    context_object_name = 'interviews'
     allowed_groups = ANY_STAFF
 
     def get_queryset(self):
-        qs = (Candidate.objects.filter(status=Candidate.Status.INTERVIEW)
-              .select_related('job').prefetch_related('interviews'))
+        qs = (Interview.objects.filter(
+                status__in=[Interview.Status.SCHEDULED, Interview.Status.RESCHEDULED],
+                result=Interview.Result.PENDING)
+              .select_related('candidate', 'candidate__job', 'interviewer')
+              .annotate(is_upcoming=Case(
+                  When(scheduled_date__gt=timezone.now(), then=Value(True)),
+                  default=Value(False), output_field=BooleanField())))
         q = self.request.GET.get('q')
         if q:
-            qs = qs.filter(full_name__icontains=q)
-        return qs.order_by('full_name')
+            qs = qs.filter(candidate__full_name__icontains=q)
+        return qs.order_by('scheduled_date')
 
 
 class InterviewScheduleView(GroupRequiredMixin, CreateView):
