@@ -46,6 +46,10 @@ python manage.py runserver
 - `candidates.Note` / `CommunicationLog` / `Attachment` / `Offer` — Candidate Timeline extras.
 - `candidates.BulkUploadBatch` / `BulkUploadItem` — staging rows for Bulk Upload CV (see below); a Candidate
   is created only once its CV has been parsed successfully.
+- `Candidate.role_applied` — the position the applicant *asked for*, as written on their CV or in the
+  application email. `Candidate.job` is where they were *filed*, which falls back to the
+  **General Application** vacancy when the text matches no open vacancy. The **General Applications**
+  page lists that bucket and filters it by `role_applied`.
 - `interviews.Interview` — round type, interviewer, schedule, mode, status, result, feedback, score.
 
 ## RBAC

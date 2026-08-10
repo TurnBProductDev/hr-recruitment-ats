@@ -54,10 +54,36 @@ TAB_STATUS_MAP = {key: status for key, _, status in REPOSITORY_TABS}
 STATUS_TAB_MAP = {status: key for key, _, status in REPOSITORY_TABS}
 
 
-def _repository_back_url(candidate):
-    """Where "Back" goes from a candidate's own pages: the Candidate Repository,
-    on the tab this candidate currently sits in. Retracing browser history got
-    confusing once a status change had moved the candidate to another tab."""
+LIST_URL_SESSION_KEY = 'last_candidate_list_url'
+
+
+def _remember_list_url(request):
+    """Record the candidate list the user is looking at (tab, filters, search and
+    all) so that opening a candidate and then acting on them returns to exactly
+    that list rather than a bare, unfiltered repository page."""
+    request.session[LIST_URL_SESSION_KEY] = request.get_full_path()
+
+
+def _remembered_list_url(request):
+    return request.session.get(LIST_URL_SESSION_KEY) or ''
+
+
+class RemembersListUrlMixin:
+    """Mix into a candidate list page so it records itself as "where I was
+    working"; candidate pages opened from here come back to it."""
+
+    def get(self, request, *args, **kwargs):
+        _remember_list_url(request)
+        return super().get(request, *args, **kwargs)
+
+
+def _repository_back_url(candidate, request=None):
+    """Where "Back" goes from a candidate's own pages: the list the user came
+    from, else the Candidate Repository on the tab this candidate sits in."""
+    if request is not None:
+        remembered = _remembered_list_url(request)
+        if remembered:
+            return remembered
     tab = STATUS_TAB_MAP.get(candidate.status, 'open')
     return f"{reverse('candidate_repository')}?tab={tab}"
 
@@ -104,6 +130,9 @@ class ApplicationCreateView(View):
         if form.is_valid() and education_formset.is_valid() and experience_formset.is_valid():
             candidate = form.save(commit=False)
             candidate.job = job
+            # On the careers site the applicant picks the vacancy, so the position
+            # they applied for is simply its title.
+            candidate.role_applied = job.title
             # CAREERS (not 'Careers Portal') so this matches the Logic App intake proc
             candidate.source = candidate.source or CAREERS
             services.submit_application(candidate)
@@ -136,7 +165,7 @@ class ApplicationThankYouView(DetailView):
 # ---------------------------------------------------------------------------
 
 
-class CandidateRepositoryListView(GroupRequiredMixin, ListView):
+class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, ListView):
     model = Candidate
     template_name = 'candidates/repository.html'
     context_object_name = 'candidates'
@@ -239,7 +268,7 @@ class CandidateRepositoryListView(GroupRequiredMixin, ListView):
         return ctx
 
 
-class AllCandidatesListView(GroupRequiredMixin, ListView):
+class AllCandidatesListView(RemembersListUrlMixin, GroupRequiredMixin, ListView):
     """Flat, full list of every candidate — Name, Email, Job, Status, View —
     reached from the 'Candidate Repository' heading and exportable to Excel."""
     model = Candidate
@@ -251,6 +280,59 @@ class AllCandidatesListView(GroupRequiredMixin, ListView):
         return Candidate.objects.select_related('job').order_by('full_name')
 
 
+GENERAL_APPLICATION = 'General Application'
+# Filter value for candidates whose applied position was never captured.
+NO_ROLE = '__none__'
+
+
+class GeneralApplicationsListView(RemembersListUrlMixin, GroupRequiredMixin, ListView):
+    """Everyone filed under the "General Application" vacancy - i.e. the intake
+    couldn't match the position they asked for to an open vacancy - shown with the
+    position they actually applied for, and filterable by it."""
+    model = Candidate
+    template_name = 'candidates/general_applications.html'
+    context_object_name = 'candidates'
+    allowed_groups = ANY_STAFF
+
+    def base_queryset(self):
+        return (Candidate.objects.select_related('job')
+                .filter(job__title__iexact=GENERAL_APPLICATION))
+
+    def selected_roles(self):
+        return [r for r in self.request.GET.getlist('role') if r]
+
+    def get_queryset(self):
+        qs = self.base_queryset()
+
+        roles = self.selected_roles()
+        if roles:
+            condition = Q(role_applied__in=[r for r in roles if r != NO_ROLE])
+            if NO_ROLE in roles:
+                condition |= Q(role_applied__isnull=True) | Q(role_applied='')
+            qs = qs.filter(condition)
+
+        q = self.request.GET.get('q')
+        if q:
+            qs = qs.filter(Q(full_name__icontains=q) | Q(email__icontains=q)
+                           | Q(role_applied__icontains=q))
+        return qs.order_by('-created_at')
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        base = self.base_queryset()
+        ctx['role_options'] = (base.exclude(role_applied__isnull=True).exclude(role_applied='')
+                               .values('role_applied').annotate(n=Count('id'))
+                               .order_by('role_applied'))
+        ctx['no_role_count'] = base.filter(Q(role_applied__isnull=True) | Q(role_applied='')).count()
+        ctx['no_role_value'] = NO_ROLE
+        ctx['selected_roles'] = self.selected_roles()
+        ctx['q'] = self.request.GET.get('q', '')
+        ctx['total'] = base.count()
+        u = self.request.user
+        ctx['is_hr_admin'] = u.is_superuser or u.groups.filter(name=HR_ADMIN).exists()
+        return ctx
+
+
 class CandidateTimelineView(GroupRequiredMixin, DetailView):
     model = Candidate
     template_name = 'candidates/timeline.html'
@@ -260,7 +342,7 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         candidate = self.object
-        ctx['back_url'] = _repository_back_url(candidate)
+        ctx['back_url'] = _repository_back_url(candidate, self.request)
         ctx['back_label'] = 'Back to Candidates'
         ctx['history'] = candidate.history.select_related('changed_by').all()
         ctx['notes'] = candidate.notes.select_related('author').all()
@@ -328,7 +410,7 @@ class CandidateUpdateView(GroupRequiredMixin, UpdateView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        ctx['back_url'] = _repository_back_url(self.object)
+        ctx['back_url'] = _repository_back_url(self.object, self.request)
         ctx['back_label'] = 'Back to Candidates'
         return ctx
 
@@ -491,8 +573,31 @@ class CandidateDeleteView(GroupRequiredMixin, View):
         messages.success(request, f'Candidate "{name}" and all their records were deleted.')
         next_url = request.POST.get('next')
         if next_url and f'/candidates/{pk}/' in next_url:
-            next_url = None  # came from the deleted candidate's own page
-        return redirect(next_url or reverse('candidate_repository'))
+            # Deleted from the candidate's own page - that URL is gone now, so
+            # fall back to the list the user was working in.
+            next_url = None
+        return redirect(next_url or _remembered_list_url(request) or reverse('candidate_repository'))
+
+
+class CandidateBulkDeleteView(GroupRequiredMixin, View):
+    """Delete several candidates at once, ticked on the Candidate Repository
+    (HR Admin only, same as deleting one)."""
+    allowed_groups = (HR_ADMIN,)
+
+    def post(self, request):
+        ids = request.POST.getlist('ids')
+        candidates = list(Candidate.objects.filter(pk__in=ids))
+        deleted = len(candidates)
+        for candidate in candidates:
+            candidate.delete()
+        if deleted:
+            messages.success(
+                request, f'{deleted} candidate{"s" if deleted != 1 else ""} '
+                         f'and all their records were deleted.')
+        else:
+            messages.info(request, 'No candidates were selected.')
+        next_url = request.POST.get('next')
+        return redirect(next_url or _remembered_list_url(request) or reverse('candidate_repository'))
 
 
 class BulkRejectClosedVacanciesView(GroupRequiredMixin, View):

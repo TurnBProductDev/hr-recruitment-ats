@@ -1,0 +1,96 @@
+{% extends "hr_base.html" %}
+{% load candidates_extras %}
+{% block title %}General Applications{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-1">
+  <h3 class="mb-0">General Applications</h3>
+  <span class="text-muted small">{{ total }} candidate{{ total|pluralize }} in this bucket</span>
+</div>
+<p class="text-muted small">
+  Applicants filed under the <strong>General Application</strong> vacancy — the position they asked
+  for didn't match an open vacancy. <em>Applied Position</em> is what they actually asked for, as
+  captured from their CV or application email.
+</p>
+
+<form method="get" class="card app-card p-3 mb-3">
+  <div class="row g-3 align-items-end">
+    <div class="col-md-5">
+      <label class="form-label mb-1">Applied Position <span class="text-muted small">(pick one or more)</span></label>
+      <select name="role" class="form-select" multiple size="6">
+        {% for opt in role_options %}
+          <option value="{{ opt.role_applied }}"
+                  {% if opt.role_applied in selected_roles %}selected{% endif %}>
+            {{ opt.role_applied }} ({{ opt.n }})
+          </option>
+        {% endfor %}
+        {% if no_role_count %}
+          <option value="{{ no_role_value }}" {% if no_role_value in selected_roles %}selected{% endif %}>
+            Not captured ({{ no_role_count }})
+          </option>
+        {% endif %}
+      </select>
+      <div class="form-text">Ctrl/Cmd-click to select several, or drag to pick a range.</div>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label mb-1">Search</label>
+      <input type="text" name="q" value="{{ q }}" class="form-control" placeholder="Name, email or position">
+    </div>
+    <div class="col-md-3">
+      <button type="submit" class="btn btn-fill-app"><i class="bi bi-search"></i> Apply</button>
+      <a href="{% url 'candidate_general_applications' %}" class="btn btn-outline-app">Clear</a>
+    </div>
+  </div>
+</form>
+
+{% if selected_roles %}
+<p class="small text-muted">
+  Showing {{ candidates|length }} of {{ total }} — filtered by:
+  {% for r in selected_roles %}
+    <span class="badge bg-secondary">{% if r == no_role_value %}Not captured{% else %}{{ r }}{% endif %}</span>
+  {% endfor %}
+</p>
+{% endif %}
+
+<div class="card app-card p-3">
+  <div class="table-responsive">
+    <table id="generalTable" class="table table-hover align-middle w-100">
+      <thead>
+        <tr>
+          <th>Code</th><th>Name</th><th>Applied Position</th><th>Source</th>
+          <th>Applied</th><th>Status</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in candidates %}
+        <tr>
+          <td class="text-muted">{{ c.candidate_code }}</td>
+          <td><a href="{% url 'candidate_timeline' c.id %}">{{ c.full_name }}</a>
+            <div class="small text-muted">{{ c.email }}</div></td>
+          <td>
+            {% if c.role_applied %}{{ c.role_applied }}
+            {% else %}<span class="text-muted">Not captured</span>{% endif %}
+          </td>
+          <td>{{ c.source|default:"-" }}</td>
+          <td>{{ c.created_at|date:"d M Y" }}</td>
+          <td><span class="{{ c.status|badge_class }}">{{ c.get_status_display }}</span></td>
+          <td class="text-nowrap">
+            {# Re-assigning the vacancy lives on the candidate's own page, which has the vacancy picker. #}
+            <a href="{% url 'candidate_timeline' c.id %}" class="btn btn-sm btn-outline-app">View</a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="text-muted">No candidates match this filter.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(function () {
+  $('#generalTable').DataTable({ order: [], dom: 'Bfrtip', buttons: ['excelHtml5'], pageLength: 25 });
+});
+</script>
+{% endblock %}

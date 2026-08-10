@@ -99,11 +99,29 @@
   </div>
 </form>
 
+{% if is_hr_admin %}
+<div id="bulkBar" class="alert alert-secondary d-none d-flex justify-content-between align-items-center py-2">
+  <span><strong id="bulkCount">0</strong> candidate(s) selected</span>
+  <span>
+    <button type="button" class="btn btn-sm btn-outline-secondary" id="bulkClear">Clear selection</button>
+    <button type="button" class="btn btn-sm btn-danger" id="bulkDelete">Delete selected</button>
+  </span>
+</div>
+<form method="post" action="{% url 'candidate_bulk_delete' %}" id="bulkDeleteForm" class="d-none">
+  {% csrf_token %}
+  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+  <div id="bulkDeleteIds"></div>
+</form>
+{% endif %}
+
 <div class="card app-card p-3">
   <div class="table-responsive">
     <table id="candidateTable" class="table table-hover align-middle w-100">
       <thead>
         <tr>
+          {% if is_hr_admin %}<th class="no-export" style="width:2rem">
+            <input type="checkbox" class="form-check-input" id="selectAll" title="Select all on this page">
+          </th>{% endif %}
           <th>Code</th><th>Name</th><th>Job</th><th>Exp.</th>
           <th>Applied</th><th>Interview</th><th>Last Action</th><th>Status</th><th>Actions</th>
         </tr>
@@ -111,6 +129,10 @@
       <tbody>
         {% for c in candidates %}
         <tr>
+          {% if is_hr_admin %}<td class="no-export">
+            <input type="checkbox" class="form-check-input row-select" value="{{ c.id }}"
+                   aria-label="Select {{ c.full_name }}">
+          </td>{% endif %}
           <td class="text-muted">{{ c.candidate_code }}</td>
           <td><a href="{% url 'candidate_timeline' c.id %}">{{ c.full_name }}</a>
             <div class="small text-muted">{{ c.email }}</div></td>
@@ -193,7 +215,45 @@
 {% block extra_js %}
 <script>
 $(function () {
-  $('#candidateTable').DataTable({ order: [], dom: 'Bfrtip', buttons: ['excelHtml5'], pageLength: 25 });
+  $('#candidateTable').DataTable({
+    order: [], dom: 'Bfrtip', pageLength: 25,
+    // The tick-box column is neither sortable nor worth exporting.
+    columnDefs: [{ targets: 'no-export', orderable: false, searchable: false }],
+    buttons: [{ extend: 'excelHtml5', exportOptions: { columns: ':not(.no-export)' } }]
+  });
+
+  {% if is_hr_admin %}
+  // --- Multi-select delete -------------------------------------------------
+  function selectedIds() {
+    return $('#candidateTable').find('.row-select:checked').map(function () { return this.value; }).get();
+  }
+  function refreshBulkBar() {
+    var n = selectedIds().length;
+    $('#bulkCount').text(n);
+    $('#bulkBar').toggleClass('d-none', n === 0);
+  }
+  $('#candidateTable').on('change', '.row-select', refreshBulkBar);
+  $('#selectAll').on('change', function () {
+    // Only rows on the current DataTables page are visible/tickable.
+    $('#candidateTable tbody .row-select').prop('checked', this.checked);
+    refreshBulkBar();
+  });
+  $('#bulkClear').on('click', function () {
+    $('#candidateTable').find('.row-select, #selectAll').prop('checked', false);
+    refreshBulkBar();
+  });
+  $('#bulkDelete').on('click', function () {
+    var ids = selectedIds();
+    if (!ids.length) { return; }
+    if (!window.confirm('Permanently delete ' + ids.length + ' candidate(s) and all their ' +
+                        'interviews, notes and history? This cannot be undone.')) { return; }
+    var holder = $('#bulkDeleteIds').empty();
+    ids.forEach(function (id) {
+      $('<input>').attr({ type: 'hidden', name: 'ids', value: id }).appendTo(holder);
+    });
+    $('#bulkDeleteForm').trigger('submit');
+  });
+  {% endif %}
 
   $('#actionModal').on('show.bs.modal', function (event) {
     var b = event.relatedTarget;

@@ -7,6 +7,7 @@ Run against sqlite so the live Azure DB is never touched:
 from unittest import mock
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -16,6 +17,7 @@ from jobs.models import Job
 from . import bulk, cv_parser, services
 from .cv_parser import CVParseError
 from .models import BulkUploadBatch, BulkUploadItem, Candidate, EmailRegistry
+from .permissions import HIRING_MANAGER, RECRUITER
 
 PARSED = {
     'status': 'ok',
@@ -267,6 +269,137 @@ class BackButtonTests(TestCase):
         response = self.client.get(reverse('candidate_repository'))
         self.assertIsNone(response.context.get('back_url'))
         self.assertContains(response, 'goBack()')
+
+
+class ListReturnTests(TestCase):
+    """Acting on a candidate returns to the list the user was working in,
+    filters and all - not a bare repository page."""
+
+    def setUp(self):
+        self.job = Job.objects.create(title='Data Analyst')
+        self.user = get_user_model().objects.create_superuser('hr', 'hr@example.com', 'pw')
+        self.client.force_login(self.user)
+        self.candidate = Candidate.objects.create(
+            full_name='Asha Menon', email='asha@example.com', job=self.job,
+            status=Candidate.Status.SHORTLISTED)
+        self.list_url = f"{reverse('candidate_repository')}?tab=shortlisted&q=asha"
+
+    def test_back_returns_to_the_filtered_list(self):
+        self.client.get(self.list_url)
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertEqual(response.context['back_url'], self.list_url)
+
+    def test_delete_from_the_candidate_page_returns_to_that_list(self):
+        self.client.get(self.list_url)
+        response = self.client.post(
+            reverse('candidate_delete', args=[self.candidate.pk]),
+            {'next': reverse('candidate_timeline', args=[self.candidate.pk])})
+        self.assertRedirects(response, self.list_url, fetch_redirect_response=False)
+        self.assertFalse(Candidate.objects.filter(pk=self.candidate.pk).exists())
+
+    def test_falls_back_to_the_repository_without_a_remembered_list(self):
+        response = self.client.post(reverse('candidate_delete', args=[self.candidate.pk]), {})
+        self.assertRedirects(response, reverse('candidate_repository'),
+                             fetch_redirect_response=False)
+
+
+class BulkDeleteTests(TestCase):
+    def setUp(self):
+        self.job = Job.objects.create(title='Data Analyst')
+        self.user = get_user_model().objects.create_superuser('hr', 'hr@example.com', 'pw')
+        self.client.force_login(self.user)
+        self.candidates = [
+            Candidate.objects.create(full_name=f'C{i}', email=f'c{i}@example.com', job=self.job)
+            for i in range(3)]
+
+    def test_deletes_only_the_selected_candidates(self):
+        keep = self.candidates[2]
+        response = self.client.post(reverse('candidate_bulk_delete'), {
+            'ids': [self.candidates[0].pk, self.candidates[1].pk],
+            'next': reverse('candidate_repository'),
+        })
+        self.assertRedirects(response, reverse('candidate_repository'),
+                             fetch_redirect_response=False)
+        self.assertEqual([c.pk for c in Candidate.objects.all()], [keep.pk])
+
+    def test_nothing_selected_is_harmless(self):
+        self.client.post(reverse('candidate_bulk_delete'), {'ids': []})
+        self.assertEqual(Candidate.objects.count(), 3)
+
+    def test_non_admins_cannot_bulk_delete(self):
+        recruiter = get_user_model().objects.create_user('rec', 'rec@example.com', 'pw')
+        recruiter.groups.add(Group.objects.get_or_create(name=RECRUITER)[0])
+        self.client.force_login(recruiter)
+        response = self.client.post(reverse('candidate_bulk_delete'),
+                                    {'ids': [self.candidates[0].pk]})
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(Candidate.objects.count(), 3)
+
+    def test_repository_shows_tick_boxes_for_admins_only(self):
+        response = self.client.get(reverse('candidate_repository'))
+        self.assertContains(response, 'row-select')
+
+        viewer = get_user_model().objects.create_user('view', 'view@example.com', 'pw')
+        viewer.groups.add(Group.objects.get_or_create(name=HIRING_MANAGER)[0])
+        self.client.force_login(viewer)
+        response = self.client.get(reverse('candidate_repository'))
+        self.assertNotContains(response, 'row-select')
+
+
+class GeneralApplicationsTests(TestCase):
+    def setUp(self):
+        self.general = Job.objects.create(title='General Application')
+        self.analyst = Job.objects.create(title='Data Analyst')
+        self.user = get_user_model().objects.create_superuser('hr', 'hr@example.com', 'pw')
+        self.client.force_login(self.user)
+        self.designer = Candidate.objects.create(
+            full_name='Dev One', email='dev1@example.com', job=self.general,
+            role_applied='UI Designer')
+        self.tester = Candidate.objects.create(
+            full_name='Dev Two', email='dev2@example.com', job=self.general,
+            role_applied='QA Tester')
+        self.uncaptured = Candidate.objects.create(
+            full_name='Dev Three', email='dev3@example.com', job=self.general)
+        # Not a general application - must never appear.
+        Candidate.objects.create(full_name='Ana Lyst', email='ana@example.com', job=self.analyst,
+                                 role_applied='Data Analyst')
+        self.url = reverse('candidate_general_applications')
+
+    def test_lists_only_general_application_candidates(self):
+        response = self.client.get(self.url)
+        names = [c.full_name for c in response.context['candidates']]
+        self.assertCountEqual(names, ['Dev One', 'Dev Two', 'Dev Three'])
+        self.assertContains(response, 'UI Designer')
+
+    def test_role_options_carry_counts_and_an_uncaptured_bucket(self):
+        response = self.client.get(self.url)
+        options = {o['role_applied']: o['n'] for o in response.context['role_options']}
+        self.assertEqual(options, {'QA Tester': 1, 'UI Designer': 1})
+        self.assertEqual(response.context['no_role_count'], 1)
+
+    def test_filter_by_a_single_role(self):
+        response = self.client.get(self.url, {'role': 'UI Designer'})
+        self.assertEqual([c.pk for c in response.context['candidates']], [self.designer.pk])
+
+    def test_filter_by_several_roles(self):
+        response = self.client.get(self.url, {'role': ['UI Designer', 'QA Tester']})
+        self.assertCountEqual([c.pk for c in response.context['candidates']],
+                              [self.designer.pk, self.tester.pk])
+
+    def test_filter_for_candidates_whose_role_was_never_captured(self):
+        response = self.client.get(self.url, {'role': '__none__'})
+        self.assertEqual([c.pk for c in response.context['candidates']], [self.uncaptured.pk])
+
+    def test_search_matches_the_applied_position(self):
+        response = self.client.get(self.url, {'q': 'designer'})
+        self.assertEqual([c.pk for c in response.context['candidates']], [self.designer.pk])
+
+    def test_careers_application_records_the_position_applied_for(self):
+        from candidates import services
+        candidate = Candidate(full_name='Web App', email='web@example.com', job=self.analyst)
+        candidate.role_applied = self.analyst.title
+        services.submit_application(candidate)
+        self.assertEqual(Candidate.objects.get(pk=candidate.pk).role_applied, 'Data Analyst')
 
 
 class BulkUploadViewTests(TestCase):

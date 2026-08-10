@@ -13,6 +13,10 @@ urlpatterns = [
     # HR admin: Candidate Repository
     path('hr/candidates/', views.CandidateRepositoryListView.as_view(), name='candidate_repository'),
     path('hr/candidates/all/', views.AllCandidatesListView.as_view(), name='candidate_all'),
+    path('hr/candidates/general-applications/', views.GeneralApplicationsListView.as_view(),
+         name='candidate_general_applications'),
+    path('hr/candidates/delete-selected/', views.CandidateBulkDeleteView.as_view(),
+         name='candidate_bulk_delete'),
     path('hr/candidates/<int:pk>/', views.CandidateTimelineView.as_view(), name='candidate_timeline'),
     path('hr/candidates/<int:pk>/edit/', views.CandidateUpdateView.as_view(), name='candidate_edit'),
     path('hr/candidates/<int:pk>/change-job/', views.CandidateChangeJobView.as_view(), name='candidate_change_job'),

@@ -103,6 +103,11 @@ class Candidate(models.Model):
 
     status = models.CharField(max_length=30, choices=Status.choices, default=Status.OPEN)
     source = models.CharField(max_length=255, blank=True, null=True)
+    # The position the applicant actually asked for, as written on the CV / in the
+    # application email. `job` is where we filed them, which is often
+    # "General Application" when the text matched no open vacancy - this keeps the
+    # original wording so those applicants can still be sorted by what they wanted.
+    role_applied = models.CharField('Applied Position', max_length=255, blank=True, null=True)
     resume_blob_url = models.FileField('Resume', upload_to=candidate_resume_path, blank=True, null=True)
     resume_url = models.URLField('Resume Link', max_length=1000, blank=True, null=True,
                                  help_text='External link to the resume (e.g. SharePoint/Drive).')

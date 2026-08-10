@@ -94,6 +94,24 @@ Add the connection to the workflow's `$connections` parameters, e.g.:
 ```
 (The exact `connectionId` is filled in for you when you create the connection in the designer.)
 
+## Applied position (2026-08-10)
+
+`@role_applied` used to be read only to *resolve* the vacancy and was then thrown
+away, so anyone who landed in **General Application** lost the position they had
+actually asked for. The proc now also stores it in the new
+`candidates_candidate.role_applied` column, which powers the **General
+Applications** page in the app.
+
+**Deploy order matters:** ship the Django app first (the container runs
+`manage.py migrate` on boot, creating the column), *then* re-run
+`sp_intake_add_candidate.sql`. Applying the proc first makes every insert fail on
+the missing column. No Logic App change is needed — it already passes
+`role_applied`.
+
+Rows created before this change keep `role_applied = NULL` and show as
+"Not captured"; the original text was never stored anywhere, so there is nothing
+to backfill from.
+
 ## Behaviour notes
 
 - **Role → vacancy:** matched on exact title; anything unmatched lands under

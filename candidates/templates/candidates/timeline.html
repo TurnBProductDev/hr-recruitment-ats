@@ -37,7 +37,13 @@
         <dt class="col-sm-4">DOB</dt><dd class="col-sm-8">{{ candidate.dob|default:"-" }}</dd>
         <dt class="col-sm-4">Location</dt><dd class="col-sm-8">{{ candidate.current_location|default:"-" }}</dd>
         <dt class="col-sm-4">Qualification</dt><dd class="col-sm-8">{{ candidate.qualification|default:"-" }}</dd>
-        <dt class="col-sm-4">Applied Role</dt>
+        <dt class="col-sm-4">Applied Position</dt>
+        <dd class="col-sm-8">
+          {% if candidate.role_applied %}{{ candidate.role_applied }}
+          {% else %}<span class="text-muted">Not captured</span>{% endif %}
+          <div class="form-text mb-0">What the applicant asked for, as captured from their CV / email.</div>
+        </dd>
+        <dt class="col-sm-4">Mapped Vacancy</dt>
         <dd class="col-sm-8">
           <form method="post" action="{% url 'candidate_change_job' candidate.pk %}" class="d-flex gap-2 align-items-center">
             {% csrf_token %}

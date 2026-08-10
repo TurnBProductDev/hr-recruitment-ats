@@ -99,6 +99,7 @@ def create_from_parsed_cv(fields, job, source, user=None, performed_by=None, rem
         qualification=fields.get('qualification'),
         cv_summary=fields.get('cv_summary'),
         resume_url=fields.get('resume_url'),
+        role_applied=fields.get('role_applied') or (job.title if job else None),
         job=job,
         source=source,
         is_duplicate=is_duplicate,

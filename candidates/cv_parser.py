@@ -141,6 +141,9 @@ def map_to_candidate_fields(data, fallback_name=''):
         'qualification': clean('Education', 255) or None,
         'cv_summary': clean('Summary') or None,
         'resume_url': clean('CV_Link', 1000) or None,
+        # What the CV says they applied for. The vacancy they get filed under is
+        # the one HR picked on the upload screen; this keeps the original wording.
+        'role_applied': clean('Role_Applied', 255) or None,
     }
     if not fields['full_name']:
         fields['full_name'] = (fallback_name or 'Unnamed Candidate')[:255]

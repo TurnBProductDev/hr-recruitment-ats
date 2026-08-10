@@ -9,12 +9,10 @@
 --   * writes the initial "Applied" status-history row (status = OPEN)
 -- The new candidate appears in the Open Applications tab.
 --
--- Re-runnable: drops and recreates the procedure.
+-- Re-runnable: CREATE OR ALTER, so a failed deploy can never leave the live
+-- procedure dropped (the Logic App would start erroring on every application).
 -- =============================================================================
-IF OBJECT_ID('dbo.sp_intake_add_candidate', 'P') IS NOT NULL
-    DROP PROCEDURE dbo.sp_intake_add_candidate;
-GO
-CREATE PROCEDURE dbo.sp_intake_add_candidate
+CREATE OR ALTER PROCEDURE dbo.sp_intake_add_candidate
     @full_name    nvarchar(255),
     @email        nvarchar(254),
     @phone        nvarchar(20)   = NULL,
@@ -71,14 +69,19 @@ BEGIN
         WHERE candidate_code LIKE @prefix + '[0-9][0-9][0-9][0-9][0-9]'), 0) + 1;
     DECLARE @code nvarchar(20) = @prefix + RIGHT('00000' + CAST(@next AS nvarchar(5)), 5);
 
+    -- Keep the position the applicant actually asked for. @job_id above may have
+    -- fallen back to General Application; role_applied preserves the original text
+    -- so the General Applications page can still group them by what they wanted.
+    DECLARE @role nvarchar(255) = NULLIF(LTRIM(RTRIM(ISNULL(@role_applied, ''))), '');
+
     INSERT INTO dbo.candidates_candidate
         (candidate_code, full_name, email, phone, qualification, resume_url,
          source, status, is_duplicate, is_blacklisted, is_on_hold,
-         created_at, updated_at, job_id, cv_summary)
+         created_at, updated_at, job_id, cv_summary, role_applied)
     VALUES
         (@code, @full_name, @email_norm, @phone, @education, @cv_link,
          @src, @status, @is_dup, @is_black, 0,
-         @created, @now, @job_id, @cv_summary);
+         @created, @now, @job_id, @cv_summary, @role);
     DECLARE @cid bigint = SCOPE_IDENTITY();
 
     IF @is_dup = 1
