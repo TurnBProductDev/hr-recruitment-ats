@@ -248,6 +248,8 @@ class BackButtonTests(TestCase):
         self.assertEqual(response.context['back_url'],
                          f"{reverse('candidate_repository')}?tab=shortlisted")
         self.assertContains(response, 'Back to Candidates')
+        # A multi-line {# #} comment renders as visible text - never ship one.
+        self.assertNotContains(response, '{#')
 
     def test_edit_page_back_points_at_the_candidates_tab(self):
         response = self.client.get(reverse('candidate_edit', args=[self.candidate.pk]))

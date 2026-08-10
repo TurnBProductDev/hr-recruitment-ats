@@ -45,9 +45,8 @@
 </nav>
 
 <main class="container-fluid py-4">
+  {# Pages with one obvious parent set back_url; the rest walk browser history. #}
   {% if back_url %}
-    {# Pages that have one obvious parent (a candidate belongs to the repository)
-       send you there, instead of retracing every click that got you here. #}
     <a href="{{ back_url }}" class="btn btn-sm btn-outline-app mb-3">
       <i class="bi bi-arrow-left"></i> {{ back_label|default:"Back" }}
     </a>
