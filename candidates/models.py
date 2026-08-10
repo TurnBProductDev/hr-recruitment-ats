@@ -1,3 +1,7 @@
+import json
+import os
+import uuid
+
 from django.conf import settings
 from django.db import models
 from django.urls import reverse
@@ -24,6 +28,11 @@ _SOURCE_ALIASES = {
     'naukri': 'Naukri',
     'agency': 'Agency',
 }
+
+
+# Stand-in address for a candidate whose CV had no readable email (bulk upload).
+# Never entered into the email registry, so it can't count as a duplicate.
+PLACEHOLDER_EMAIL_DOMAIN = 'placeholder.local'
 
 
 def canonical_source(value):
@@ -120,7 +129,13 @@ class Candidate(models.Model):
         super().save(*args, **kwargs)
 
     def get_absolute_url(self):
-        return reverse('candidate_detail', args=[self.pk])
+        return reverse('candidate_timeline', args=[self.pk])
+
+    @property
+    def email_is_placeholder(self):
+        """True when no real email was found (bulk upload / unparsed CV) - the
+        row carries a pending-*@placeholder.local stand-in for HR to replace."""
+        return (self.email or '').endswith(f'@{PLACEHOLDER_EMAIL_DOMAIN}')
 
     @property
     def latest_interview(self):
@@ -264,6 +279,77 @@ class Attachment(models.Model):
 
     def __str__(self):
         return self.label or self.file.name
+
+
+def bulk_cv_path(instance, filename):
+    """bulk_cvs/<batch_id>/<uuid>_<original name> - the uploaded file is kept
+    even when parsing fails, so HR can retry the same file later."""
+    stem = os.path.basename(filename)[-120:]
+    return f"bulk_cvs/{instance.batch_id or 'pending'}/{uuid.uuid4().hex[:8]}_{stem}"
+
+
+class BulkUploadBatch(models.Model):
+    """One "Bulk Upload CV" submission: the vacancy + source HR picked, plus one
+    BulkUploadItem per file. Candidates are only created for items that parse
+    successfully, so a failed CV never leaves a half-filled row in the
+    repository."""
+    job = models.ForeignKey(Job, on_delete=models.SET_NULL, null=True, blank=True, related_name='bulk_batches')
+    source = models.CharField(max_length=255, blank=True, null=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    performed_by = models.CharField('Done by', max_length=150, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Bulk upload #{self.pk} ({self.job.title if self.job else 'no vacancy'})"
+
+    @property
+    def is_finished(self):
+        return not self.items.filter(
+            status__in=[BulkUploadItem.Status.PENDING, BulkUploadItem.Status.PARSING]
+        ).exists()
+
+
+class BulkUploadItem(models.Model):
+    """One CV inside a batch, tracked from upload through parsing to the
+    candidate row it produced (or the error that stopped it)."""
+    class Status(models.TextChoices):
+        PENDING = 'PENDING', 'Waiting'
+        PARSING = 'PARSING', 'Parsing'
+        SUCCESS = 'SUCCESS', 'Added'
+        ERROR = 'ERROR', 'Failed'
+
+    batch = models.ForeignKey(BulkUploadBatch, on_delete=models.CASCADE, related_name='items')
+    filename = models.CharField(max_length=255)
+    cv_file = models.FileField(upload_to=bulk_cv_path)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    # Non-fatal note, e.g. "no email found in the CV" - the candidate is still created.
+    warning = models.CharField(max_length=255, blank=True, null=True)
+    error_message = models.TextField(blank=True, null=True)
+    # Raw JSON the Logic App returned, kept for troubleshooting. TextField rather
+    # than JSONField so the Azure SQL backend needs no JSON column support.
+    parsed_json = models.TextField(blank=True, null=True)
+    candidate = models.ForeignKey(Candidate, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    attempts = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['pk']
+
+    def __str__(self):
+        return f"{self.filename} ({self.get_status_display()})"
+
+    @property
+    def parsed(self):
+        if not self.parsed_json:
+            return {}
+        try:
+            return json.loads(self.parsed_json)
+        except ValueError:
+            return {}
 
 
 class Offer(models.Model):

@@ -44,6 +44,8 @@ python manage.py runserver
 - `candidates.EmailRegistry` — one row per applicant email, used for duplicate/reapply detection
   (`candidates/services.py::check_email`).
 - `candidates.Note` / `CommunicationLog` / `Attachment` / `Offer` — Candidate Timeline extras.
+- `candidates.BulkUploadBatch` / `BulkUploadItem` — staging rows for Bulk Upload CV (see below); a Candidate
+  is created only once its CV has been parsed successfully.
 - `interviews.Interview` — round type, interviewer, schedule, mode, status, result, feedback, score.
 
 ## RBAC
@@ -51,6 +53,32 @@ python manage.py runserver
 `candidates/permissions.py` defines the four groups and a `GroupRequiredMixin` used across `jobs`, `candidates`,
 `interviews`, and `dashboard` views. Vacancy Management (create/edit/close/archive) is HR-Admin-only; Candidate
 Repository status actions allow HR Admin/Recruiter/Hiring Manager; interview result entry allows HR Admin/Interviewer.
+
+## Bulk Upload CV (CV parsing)
+
+Bulk-uploaded CVs are read by the **`cv-parse-single` Azure Logic App** — the same
+Form Recognizer (`MyCVModel`) + Azure OpenAI (`cv-data-agent`) extraction the careers-mailbox
+intake flow uses — so they arrive with name, email, phone, education and an AI summary
+instead of a name guessed from the filename.
+
+```
+Upload screen  ->  BulkUploadItem per file  ->  background worker  ->  Logic App (one CV per call)
+                                                      |
+                                     parsed  ->  Candidate + CandidateEducation (status Open)
+                                     failed  ->  error on the results screen, no candidate row
+```
+
+The results screen shows live progress and then "N uploaded successfully, M errors", listing
+each success (with a link to the candidate) and each failure (with the reason and a **Retry**
+button that re-uses the stored file). The vacancy and source picked on the upload screen always
+win over whatever the CV says.
+
+Set `LOGIC_APP_CV_PARSER_URL` (plus the optional `CV_PARSER_*` / `BULK_UPLOAD_*` settings) to
+enable it — **[logic_apps/README.md](logic_apps/README.md)** has the workflow JSON and the
+one-time Azure setup. Without it the app runs normally; bulk uploads just report that parsing
+is not configured.
+
+Tests: `DB_ENGINE=sqlite python manage.py test candidates` (never runs against the Azure DB).
 
 ## Switching to PostgreSQL / Azure SQL
 

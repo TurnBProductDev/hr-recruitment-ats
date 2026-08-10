@@ -1,0 +1,112 @@
+{% extends "hr_base.html" %}
+{% block title %}Bulk Upload Results{% endblock %}
+{% block content %}
+<h3 class="mb-1">Bulk Upload CV</h3>
+<p class="text-muted">
+  Vacancy: <strong>{{ batch.job.title|default:"—" }}</strong> ·
+  Source: <strong>{{ batch.source|default:"—" }}</strong> ·
+  Uploaded {{ batch.created_at|date:"d M Y, H:i" }}
+</p>
+
+{% if counts.finished %}
+  <div class="alert {% if counts.error %}alert-warning{% else %}alert-success{% endif %}">
+    <strong>{{ counts.success }} CV{{ counts.success|pluralize }} uploaded successfully</strong>
+    {% if counts.error %} and <strong>{{ counts.error }} error{{ counts.error|pluralize }}</strong>{% endif %}.
+    {% if counts.success %}The successful ones are now in <em>Open Applications</em>.{% endif %}
+  </div>
+{% else %}
+  <div class="card app-card p-3 mb-3">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <span>Reading the CVs… this takes about 20–40 seconds per CV. You can leave this page open.</span>
+      <span class="text-muted small" id="bulk-count">{{ counts.done }} of {{ counts.total }}</span>
+    </div>
+    <div class="progress" role="progressbar" aria-label="Parsing progress">
+      <div class="progress-bar progress-bar-striped progress-bar-animated" id="bulk-bar"
+           style="width: {% widthratio counts.done counts.total 100 %}%"></div>
+    </div>
+  </div>
+{% endif %}
+
+<div class="card app-card p-3">
+  <table class="table table-hover align-middle w-100">
+    <thead>
+      <tr><th>File</th><th>Status</th><th>Candidate</th><th>Email</th><th>Details</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for item in items %}
+      <tr>
+        <td>{{ item.filename }}</td>
+        <td>
+          {% if item.status == 'SUCCESS' %}<span class="badge bg-success">Added</span>
+          {% elif item.status == 'ERROR' %}<span class="badge bg-danger">Failed</span>
+          {% elif item.status == 'PARSING' %}<span class="badge bg-info text-dark">Parsing…</span>
+          {% else %}<span class="badge bg-secondary">Waiting</span>{% endif %}
+        </td>
+        <td>
+          {% if item.candidate %}
+            <a href="{% url 'candidate_timeline' item.candidate.pk %}">{{ item.candidate.full_name }}</a>
+            <div class="text-muted small">{{ item.candidate.candidate_code }}</div>
+          {% else %}—{% endif %}
+        </td>
+        <td>
+          {% if item.candidate and not item.candidate.email_is_placeholder %}
+            {{ item.candidate.email }}
+          {% else %}—{% endif %}
+        </td>
+        <td class="small">
+          {% if item.error_message %}<span class="text-danger">{{ item.error_message }}</span>
+          {% elif item.warning %}<span class="text-warning-emphasis">{{ item.warning }}</span>
+          {% elif item.candidate %}
+            {{ item.candidate.qualification|default:"" }}
+            {% if item.candidate.resume_url %}
+              <a href="{{ item.candidate.resume_url }}" target="_blank" rel="noopener">CV link</a>
+            {% endif %}
+          {% endif %}
+        </td>
+        <td class="text-end">
+          {% if item.candidate %}
+            <a href="{% url 'candidate_edit' item.candidate.pk %}" class="btn btn-sm btn-outline-app">Edit</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6" class="text-muted">No files in this batch.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="mt-3 d-flex gap-2">
+  <a href="{% url 'candidate_repository' %}?tab=open" class="btn btn-fill-app">Go to Candidate Repository</a>
+  <a href="{% url 'candidate_bulk_upload' %}" class="btn btn-outline-app">Upload More CVs</a>
+  {% if counts.finished and counts.error %}
+  <form method="post" action="{% url 'candidate_bulk_retry' batch.pk %}">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-outline-danger">Retry {{ counts.error }} failed CV{{ counts.error|pluralize }}</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% if not counts.finished %}
+<script>
+// Poll the batch until every CV is done, then reload once to show the results.
+(function () {
+  var url = "{% url 'candidate_bulk_status' batch.pk %}";
+  var bar = document.getElementById('bulk-bar');
+  var label = document.getElementById('bulk-count');
+  var timer = setInterval(function () {
+    fetch(url, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (bar && d.total) { bar.style.width = Math.round(d.done * 100 / d.total) + '%'; }
+        if (label) { label.textContent = d.done + ' of ' + d.total; }
+        if (d.finished) { clearInterval(timer); window.location.reload(); }
+      })
+      .catch(function () { /* transient network blip - try again next tick */ });
+  }, 3000);
+})();
+</script>
+{% endif %}
+{% endblock %}

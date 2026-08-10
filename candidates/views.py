@@ -1,8 +1,7 @@
-import re
-import uuid
-
+from django.conf import settings
 from django.contrib import messages
 from django.db.models import Exists, Max, OuterRef, Q, Subquery
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -12,7 +11,7 @@ from django.views.generic import DetailView, ListView, UpdateView
 from interviews.models import Interview
 from jobs.models import Job
 
-from . import services
+from . import bulk, cv_parser, services
 from .forms import (
     BulkUploadForm,
     CandidateApplicationForm,
@@ -21,7 +20,15 @@ from .forms import (
     EducationFormSet,
     ExperienceFormSet,
 )
-from .models import CAREERS, Candidate, CandidateStatusHistory, CommunicationLog, Note
+from .models import (
+    CAREERS,
+    BulkUploadBatch,
+    BulkUploadItem,
+    Candidate,
+    CandidateStatusHistory,
+    CommunicationLog,
+    Note,
+)
 from .permissions import ANY_STAFF, HIRING_MANAGER, HR_ADMIN, RECRUITER, GroupRequiredMixin
 
 
@@ -497,59 +504,104 @@ class BulkRejectClosedVacanciesView(GroupRequiredMixin, View):
 # ---------------------------------------------------------------------------
 
 
-def _name_from_filename(filename):
-    stem = filename.rsplit('.', 1)[0]
-    stem = re.sub(r'[_\-\.]+', ' ', stem)
-    stem = re.sub(r'\b(cv|resume)\b', '', stem, flags=re.IGNORECASE).strip()
-    return stem.title() or 'Unnamed Candidate'
+ALLOWED_CV_EXTENSIONS = ('.pdf', '.doc', '.docx')
+
+
+def _validate_cv_files(files):
+    """Returns (errors, ok_files). Rejects the wrong file types / oversized files
+    up front rather than paying for a Logic App run that is bound to fail."""
+    max_files = int(getattr(settings, 'BULK_UPLOAD_MAX_FILES', 25))
+    max_bytes = int(getattr(settings, 'BULK_UPLOAD_MAX_MB', 10)) * 1024 * 1024
+    errors = []
+    if len(files) > max_files:
+        errors.append(f'Upload at most {max_files} CVs at a time (you selected {len(files)}).')
+        return errors, []
+    ok = []
+    for f in files:
+        if not f.name.lower().endswith(ALLOWED_CV_EXTENSIONS):
+            errors.append(f'{f.name}: only PDF, DOC and DOCX files can be parsed.')
+        elif f.size > max_bytes:
+            errors.append(f'{f.name}: larger than {max_bytes // (1024 * 1024)} MB.')
+        else:
+            ok.append(f)
+    return errors, ok
 
 
 class BulkUploadCVView(GroupRequiredMixin, View):
-    """Step 1: select vacancy + source, upload multiple CVs. Creates one
-    draft Candidate per file (name guessed from the filename - no resume
-    parsing is wired up here, see README) and redirects to the review step
-    where HR edits/confirms each row."""
+    """Step 1: select vacancy + source, upload multiple CVs. Each file is queued
+    as a BulkUploadItem and parsed in the background by the `cv-parse-single`
+    Logic App (same extraction as the careers mailbox intake); candidates are
+    created only for CVs that parse. HR watches progress on the results screen."""
     template_name = 'candidates/bulk_upload.html'
     allowed_groups = (HR_ADMIN, RECRUITER)
 
     def get(self, request):
-        return render(request, self.template_name, {'form': BulkUploadForm()})
+        return render(request, self.template_name, {
+            'form': BulkUploadForm(),
+            'parser_configured': cv_parser.is_configured(),
+        })
 
     def post(self, request):
         form = BulkUploadForm(request.POST)
         files = request.FILES.getlist('cvs')
+        errors, files = _validate_cv_files(files)
+        for error in errors:
+            messages.error(request, error)
         if not files:
             messages.error(request, 'Select at least one CV file to upload.')
-        if form.is_valid() and files:
-            job = form.cleaned_data['job']
-            source = form.cleaned_data['source']
-            created_ids = []
+        elif form.is_valid():
+            batch = BulkUploadBatch.objects.create(
+                job=form.cleaned_data['job'],
+                source=form.cleaned_data['source'],
+                created_by=request.user,
+                performed_by=_performed_by(request),
+            )
             for f in files:
-                candidate = Candidate(
-                    full_name=_name_from_filename(f.name),
-                    email=f"pending-{uuid.uuid4().hex[:12]}@placeholder.local",
-                    job=job,
-                    source=source,
-                    status=STATUS.OPEN,
-                    resume_blob_url=f,
-                )
-                candidate.save()
-                services.record_creation(candidate, user=request.user, remarks='Created via Bulk Upload CV')
-                created_ids.append(candidate.pk)
-            messages.success(request, f'{len(created_ids)} candidate(s) created. Please review and edit their details below.')
-            ids_param = ','.join(str(i) for i in created_ids)
-            return redirect(f"{reverse('candidate_bulk_review')}?ids={ids_param}")
-        return render(request, self.template_name, {'form': form})
+                BulkUploadItem.objects.create(batch=batch, filename=f.name[:255], cv_file=f)
+            bulk.start_batch(batch)
+            return redirect('candidate_bulk_progress', pk=batch.pk)
+        return render(request, self.template_name, {
+            'form': form,
+            'parser_configured': cv_parser.is_configured(),
+        })
 
 
-class BulkReviewListView(GroupRequiredMixin, ListView):
-    """Step 2: Edit Data / Confirm - lists the batch just created so HR can
-    fix the auto-guessed names/emails before the rows enter the normal
-    Candidate Repository workflow."""
-    template_name = 'candidates/bulk_review.html'
-    context_object_name = 'candidates'
+class BulkUploadProgressView(GroupRequiredMixin, View):
+    """Step 2: live progress while the CVs are parsed, then the results -
+    which CVs became candidates and which failed, with a retry for the failures."""
+    template_name = 'candidates/bulk_progress.html'
     allowed_groups = (HR_ADMIN, RECRUITER)
 
-    def get_queryset(self):
-        ids = [i for i in self.request.GET.get('ids', '').split(',') if i]
-        return Candidate.objects.filter(pk__in=ids)
+    def get(self, request, pk):
+        batch = get_object_or_404(BulkUploadBatch.objects.select_related('job'), pk=pk)
+        items, counts = bulk.summarise(batch)
+        return render(request, self.template_name, {
+            'batch': batch, 'items': items, 'counts': counts,
+        })
+
+
+class BulkUploadStatusView(GroupRequiredMixin, View):
+    """Poll target for the progress page: just the counts, so the page can show
+    a live bar and reload itself once the batch is finished."""
+    allowed_groups = (HR_ADMIN, RECRUITER)
+
+    def get(self, request, pk):
+        batch = get_object_or_404(BulkUploadBatch, pk=pk)
+        _, counts = bulk.summarise(batch)
+        return JsonResponse(counts)
+
+
+class BulkUploadRetryView(GroupRequiredMixin, View):
+    """Re-queue the failed CVs in a batch (same files, no re-upload needed)."""
+    allowed_groups = (HR_ADMIN, RECRUITER)
+
+    def post(self, request, pk):
+        batch = get_object_or_404(BulkUploadBatch, pk=pk)
+        requeued = batch.items.filter(status=BulkUploadItem.Status.ERROR).update(
+            status=BulkUploadItem.Status.PENDING, error_message=None)
+        if requeued:
+            bulk.start_batch(batch)
+            messages.success(request, f'Retrying {requeued} CV(s).')
+        else:
+            messages.info(request, 'Nothing to retry in this batch.')
+        return redirect('candidate_bulk_progress', pk=batch.pk)

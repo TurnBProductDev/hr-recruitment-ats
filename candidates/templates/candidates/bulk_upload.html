@@ -7,10 +7,19 @@
       <h4 class="mb-3">Bulk Upload CV</h4>
       <ol class="text-muted small">
         <li>Select the vacancy and source</li>
-        <li>Upload one or more CV files</li>
-        <li>Edit each candidate's details on the next screen</li>
-        <li>Confirm to add them to the Candidate Repository</li>
+        <li>Upload one or more CV files (PDF, DOC or DOCX)</li>
+        <li>Each CV is read automatically — name, email, phone, education and an AI summary</li>
+        <li>Review the results, then edit any candidate that needs a correction</li>
       </ol>
+
+      {% if not parser_configured %}
+      <div class="alert alert-warning small">
+        CV reading is not configured yet (<code>LOGIC_APP_CV_PARSER_URL</code> is not set),
+        so uploads will be recorded as errors and no candidates will be created.
+        See <code>logic_apps/README.md</code>.
+      </div>
+      {% endif %}
+
       <form method="post" enctype="multipart/form-data">
         {% csrf_token %}
         <div class="mb-3"><label class="form-label">Vacancy</label>{{ form.job }}</div>
@@ -18,8 +27,9 @@
         <div class="mb-3">
           <label class="form-label">CV Files</label>
           <input type="file" name="cvs" multiple class="form-control" accept=".pdf,.doc,.docx" required>
+          <div class="form-text">Up to 25 files, 10 MB each. Reading a CV takes about 20–40 seconds.</div>
         </div>
-        <button type="submit" class="btn btn-fill-app">Upload</button>
+        <button type="submit" class="btn btn-fill-app">Upload &amp; Read CVs</button>
       </form>
     </div>
   </div>

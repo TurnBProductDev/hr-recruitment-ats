@@ -44,5 +44,10 @@ urlpatterns = [
          name='candidate_reject_closed'),
 
     path('hr/candidates/bulk-upload/', views.BulkUploadCVView.as_view(), name='candidate_bulk_upload'),
-    path('hr/candidates/bulk-review/', views.BulkReviewListView.as_view(), name='candidate_bulk_review'),
+    path('hr/candidates/bulk-upload/<int:pk>/', views.BulkUploadProgressView.as_view(),
+         name='candidate_bulk_progress'),
+    path('hr/candidates/bulk-upload/<int:pk>/status/', views.BulkUploadStatusView.as_view(),
+         name='candidate_bulk_status'),
+    path('hr/candidates/bulk-upload/<int:pk>/retry/', views.BulkUploadRetryView.as_view(),
+         name='candidate_bulk_retry'),
 ]

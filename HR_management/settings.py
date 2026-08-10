@@ -156,6 +156,21 @@ MEDIA_ROOT = os.environ.get("MEDIA_ROOT", BASE_DIR / 'media')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# --- Bulk Upload CV -> `cv-parse-single` Logic App -------------------------
+# HTTP POST URL of the Logic App trigger that reads one CV (Form Recognizer +
+# Azure OpenAI) and returns the extracted fields. Contains a SAS signature, so
+# keep it in app settings / .env, never in the repo. Setup: logic_apps/README.md.
+# Unset = bulk upload records every file as an error and creates no candidates.
+LOGIC_APP_CV_PARSER_URL = os.environ.get("LOGIC_APP_CV_PARSER_URL", "")
+# Seconds to wait for one CV (the workflow answers 202 + Location if it needs
+# longer than the trigger's synchronous window, and the client polls that).
+CV_PARSER_TIMEOUT = int(os.environ.get("CV_PARSER_TIMEOUT", "180"))
+# Whether the Logic App also files the CV in the SharePoint "Resume Received"
+# folder and returns a sharing link (stored on the candidate as resume_url).
+CV_PARSER_UPLOAD_TO_SHAREPOINT = os.environ.get("CV_PARSER_UPLOAD_TO_SHAREPOINT", "True") == "True"
+BULK_UPLOAD_MAX_FILES = int(os.environ.get("BULK_UPLOAD_MAX_FILES", "25"))
+BULK_UPLOAD_MAX_MB = int(os.environ.get("BULK_UPLOAD_MAX_MB", "10"))
+
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'hr_dashboard'
 LOGOUT_REDIRECT_URL = 'vacancy_list'

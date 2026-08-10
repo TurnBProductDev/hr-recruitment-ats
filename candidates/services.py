@@ -1,9 +1,23 @@
 """Duplicate/blacklist detection and status-transition helpers for the
 candidates app, built around the email_registry + blacklist tables.
 """
-from .models import Blacklist, Candidate, CandidateStatusHistory, EmailRegistry
+import uuid
+
+from .models import (
+    PLACEHOLDER_EMAIL_DOMAIN,
+    Blacklist,
+    Candidate,
+    CandidateEducation,
+    CandidateStatusHistory,
+    EmailRegistry,
+)
 
 STATUS = Candidate.Status
+
+
+def placeholder_email():
+    """Stand-in address for a candidate whose CV had no readable email."""
+    return f"pending-{uuid.uuid4().hex[:12]}@{PLACEHOLDER_EMAIL_DOMAIN}"
 
 
 def check_email(email):
@@ -61,6 +75,49 @@ def blacklist_candidate(candidate, reason, user=None, performed_by=None):
     candidate.is_blacklisted = True
     candidate.save(update_fields=['is_blacklisted'])
     change_status(candidate, STATUS.BLACKLISTED, user=user, remarks=reason, performed_by=performed_by)
+    return candidate
+
+
+def create_from_parsed_cv(fields, job, source, user=None, performed_by=None, remarks=None):
+    """Create a Candidate from Logic-App-parsed CV fields (Bulk Upload CV).
+
+    Runs the same duplicate/blacklist checks as the careers form, and builds the
+    structured education record from the "Degree - College - Year" string the
+    same way sql/sp_intake_add_candidate.sql does. The vacancy and source come
+    from the upload screen, not from the CV.
+    """
+    from . import cv_parser  # local import: cv_parser imports settings/requests
+
+    email = (fields.get('email') or '').strip().lower()
+    has_real_email = bool(email)
+    is_duplicate, is_blacklisted = check_email(email) if has_real_email else (False, False)
+
+    candidate = Candidate(
+        full_name=fields.get('full_name') or 'Unnamed Candidate',
+        email=email or placeholder_email(),
+        phone=fields.get('phone'),
+        qualification=fields.get('qualification'),
+        cv_summary=fields.get('cv_summary'),
+        resume_url=fields.get('resume_url'),
+        job=job,
+        source=source,
+        is_duplicate=is_duplicate,
+        is_blacklisted=is_blacklisted,
+        status=STATUS.BLACKLISTED if is_blacklisted else STATUS.OPEN,
+    )
+    candidate.save()
+
+    if has_real_email:
+        register_application(candidate)
+
+    qualification, institution, year = cv_parser.split_education(fields.get('qualification'))
+    if qualification:
+        CandidateEducation.objects.create(
+            candidate=candidate, qualification=qualification,
+            institution=institution, year_completed=year,
+        )
+
+    record_creation(candidate, user=user, remarks=remarks, performed_by=performed_by)
     return candidate
 
 

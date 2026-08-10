@@ -8,5 +8,7 @@ gunicorn>=21.0
 whitenoise>=6.6
 # Excel import (management command)
 openpyxl>=3.1
+# Calls the cv-parse-single Logic App from Bulk Upload CV
+requests>=2.31
 # PostgreSQL (optional, only if DB_ENGINE=postgres)
 psycopg2-binary>=2.9

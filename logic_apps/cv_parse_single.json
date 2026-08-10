@@ -1,0 +1,384 @@
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "triggers": {
+            "When_a_HTTP_request_is_received": {
+                "type": "Request",
+                "kind": "Http",
+                "inputs": {
+                    "method": "POST",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "filename": {
+                                "type": "string"
+                            },
+                            "content_base64": {
+                                "type": "string"
+                            },
+                            "role_hint": {
+                                "type": "string"
+                            },
+                            "source_hint": {
+                                "type": "string"
+                            },
+                            "upload_to_sharepoint": {
+                                "type": "boolean"
+                            }
+                        },
+                        "required": [
+                            "filename",
+                            "content_base64"
+                        ]
+                    }
+                }
+            }
+        },
+        "actions": {
+            "Parse_CV": {
+                "type": "Scope",
+                "runAfter": {},
+                "actions": {
+                    "AnalyzeCV": {
+                        "type": "ApiConnection",
+                        "runAfter": {},
+                        "inputs": {
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['formrecognizer']['connectionId']"
+                                }
+                            },
+                            "method": "post",
+                            "body": "@base64ToBinary(triggerBody()?['content_base64'])",
+                            "path": "/documentModels/@{encodeURIComponent('MyCVModel')}:analyze",
+                            "queries": {
+                                "api-version": "2023-07-31"
+                            }
+                        }
+                    },
+                    "Set_CV_text": {
+                        "type": "Compose",
+                        "inputs": "@if(greater(length(coalesce(body('AnalyzeCV')?['analyzeResult']?['content'], '')), 12000), substring(coalesce(body('AnalyzeCV')?['analyzeResult']?['content'], ''), 0, 12000), coalesce(body('AnalyzeCV')?['analyzeResult']?['content'], ''))",
+                        "runAfter": {
+                            "AnalyzeCV": [
+                                "Succeeded"
+                            ]
+                        }
+                    },
+                    "Extract_completion": {
+                        "type": "ApiConnection",
+                        "operationOptions": "DisableAsyncPattern",
+                        "runAfter": {
+                            "Set_CV_text": [
+                                "Succeeded"
+                            ]
+                        },
+                        "inputs": {
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['azureopenai']['connectionId']"
+                                }
+                            },
+                            "method": "post",
+                            "body": {
+                                "messages": [
+                                    {
+                                        "role": "system",
+                                        "content": "You are an HR Data Extraction Specialist. Clean and format candidate data provided in the labels below.\n\nCRITICAL RULES:\n1. Name: Use the 'Name' label.\n2. Role Applied: Identify the job title from 'Email Subject' or 'Email Body'. Return only the title. Default to 'General Application' if not found.\n3. Email Address: Use the 'Email' label. CLEANING: Remove all internal spaces and return in lowercase.\n4. Mobile Number: Use the 'Mobile' label. STANDARDIZATION: Format as +91-XXXXXXXXXX (Indian) or +[CountryCode]-XXXXXXXXX.\n5. Education: Use the 'Education' label. Identify highest degree and college and year of passout. FORMAT: 'Degree - College Name - Year' (e.g., 'MBA - DC School of Management & Technology - 2019').\n6. Source: Identify the source from 'Email Subject'. Return 'LinkedIn' if it is LinkedIn, 'Referral' if it is Referral, 'Indeed' if it is Indeed, 'Naukri' if it is Naukri. Else default to 'Careers'.\n\nOUTPUT REQUIREMENT: Return ONLY a raw JSON object with keys: Name, Role_Applied, Email, Mobile, Education, Source. No markdown formatting."
+                                    },
+                                    {
+                                        "role": "user",
+                                        "content": "Email Subject: @{coalesce(triggerBody()?['role_hint'], 'General Application')}\n\nEmail Body: Bulk CV upload from the ATS. Source: @{coalesce(triggerBody()?['source_hint'], 'Careers')}. File name: @{triggerBody()?['filename']}\n\nName: @{body('AnalyzeCV')?['analyzeResult']?['documents']?[0]?['fields']?['NAME']?['valueString']}\n\nEmail: @{body('AnalyzeCV')?['analyzeResult']?['documents']?[0]?['fields']?['EMAIL']?['valueString']}\n\nMobile: @{body('AnalyzeCV')?['analyzeResult']?['documents']?[0]?['fields']?['MOBILE NO']?['valueString']}\n\nEducation: @{body('AnalyzeCV')?['analyzeResult']?['documents']?[0]?['fields']?['EDUCATION']?['valueString']}"
+                                    }
+                                ],
+                                "temperature": 0
+                            },
+                            "path": "/2024-02-15-preview/deployments/@{encodeURIComponent('cv-data-agent')}/chat/completions",
+                            "queries": {
+                                "api-version": "2024-02-01"
+                            },
+                            "retryPolicy": {
+                                "type": "exponential",
+                                "count": 2,
+                                "interval": "PT10S"
+                            }
+                        }
+                    },
+                    "Parse_JSON": {
+                        "type": "ParseJson",
+                        "runAfter": {
+                            "Extract_completion": [
+                                "Succeeded"
+                            ]
+                        },
+                        "inputs": {
+                            "content": "@body('Extract_completion')?['choices']?[0]?['message']?['content']",
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "Name": {
+                                        "type": "string"
+                                    },
+                                    "Role_Applied": {
+                                        "type": "string"
+                                    },
+                                    "Email": {
+                                        "type": "string"
+                                    },
+                                    "Mobile": {
+                                        "type": "string"
+                                    },
+                                    "Education": {
+                                        "type": "string"
+                                    },
+                                    "Source": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "Summary_completion": {
+                        "type": "ApiConnection",
+                        "operationOptions": "DisableAsyncPattern",
+                        "runAfter": {
+                            "Parse_JSON": [
+                                "Succeeded"
+                            ]
+                        },
+                        "inputs": {
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['azureopenai']['connectionId']"
+                                }
+                            },
+                            "method": "post",
+                            "body": {
+                                "messages": [
+                                    {
+                                        "role": "system",
+                                        "content": "You are an HR analyst. Write a concise 4-5 sentence professional summary of the candidate from the CV text: key skills, total years of experience, major work experiences and impact. Factual, neutral tone. If a piece of information, such as years of experience, is not explicitly stated or easily calculable from the provided text, do not invent it. Base the summary strictly on the provided text. Return ONLY the summary text — no preamble, no markdown"
+                                    },
+                                    {
+                                        "role": "user",
+                                        "content": "Role Applied: @{body('Parse_JSON')?['Role_Applied']}\n\nCV:\n@{outputs('Set_CV_text')}"
+                                    }
+                                ],
+                                "temperature": 0.3,
+                                "max_tokens": 400
+                            },
+                            "path": "/2024-02-15-preview/deployments/@{encodeURIComponent('cv-data-agent')}/chat/completions",
+                            "queries": {
+                                "api-version": "2024-02-01"
+                            },
+                            "retryPolicy": {
+                                "type": "exponential",
+                                "count": 2,
+                                "interval": "PT10S"
+                            }
+                        }
+                    },
+                    "Should_upload_to_SharePoint": {
+                        "type": "If",
+                        "runAfter": {
+                            "Parse_JSON": [
+                                "Succeeded"
+                            ]
+                        },
+                        "expression": {
+                            "and": [
+                                {
+                                    "not": {
+                                        "equals": [
+                                            "@coalesce(triggerBody()?['upload_to_sharepoint'], true)",
+                                            false
+                                        ]
+                                    }
+                                }
+                            ]
+                        },
+                        "actions": {
+                            "Create_file_1": {
+                                "type": "ApiConnection",
+                                "runAfter": {},
+                                "runtimeConfiguration": {
+                                    "contentTransfer": {
+                                        "transferMode": "Chunked"
+                                    }
+                                },
+                                "inputs": {
+                                    "host": {
+                                        "connection": {
+                                            "name": "@parameters('$connections')['sharepointonline-1']['connectionId']"
+                                        }
+                                    },
+                                    "method": "post",
+                                    "body": "@base64ToBinary(triggerBody()?['content_base64'])",
+                                    "path": "/datasets/@{encodeURIComponent(encodeURIComponent('https://netorg519925.sharepoint.com/sites/TeamHR'))}/files",
+                                    "queries": {
+                                        "folderPath": "/Shared Documents/General/HR - Docs/TurnB - HR/Recruitment/Resume Received",
+                                        "name": "@triggerBody()?['filename']",
+                                        "queryParametersSingleEncoded": true
+                                    }
+                                }
+                            },
+                            "Create_sharing_link_for_a_file_or_folder": {
+                                "type": "ApiConnection",
+                                "runAfter": {
+                                    "Create_file_1": [
+                                        "Succeeded"
+                                    ]
+                                },
+                                "inputs": {
+                                    "host": {
+                                        "connection": {
+                                            "name": "@parameters('$connections')['sharepointonline']['connectionId']"
+                                        }
+                                    },
+                                    "method": "post",
+                                    "body": {
+                                        "type": "edit",
+                                        "scope": "organization"
+                                    },
+                                    "path": "/datasets/@{encodeURIComponent(encodeURIComponent('https://netorg519925.sharepoint.com/sites/TeamHR'))}/codeless/_api/v2.0/sites/root/lists/@{encodeURIComponent(encodeURIComponent('55178891-31a8-46cc-9a03-23970fab1fcd'))}/items/@{encodeURIComponent(encodeURIComponent(body('Create_file_1')?['ItemId']))}/driveItem/createLink"
+                                }
+                            }
+                        },
+                        "else": {
+                            "actions": {}
+                        }
+                    }
+                }
+            },
+            "Extracted_text": {
+                "type": "Compose",
+                "runAfter": {
+                    "Parse_CV": [
+                        "Succeeded",
+                        "Failed",
+                        "TimedOut"
+                    ]
+                },
+                "inputs": "@concat(coalesce(body('Parse_JSON')?['Name'], ''), coalesce(body('Parse_JSON')?['Email'], ''), coalesce(body('Parse_JSON')?['Education'], ''))"
+            },
+            "Respond": {
+                "type": "If",
+                "runAfter": {
+                    "Extracted_text": [
+                        "Succeeded"
+                    ]
+                },
+                "expression": {
+                    "and": [
+                        {
+                            "not": {
+                                "equals": [
+                                    "@outputs('Extracted_text')",
+                                    ""
+                                ]
+                            }
+                        }
+                    ]
+                },
+                "actions": {
+                    "Response_Success": {
+                        "type": "Response",
+                        "kind": "Http",
+                        "runAfter": {},
+                        "inputs": {
+                            "statusCode": 200,
+                            "headers": {
+                                "Content-Type": "application/json"
+                            },
+                            "body": {
+                                "status": "ok",
+                                "Name": "@{body('Parse_JSON')?['Name']}",
+                                "Email": "@{body('Parse_JSON')?['Email']}",
+                                "Mobile": "@{body('Parse_JSON')?['Mobile']}",
+                                "Education": "@{body('Parse_JSON')?['Education']}",
+                                "Role_Applied": "@{body('Parse_JSON')?['Role_Applied']}",
+                                "Source": "@{body('Parse_JSON')?['Source']}",
+                                "Summary": "@{body('Summary_completion')?['choices']?[0]?['message']?['content']}",
+                                "CV_Link": "@{body('Create_sharing_link_for_a_file_or_folder')?['link']?['webUrl']}"
+                            }
+                        }
+                    }
+                },
+                "else": {
+                    "actions": {
+                        "Failed_actions": {
+                            "type": "Query",
+                            "runAfter": {},
+                            "inputs": {
+                                "from": "@result('Parse_CV')",
+                                "where": "@equals(item()?['status'], 'Failed')"
+                            }
+                        },
+                        "Response_Error": {
+                            "type": "Response",
+                            "kind": "Http",
+                            "runAfter": {
+                                "Failed_actions": [
+                                    "Succeeded",
+                                    "Failed",
+                                    "Skipped",
+                                    "TimedOut"
+                                ]
+                            },
+                            "inputs": {
+                                "statusCode": 200,
+                                "headers": {
+                                    "Content-Type": "application/json"
+                                },
+                                "body": {
+                                    "status": "error",
+                                    "action": "@{first(body('Failed_actions'))?['name']}",
+                                    "message": "@{coalesce(first(body('Failed_actions'))?['error']?['message'], first(body('Failed_actions'))?['outputs']?['body']?['error']?['message'], 'Nothing could be read from this CV.')}"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "outputs": {},
+        "parameters": {
+            "$connections": {
+                "type": "Object",
+                "defaultValue": {}
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "type": "Object",
+            "value": {
+                "formrecognizer": {
+                    "id": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/providers/Microsoft.Web/locations/centralindia/managedApis/formrecognizer",
+                    "connectionId": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/resourceGroups/HRMS/providers/Microsoft.Web/connections/formrecognizer",
+                    "connectionName": "formrecognizer",
+                    "connectionProperties": {}
+                },
+                "azureopenai": {
+                    "id": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/providers/Microsoft.Web/locations/centralindia/managedApis/azureopenai",
+                    "connectionId": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/resourceGroups/HRMS/providers/Microsoft.Web/connections/azureopenai",
+                    "connectionName": "azureopenai",
+                    "connectionProperties": {}
+                },
+                "sharepointonline-1": {
+                    "id": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/providers/Microsoft.Web/locations/centralindia/managedApis/sharepointonline",
+                    "connectionId": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/resourceGroups/HRMS/providers/Microsoft.Web/connections/sharepointonline-2",
+                    "connectionName": "sharepointonline-2",
+                    "connectionProperties": {}
+                },
+                "sharepointonline": {
+                    "id": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/providers/Microsoft.Web/locations/centralindia/managedApis/sharepointonline",
+                    "connectionId": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/resourceGroups/HRMS/providers/Microsoft.Web/connections/sharepointonline-2",
+                    "connectionName": "sharepointonline-2",
+                    "connectionProperties": {}
+                }
+            }
+        }
+    }
+}
