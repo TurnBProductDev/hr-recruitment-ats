@@ -123,4 +123,3 @@ BEGIN
     SELECT @cid AS candidate_id, @code AS candidate_code, @status AS [status],
            @is_dup AS is_duplicate, @job_id AS job_id;
 END
-GO
