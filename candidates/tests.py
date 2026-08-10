@@ -231,6 +231,42 @@ class BulkProcessingTests(TestCase):
                                   'done': 2, 'finished': False})
 
 
+class BackButtonTests(TestCase):
+    """Back from a candidate's own pages goes to the repository tab the
+    candidate is in, not back through browser history."""
+
+    def setUp(self):
+        self.job = Job.objects.create(title='Data Analyst')
+        self.user = get_user_model().objects.create_superuser('hr', 'hr@example.com', 'pw')
+        self.client.force_login(self.user)
+        self.candidate = Candidate.objects.create(
+            full_name='Asha Menon', email='asha@example.com', job=self.job,
+            status=Candidate.Status.SHORTLISTED)
+
+    def test_timeline_back_points_at_the_candidates_tab(self):
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertEqual(response.context['back_url'],
+                         f"{reverse('candidate_repository')}?tab=shortlisted")
+        self.assertContains(response, 'Back to Candidates')
+
+    def test_edit_page_back_points_at_the_candidates_tab(self):
+        response = self.client.get(reverse('candidate_edit', args=[self.candidate.pk]))
+        self.assertEqual(response.context['back_url'],
+                         f"{reverse('candidate_repository')}?tab=shortlisted")
+
+    def test_back_follows_the_candidates_current_status(self):
+        self.candidate.status = Candidate.Status.HIRED
+        self.candidate.save(update_fields=['status'])
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertEqual(response.context['back_url'],
+                         f"{reverse('candidate_repository')}?tab=hired")
+
+    def test_pages_without_an_obvious_parent_keep_the_history_button(self):
+        response = self.client.get(reverse('candidate_repository'))
+        self.assertIsNone(response.context.get('back_url'))
+        self.assertContains(response, 'goBack()')
+
+
 class BulkUploadViewTests(TestCase):
     def setUp(self):
         self.job = Job.objects.create(title='Data Analyst')
@@ -300,6 +336,21 @@ class BulkUploadViewTests(TestCase):
         self.assertContains(finished, '1 error')
         self.assertContains(finished, 'Password-protected PDF.')
         self.assertContains(finished, 'Retry 1 failed CV')
+
+    def test_upload_page_lists_recent_batches(self):
+        batch = BulkUploadBatch.objects.create(job=self.job, source='Naukri')
+        BulkUploadItem.objects.create(batch=batch, filename='a.pdf',
+                                      cv_file=SimpleUploadedFile('a.pdf', b'x'),
+                                      status=BulkUploadItem.Status.SUCCESS)
+        BulkUploadItem.objects.create(batch=batch, filename='b.pdf',
+                                      cv_file=SimpleUploadedFile('b.pdf', b'x'),
+                                      status=BulkUploadItem.Status.ERROR)
+
+        response = self.client.get(reverse('candidate_bulk_upload'))
+        self.assertContains(response, 'Recent Uploads')
+        self.assertContains(response, '1 added')
+        self.assertContains(response, '1 failed')
+        self.assertContains(response, reverse('candidate_bulk_progress', args=[batch.pk]))
 
     def test_retry_requeues_failed_items(self):
         batch = BulkUploadBatch.objects.create(job=self.job, source='Naukri')

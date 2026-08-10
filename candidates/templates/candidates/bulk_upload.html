@@ -32,6 +32,35 @@
         <button type="submit" class="btn btn-fill-app">Upload &amp; Read CVs</button>
       </form>
     </div>
+
+    {% if recent_batches %}
+    <div class="card app-card p-4 mt-3">
+      <h6 class="mb-1">Recent Uploads</h6>
+      <p class="text-muted small mb-3">Reopen the results of an earlier batch — including any CVs that failed.</p>
+      <table class="table table-sm table-hover align-middle w-100 mb-0">
+        <thead><tr><th>When</th><th>Vacancy</th><th>Result</th><th></th></tr></thead>
+        <tbody>
+          {% for b in recent_batches %}
+          <tr>
+            <td class="small">{{ b.created_at|date:"d M Y, H:i" }}</td>
+            <td class="small">{{ b.job.title|default:"—" }}<div class="text-muted">{{ b.source|default:"" }}</div></td>
+            <td class="small">
+              {% if b.waiting %}
+                <span class="badge bg-info text-dark">{{ b.waiting }} in progress</span>
+              {% endif %}
+              {% if b.success %}<span class="badge bg-success">{{ b.success }} added</span>{% endif %}
+              {% if b.errors %}<span class="badge bg-danger">{{ b.errors }} failed</span>{% endif %}
+              {% if not b.total %}<span class="text-muted">no files</span>{% endif %}
+            </td>
+            <td class="text-end">
+              <a href="{% url 'candidate_bulk_progress' b.pk %}" class="btn btn-sm btn-outline-app">View</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

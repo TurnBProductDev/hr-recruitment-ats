@@ -1,6 +1,6 @@
 from django.conf import settings
 from django.contrib import messages
-from django.db.models import Exists, Max, OuterRef, Q, Subquery
+from django.db.models import Count, Exists, Max, OuterRef, Q, Subquery
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -51,6 +51,15 @@ REPOSITORY_TABS = [
     ('screening_hold', 'Screening Hold', STATUS.SCREENING_HOLD),
 ]
 TAB_STATUS_MAP = {key: status for key, _, status in REPOSITORY_TABS}
+STATUS_TAB_MAP = {status: key for key, _, status in REPOSITORY_TABS}
+
+
+def _repository_back_url(candidate):
+    """Where "Back" goes from a candidate's own pages: the Candidate Repository,
+    on the tab this candidate currently sits in. Retracing browser history got
+    confusing once a status change had moved the candidate to another tab."""
+    tab = STATUS_TAB_MAP.get(candidate.status, 'open')
+    return f"{reverse('candidate_repository')}?tab={tab}"
 
 # Readable titles for the dashboard funnel drill-downs (?flow=…)
 FLOW_TITLES = {
@@ -251,6 +260,8 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         candidate = self.object
+        ctx['back_url'] = _repository_back_url(candidate)
+        ctx['back_label'] = 'Back to Candidates'
         ctx['history'] = candidate.history.select_related('changed_by').all()
         ctx['notes'] = candidate.notes.select_related('author').all()
         ctx['communication_logs'] = candidate.communication_logs.select_related('logged_by').all()
@@ -314,6 +325,12 @@ class CandidateUpdateView(GroupRequiredMixin, UpdateView):
     form_class = CandidateApplicationForm
     template_name = 'candidates/candidate_form.html'
     allowed_groups = (HR_ADMIN, RECRUITER)
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx['back_url'] = _repository_back_url(self.object)
+        ctx['back_label'] = 'Back to Candidates'
+        return ctx
 
     def form_valid(self, form):
         messages.success(self.request, f'{form.instance.full_name} updated.')
@@ -506,6 +523,21 @@ class BulkRejectClosedVacanciesView(GroupRequiredMixin, View):
 
 ALLOWED_CV_EXTENSIONS = ('.pdf', '.doc', '.docx')
 
+RECENT_BATCH_COUNT = 8
+
+
+def recent_batches(limit=RECENT_BATCH_COUNT):
+    """Last few bulk uploads with their counts, so HR can reopen the results of
+    a batch after navigating away from the progress screen."""
+    waiting = (BulkUploadItem.Status.PENDING, BulkUploadItem.Status.PARSING)
+    return (BulkUploadBatch.objects.select_related('job')
+            .annotate(
+                total=Count('items'),
+                success=Count('items', filter=Q(items__status=BulkUploadItem.Status.SUCCESS)),
+                errors=Count('items', filter=Q(items__status=BulkUploadItem.Status.ERROR)),
+                waiting=Count('items', filter=Q(items__status__in=waiting)),
+            )[:limit])
+
 
 def _validate_cv_files(files):
     """Returns (errors, ok_files). Rejects the wrong file types / oversized files
@@ -539,6 +571,7 @@ class BulkUploadCVView(GroupRequiredMixin, View):
         return render(request, self.template_name, {
             'form': BulkUploadForm(),
             'parser_configured': cv_parser.is_configured(),
+            'recent_batches': recent_batches(),
         })
 
     def post(self, request):
@@ -563,6 +596,7 @@ class BulkUploadCVView(GroupRequiredMixin, View):
         return render(request, self.template_name, {
             'form': form,
             'parser_configured': cv_parser.is_configured(),
+            'recent_batches': recent_batches(),
         })
 
 
@@ -577,6 +611,8 @@ class BulkUploadProgressView(GroupRequiredMixin, View):
         items, counts = bulk.summarise(batch)
         return render(request, self.template_name, {
             'batch': batch, 'items': items, 'counts': counts,
+            'back_url': reverse('candidate_bulk_upload'),
+            'back_label': 'Back to Bulk Upload',
         })
 
 

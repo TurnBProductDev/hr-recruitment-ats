@@ -45,9 +45,17 @@
 </nav>
 
 <main class="container-fluid py-4">
-  <button type="button" id="backBtn" class="btn btn-sm btn-outline-app mb-3" onclick="goBack()">
-    <i class="bi bi-arrow-left"></i> Back
-  </button>
+  {% if back_url %}
+    {# Pages that have one obvious parent (a candidate belongs to the repository)
+       send you there, instead of retracing every click that got you here. #}
+    <a href="{{ back_url }}" class="btn btn-sm btn-outline-app mb-3">
+      <i class="bi bi-arrow-left"></i> {{ back_label|default:"Back" }}
+    </a>
+  {% else %}
+    <button type="button" id="backBtn" class="btn btn-sm btn-outline-app mb-3" onclick="goBack()">
+      <i class="bi bi-arrow-left"></i> Back
+    </button>
+  {% endif %}
   {% if messages %}
     {% for message in messages %}
       <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
