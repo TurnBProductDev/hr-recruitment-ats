@@ -271,6 +271,30 @@ class BackButtonTests(TestCase):
         self.assertContains(response, 'goBack()')
 
 
+class TemplateHygieneTests(TestCase):
+    def test_no_multiline_django_comments(self):
+        """`{# #}` only comments out a single line - spanning two prints the
+        comment on the page for users to read. Caught this twice by hand."""
+        import re
+        from pathlib import Path
+
+        from django.conf import settings
+
+        offenders = []
+        roots = [Path(settings.BASE_DIR)]
+        for root in roots:
+            for path in root.rglob('*.html'):
+                if any(part in ('.venv', 'staticfiles', 'node_modules') for part in path.parts):
+                    continue
+                text = path.read_text(encoding='utf-8', errors='replace')
+                for match in re.finditer(r'\{#', text):
+                    end_of_line = text.find('\n', match.start())
+                    line = text[match.start():end_of_line if end_of_line != -1 else len(text)]
+                    if '#}' not in line:
+                        offenders.append(f"{path.name}:{text[:match.start()].count(chr(10)) + 1}")
+        self.assertEqual(offenders, [], f"multi-line {{# #}} comments render as text: {offenders}")
+
+
 class ListReturnTests(TestCase):
     """Acting on a candidate returns to the list the user was working in,
     filters and all - not a bare repository page."""

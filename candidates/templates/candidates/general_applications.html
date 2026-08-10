@@ -2,54 +2,62 @@
 {% load candidates_extras %}
 {% block title %}General Applications{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-1">
+<div class="d-flex justify-content-between align-items-end mb-3">
   <h3 class="mb-0">General Applications</h3>
-  <span class="text-muted small">{{ total }} candidate{{ total|pluralize }} in this bucket</span>
+  <span class="text-muted small">
+    {{ total }} candidate{{ total|pluralize }} · <em>Applied Position</em> is what they asked for on
+    their CV or application email
+  </span>
 </div>
-<p class="text-muted small">
-  Applicants filed under the <strong>General Application</strong> vacancy — the position they asked
-  for didn't match an open vacancy. <em>Applied Position</em> is what they actually asked for, as
-  captured from their CV or application email.
-</p>
 
-<form method="get" class="card app-card p-3 mb-3">
-  <div class="row g-3 align-items-end">
-    <div class="col-md-5">
-      <label class="form-label mb-1">Applied Position <span class="text-muted small">(pick one or more)</span></label>
-      <select name="role" class="form-select" multiple size="6">
-        {% for opt in role_options %}
-          <option value="{{ opt.role_applied }}"
-                  {% if opt.role_applied in selected_roles %}selected{% endif %}>
-            {{ opt.role_applied }} ({{ opt.n }})
-          </option>
-        {% endfor %}
-        {% if no_role_count %}
-          <option value="{{ no_role_value }}" {% if no_role_value in selected_roles %}selected{% endif %}>
-            Not captured ({{ no_role_count }})
-          </option>
-        {% endif %}
-      </select>
-      <div class="form-text">Ctrl/Cmd-click to select several, or drag to pick a range.</div>
-    </div>
-    <div class="col-md-4">
-      <label class="form-label mb-1">Search</label>
+<form method="get">
+  <div class="row g-2 mb-3 align-items-end">
+    <div class="col-md-3">
+      <label class="form-label small text-muted mb-0">Search</label>
       <input type="text" name="q" value="{{ q }}" class="form-control" placeholder="Name, email or position">
     </div>
     <div class="col-md-3">
-      <button type="submit" class="btn btn-fill-app"><i class="bi bi-search"></i> Apply</button>
-      <a href="{% url 'candidate_general_applications' %}" class="btn btn-outline-app">Clear</a>
+      <label class="form-label small text-muted mb-0">Applied Position</label>
+      {# Checkbox dropdown: same compact look as the other filters, but multi-select. #}
+      <div class="dropdown">
+        <button class="form-select text-start" type="button" id="roleFilter"
+                data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+          <span id="roleFilterLabel">All positions</span>
+        </button>
+        <div class="dropdown-menu p-2" style="min-width: 280px; max-height: 260px; overflow-y: auto;">
+          {% for opt in role_options %}
+            <div class="form-check">
+              <input class="form-check-input role-option" type="checkbox" name="role"
+                     value="{{ opt.role_applied }}" id="role{{ forloop.counter }}"
+                     {% if opt.role_applied in selected_roles %}checked{% endif %}>
+              <label class="form-check-label" for="role{{ forloop.counter }}">
+                {{ opt.role_applied }} <span class="text-muted">({{ opt.n }})</span>
+              </label>
+            </div>
+          {% empty %}
+            <div class="text-muted small px-1">No positions captured yet.</div>
+          {% endfor %}
+          {% if no_role_count %}
+            <div class="form-check border-top mt-2 pt-2">
+              <input class="form-check-input role-option" type="checkbox" name="role"
+                     value="{{ no_role_value }}" id="roleNone"
+                     {% if no_role_value in selected_roles %}checked{% endif %}>
+              <label class="form-check-label" for="roleNone">
+                Not captured <span class="text-muted">({{ no_role_count }})</span>
+              </label>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    <div class="col-md-1">
+      <button type="submit" class="btn btn-primary-app w-100"><i class="bi bi-search"></i></button>
+    </div>
+    <div class="col-md-1">
+      <a href="{% url 'candidate_general_applications' %}" class="btn btn-outline-app w-100">Clear</a>
     </div>
   </div>
 </form>
-
-{% if selected_roles %}
-<p class="small text-muted">
-  Showing {{ candidates|length }} of {{ total }} — filtered by:
-  {% for r in selected_roles %}
-    <span class="badge bg-secondary">{% if r == no_role_value %}Not captured{% else %}{{ r }}{% endif %}</span>
-  {% endfor %}
-</p>
-{% endif %}
 
 <div class="card app-card p-3">
   <div class="table-responsive">
@@ -91,6 +99,20 @@
 <script>
 $(function () {
   $('#generalTable').DataTable({ order: [], dom: 'Bfrtip', buttons: ['excelHtml5'], pageLength: 25 });
+
+  // Summarise the ticked positions on the closed dropdown, like a select would.
+  function refreshRoleLabel() {
+    var checked = $('.role-option:checked');
+    var text = 'All positions';
+    if (checked.length === 1) {
+      text = $.trim($('label[for="' + checked[0].id + '"]').text().replace(/\(\d+\)$/, ''));
+    } else if (checked.length > 1) {
+      text = checked.length + ' positions selected';
+    }
+    $('#roleFilterLabel').text(text);
+  }
+  $('.role-option').on('change', refreshRoleLabel);
+  refreshRoleLabel();
 });
 </script>
 {% endblock %}
