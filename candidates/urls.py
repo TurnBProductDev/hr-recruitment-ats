@@ -17,6 +17,8 @@ urlpatterns = [
          name='candidate_general_applications'),
     path('hr/candidates/delete-selected/', views.CandidateBulkDeleteView.as_view(),
          name='candidate_bulk_delete'),
+    path('hr/candidates/reject-selected/', views.CandidateBulkRejectView.as_view(),
+         name='candidate_bulk_reject'),
     path('hr/candidates/<int:pk>/', views.CandidateTimelineView.as_view(), name='candidate_timeline'),
     path('hr/candidates/<int:pk>/edit/', views.CandidateUpdateView.as_view(), name='candidate_edit'),
     path('hr/candidates/<int:pk>/change-job/', views.CandidateChangeJobView.as_view(), name='candidate_change_job'),

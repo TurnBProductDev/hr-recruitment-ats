@@ -579,6 +579,36 @@ class CandidateDeleteView(GroupRequiredMixin, View):
         return redirect(next_url or _remembered_list_url(request) or reverse('candidate_repository'))
 
 
+class CandidateBulkRejectView(GroupRequiredMixin, View):
+    """Reject several candidates at once, ticked on a list page. Each one gets
+    its own history entry, exactly as rejecting them one by one would."""
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
+
+    def post(self, request):
+        ids = request.POST.getlist('ids')
+        reason = request.POST.get('reason', '').strip()
+        performed_by = _performed_by(request)
+        candidates = Candidate.objects.filter(pk__in=ids).exclude(
+            status__in=[STATUS.REJECTED, STATUS.BLACKLISTED])
+
+        rejected = 0
+        for candidate in candidates:
+            services.change_status(candidate, STATUS.REJECTED, user=request.user,
+                                   remarks=reason or None, performed_by=performed_by)
+            rejected += 1
+
+        skipped = len(ids) - rejected
+        if rejected:
+            message = f'{rejected} candidate{"s" if rejected != 1 else ""} moved to Rejected.'
+            if skipped:
+                message += f' {skipped} already rejected or blacklisted and left unchanged.'
+            messages.success(request, message)
+        else:
+            messages.info(request, 'No candidates were rejected.')
+        next_url = request.POST.get('next')
+        return redirect(next_url or _remembered_list_url(request) or reverse('candidate_repository'))
+
+
 class CandidateBulkDeleteView(GroupRequiredMixin, View):
     """Delete several candidates at once, ticked on the Candidate Repository
     (HR Admin only, same as deleting one)."""

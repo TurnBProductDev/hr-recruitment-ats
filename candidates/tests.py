@@ -17,7 +17,7 @@ from jobs.models import Job
 from . import bulk, cv_parser, services
 from .cv_parser import CVParseError
 from .models import BulkUploadBatch, BulkUploadItem, Candidate, EmailRegistry
-from .permissions import HIRING_MANAGER, RECRUITER
+from .permissions import HIRING_MANAGER, INTERVIEWER, RECRUITER
 
 PARSED = {
     'status': 'ok',
@@ -417,6 +417,54 @@ class GeneralApplicationsTests(TestCase):
     def test_search_matches_the_applied_position(self):
         response = self.client.get(self.url, {'q': 'designer'})
         self.assertEqual([c.pk for c in response.context['candidates']], [self.designer.pk])
+
+    def test_page_offers_view_reject_and_delete_per_row(self):
+        response = self.client.get(self.url)
+        self.assertContains(response, reverse('candidate_timeline', args=[self.designer.pk]))
+        self.assertContains(response, reverse('candidate_reject', args=[self.designer.pk]))
+        self.assertContains(response, reverse('candidate_delete', args=[self.designer.pk]))
+        self.assertContains(response, 'row-select')
+
+    def test_already_rejected_rows_hide_the_reject_button(self):
+        self.designer.status = Candidate.Status.REJECTED
+        self.designer.save(update_fields=['status'])
+        response = self.client.get(self.url)
+        self.assertNotContains(response, reverse('candidate_reject', args=[self.designer.pk]))
+
+    def test_bulk_reject_moves_each_candidate_and_logs_history(self):
+        response = self.client.post(reverse('candidate_bulk_reject'), {
+            'ids': [self.designer.pk, self.tester.pk],
+            'reason': 'No suitable opening',
+            'next': self.url,
+        })
+        self.assertRedirects(response, self.url, fetch_redirect_response=False)
+        for candidate in (self.designer, self.tester):
+            candidate.refresh_from_db()
+            self.assertEqual(candidate.status, Candidate.Status.REJECTED)
+            entry = candidate.history.latest('changed_at')
+            self.assertEqual(entry.new_status, Candidate.Status.REJECTED)
+            self.assertEqual(entry.remarks, 'No suitable opening')
+        self.uncaptured.refresh_from_db()
+        self.assertEqual(self.uncaptured.status, Candidate.Status.OPEN)
+
+    def test_bulk_reject_skips_already_rejected_candidates(self):
+        self.designer.status = Candidate.Status.REJECTED
+        self.designer.save(update_fields=['status'])
+        self.client.post(reverse('candidate_bulk_reject'),
+                         {'ids': [self.designer.pk, self.tester.pk], 'reason': 'x'})
+        self.assertEqual(self.designer.history.count(), 0)
+        self.tester.refresh_from_db()
+        self.assertEqual(self.tester.status, Candidate.Status.REJECTED)
+
+    def test_interviewers_cannot_bulk_reject(self):
+        interviewer = get_user_model().objects.create_user('int', 'int@example.com', 'pw')
+        interviewer.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
+        self.client.force_login(interviewer)
+        response = self.client.post(reverse('candidate_bulk_reject'),
+                                    {'ids': [self.designer.pk], 'reason': 'x'})
+        self.assertEqual(response.status_code, 403)
+        self.designer.refresh_from_db()
+        self.assertEqual(self.designer.status, Candidate.Status.OPEN)
 
     def test_careers_application_records_the_position_applied_for(self):
         from candidates import services

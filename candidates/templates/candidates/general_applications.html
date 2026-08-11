@@ -59,11 +59,32 @@
   </div>
 </form>
 
+<div id="bulkBar" class="alert alert-secondary d-none d-flex justify-content-between align-items-center py-2">
+  <span><strong id="bulkCount">0</strong> candidate(s) selected</span>
+  <span>
+    <button type="button" class="btn btn-sm btn-outline-secondary" id="bulkClear">Clear selection</button>
+    <button type="button" class="btn btn-sm btn-outline-danger" id="bulkReject">Reject selected</button>
+    {% if is_hr_admin %}
+      <button type="button" class="btn btn-sm btn-danger" id="bulkDelete">Delete selected</button>
+    {% endif %}
+  </span>
+</div>
+<form method="post" id="bulkForm" class="d-none">
+  {% csrf_token %}
+  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+  <input type="hidden" name="reason" id="bulkReason">
+  <input type="hidden" name="performed_by" value="{{ user.get_full_name|default:user.get_username }}">
+  <div id="bulkIds"></div>
+</form>
+
 <div class="card app-card p-3">
   <div class="table-responsive">
     <table id="generalTable" class="table table-hover align-middle w-100">
       <thead>
         <tr>
+          <th class="no-export" style="width:2rem">
+            <input type="checkbox" class="form-check-input" id="selectAll" title="Select all on this page">
+          </th>
           <th>Code</th><th>Name</th><th>Applied Position</th><th>Source</th>
           <th>Applied</th><th>Status</th><th>Actions</th>
         </tr>
@@ -71,6 +92,10 @@
       <tbody>
         {% for c in candidates %}
         <tr>
+          <td class="no-export">
+            <input type="checkbox" class="form-check-input row-select" value="{{ c.id }}"
+                   aria-label="Select {{ c.full_name }}">
+          </td>
           <td class="text-muted">{{ c.candidate_code }}</td>
           <td><a href="{% url 'candidate_timeline' c.id %}">{{ c.full_name }}</a>
             <div class="small text-muted">{{ c.email }}</div></td>
@@ -84,13 +109,60 @@
           <td class="text-nowrap">
             {# Re-assigning the vacancy lives on the candidate's own page, which has the vacancy picker. #}
             <a href="{% url 'candidate_timeline' c.id %}" class="btn btn-sm btn-outline-app">View</a>
+            {% if c.status != 'REJECTED' and c.status != 'BLACKLISTED' %}
+              <button type="button" class="btn btn-sm btn-outline-danger act"
+                      data-action="{% url 'candidate_reject' c.id %}"
+                      data-title="Reject {{ c.full_name }}" data-require="1"
+                      data-btn="btn-outline-danger" data-label="Reject">Reject</button>
+            {% endif %}
+            {% if is_hr_admin %}
+              <button type="button" class="btn btn-sm btn-outline-secondary act"
+                      data-action="{% url 'candidate_delete' c.id %}"
+                      data-title="Delete {{ c.full_name }}?" data-nofields="1"
+                      data-btn="btn-danger" data-label="Delete permanently"
+                      data-msg="This permanently deletes the candidate and all their interviews, notes and history. This cannot be undone.">Delete</button>
+            {% endif %}
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="7" class="text-muted">No candidates match this filter.</td></tr>
+        <tr><td colspan="8" class="text-muted">No candidates match this filter.</td></tr>
         {% endfor %}
       </tbody>
     </table>
+  </div>
+</div>
+
+{# Same single reusable confirm modal the Candidate Repository uses. #}
+<div class="modal fade" id="actionModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="post" id="actionForm">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="actionModalTitle">Confirm action</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p id="actionModalMsg" class="text-muted small mb-3"></p>
+          <div id="actionFields">
+            <div class="mb-3">
+              <label class="form-label">Remarks / Reason <span id="reasonReq" class="text-danger d-none">*</span></label>
+              <textarea name="reason" id="actionReason" class="form-control" rows="3"></textarea>
+            </div>
+            <div class="mb-1">
+              <label class="form-label">Done by</label>
+              <input type="text" name="performed_by" id="actionPerformedBy" class="form-control"
+                     value="{{ user.get_full_name|default:user.get_username }}">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-app btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-fill-app btn-sm" id="actionSubmit">Confirm</button>
+        </div>
+      </div>
+    </form>
   </div>
 </div>
 {% endblock %}
@@ -98,7 +170,71 @@
 {% block extra_js %}
 <script>
 $(function () {
-  $('#generalTable').DataTable({ order: [], dom: 'Bfrtip', buttons: ['excelHtml5'], pageLength: 25 });
+  $('#generalTable').DataTable({
+    order: [], dom: 'Bfrtip', pageLength: 25,
+    columnDefs: [{ targets: 'no-export', orderable: false, searchable: false }],
+    buttons: [{ extend: 'excelHtml5', exportOptions: { columns: ':not(.no-export)' } }]
+  });
+
+  // --- Per-row actions: same confirm modal as the Candidate Repository -------
+  $('#actionModal').on('show.bs.modal', function (event) {
+    var b = event.relatedTarget;
+    $('#actionForm').attr('action', b.getAttribute('data-action'));
+    $('#actionModalTitle').text(b.getAttribute('data-title') || 'Confirm action');
+    $('#actionModalMsg').text(b.getAttribute('data-msg') || '');
+    var required = b.getAttribute('data-require') === '1';
+    $('#actionReason').prop('required', required).val('');
+    $('#reasonReq').toggleClass('d-none', !required);
+    $('#actionFields').toggle(b.getAttribute('data-nofields') !== '1');
+    var btnCls = b.getAttribute('data-btn') || 'btn-fill-app';
+    $('#actionSubmit').attr('class', 'btn btn-sm ' + btnCls).text(b.getAttribute('data-label') || 'Confirm');
+  });
+  $('.act').on('click', function () {
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('actionModal')).show(this);
+  });
+
+  // --- Multi-select reject / delete ----------------------------------------
+  function selectedIds() {
+    return $('#generalTable').find('.row-select:checked').map(function () { return this.value; }).get();
+  }
+  function refreshBulkBar() {
+    var n = selectedIds().length;
+    $('#bulkCount').text(n);
+    $('#bulkBar').toggleClass('d-none', n === 0);
+  }
+  function submitBulk(action, ids, reason) {
+    var holder = $('#bulkIds').empty();
+    ids.forEach(function (id) {
+      $('<input>').attr({ type: 'hidden', name: 'ids', value: id }).appendTo(holder);
+    });
+    $('#bulkReason').val(reason || '');
+    $('#bulkForm').attr('action', action).trigger('submit');
+  }
+  $('#generalTable').on('change', '.row-select', refreshBulkBar);
+  $('#selectAll').on('change', function () {
+    // Only rows on the current DataTables page are in the DOM to tick.
+    $('#generalTable tbody .row-select').prop('checked', this.checked);
+    refreshBulkBar();
+  });
+  $('#bulkClear').on('click', function () {
+    $('#generalTable').find('.row-select, #selectAll').prop('checked', false);
+    refreshBulkBar();
+  });
+  $('#bulkReject').on('click', function () {
+    var ids = selectedIds();
+    if (!ids.length) { return; }
+    var reason = window.prompt('Reason for rejecting ' + ids.length + ' candidate(s):', '');
+    if (reason === null) { return; }        // cancelled
+    if (!$.trim(reason)) { window.alert('A reason is required.'); return; }
+    submitBulk("{% url 'candidate_bulk_reject' %}", ids, reason);
+  });
+  $('#bulkDelete').on('click', function () {
+    var ids = selectedIds();
+    if (!ids.length) { return; }
+    if (!window.confirm('Permanently delete ' + ids.length + ' candidate(s) and all their ' +
+                        'interviews, notes and history? This cannot be undone.')) { return; }
+    submitBulk("{% url 'candidate_bulk_delete' %}", ids, '');
+  });
 
   // Summarise the ticked positions on the closed dropdown, like a select would.
   function refreshRoleLabel() {
