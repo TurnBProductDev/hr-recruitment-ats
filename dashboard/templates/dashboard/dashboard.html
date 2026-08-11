@@ -119,7 +119,10 @@
           <h5 class="mb-3">By Job / Role</h5>
           <div class="table-responsive">
             <table class="table table-hover align-middle w-100">
-              <thead><tr><th>Role</th><th>Total</th><th>Open</th><th>Shortlisted</th><th>Rejected</th></tr></thead>
+              <thead><tr><th>Role</th><th>Total</th>
+                <th title="Open + Screening Hold">Open</th>
+                <th title="Shortlisted + Round 1 + Interview + Final Selection + Hired">Shortlisted</th>
+                <th title="Rejected + Blacklisted">Rejected</th></tr></thead>
               <tbody>
                 {% for r in by_job %}
                 <tr><td>{{ r.job__title|default:"Unassigned" }}</td><td>{{ r.total }}</td><td>{{ r.open }}</td><td>{{ r.shortlisted }}</td><td>{{ r.rejected }}</td></tr>
@@ -127,6 +130,7 @@
               </tbody>
             </table>
           </div>
+          {% include "dashboard/_bucket_note.html" %}
         </div>
       </div>
       <div class="col-lg-6">
@@ -134,7 +138,10 @@
           <h5 class="mb-3">By Source</h5>
           <div class="table-responsive">
             <table class="table table-hover align-middle w-100">
-              <thead><tr><th>Source</th><th>Total</th><th>Open</th><th>Shortlisted</th><th>Rejected</th></tr></thead>
+              <thead><tr><th>Source</th><th>Total</th>
+                <th title="Open + Screening Hold">Open</th>
+                <th title="Shortlisted + Round 1 + Interview + Final Selection + Hired">Shortlisted</th>
+                <th title="Rejected + Blacklisted">Rejected</th></tr></thead>
               <tbody>
                 {% for r in by_source %}
                 <tr><td>{{ r.source }}</td><td>{{ r.total }}</td><td>{{ r.open }}</td><td>{{ r.shortlisted }}</td><td>{{ r.rejected }}</td></tr>
@@ -142,6 +149,7 @@
               </tbody>
             </table>
           </div>
+          {% include "dashboard/_bucket_note.html" %}
         </div>
       </div>
     </div>

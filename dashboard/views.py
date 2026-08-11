@@ -11,6 +11,25 @@ from jobs.models import Job
 STATUS = Candidate.Status
 
 
+# The By Job/Role and By Source tables roll the nine statuses into three buckets
+# so the columns always add up to Total. Every status belongs to exactly one
+# bucket - add any new status here or the row stops balancing.
+OPEN_GROUP = (STATUS.OPEN, STATUS.SCREENING_HOLD)
+SHORTLISTED_GROUP = (STATUS.SHORTLISTED, STATUS.ROUND1, STATUS.INTERVIEW,
+                     STATUS.FINAL_SELECTION, STATUS.HIRED)
+REJECTED_GROUP = (STATUS.REJECTED, STATUS.BLACKLISTED)
+
+
+def _grouped_counts():
+    """Count kwargs shared by the two breakdown tables."""
+    return dict(
+        total=Count('id'),
+        open=Count('id', filter=Q(status__in=OPEN_GROUP)),
+        shortlisted=Count('id', filter=Q(status__in=SHORTLISTED_GROUP)),
+        rejected=Count('id', filter=Q(status__in=REJECTED_GROUP)),
+    )
+
+
 def _summary_counts_qs(qs):
     """Total / Open / Shortlisted / Rejected / Hired for a candidate queryset (one query)."""
     return qs.aggregate(
@@ -47,17 +66,11 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
         # ---------- Summary ----------
         ctx['summary'] = _summary_counts_qs(base)
         ctx['by_job'] = (base.values('job__title')
-                         .annotate(total=Count('id'),
-                                   open=Count('id', filter=Q(status=STATUS.OPEN)),
-                                   shortlisted=Count('id', filter=Q(status=STATUS.SHORTLISTED)),
-                                   rejected=Count('id', filter=Q(status=STATUS.REJECTED)))
+                         .annotate(**_grouped_counts())
                          .order_by('-total'))
         ctx['by_source'] = (base.exclude(source__isnull=True).exclude(source='')
                             .values('source')
-                            .annotate(total=Count('id'),
-                                      open=Count('id', filter=Q(status=STATUS.OPEN)),
-                                      shortlisted=Count('id', filter=Q(status=STATUS.SHORTLISTED)),
-                                      rejected=Count('id', filter=Q(status=STATUS.REJECTED)))
+                            .annotate(**_grouped_counts())
                             .order_by('-total'))
 
         # ---------- Overview: recruitment funnel (Power BI style). Counts come
