@@ -8,7 +8,7 @@ from django.utils import timezone
 from django.views import View
 from django.views.generic import DetailView, ListView, UpdateView
 
-from interviews.models import Interview
+from interviews.models import Interview, InterviewReschedule
 from jobs.models import Job
 
 from . import bulk, cv_parser, services
@@ -350,6 +350,9 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
         ctx['attachments'] = candidate.attachments.all()
         ctx['offers'] = candidate.offers.all()
         ctx['interviews'] = candidate.interviews.select_related('interviewer').all()
+        # At most one interview can be awaiting a result; while there is one, no
+        # further interview may be scheduled (see interviews.forms.InterviewForm).
+        ctx['open_interview'] = Interview.open_for(candidate).first()
         ctx['note_form'] = CandidateNoteForm()
         ctx['comm_form'] = CommunicationLogForm()
 
@@ -379,6 +382,16 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
                 'when': i.scheduled_date, 'icon': 'calendar-event',
                 'title': f"{i.get_round_type_display()} interview — {i.get_status_display()} / {i.get_result_display()}",
                 'detail': i.feedback, 'who': i.interviewer or i.created_by})
+        # Rescheduling rewrites the interview row, so the trail of what moved
+        # lives in these rows rather than in the interview itself.
+        reschedules = (InterviewReschedule.objects.filter(interview__candidate=candidate)
+                       .select_related('interview', 'previous_interviewer',
+                                       'new_interviewer', 'changed_by'))
+        for r in reschedules:
+            events.append({
+                'when': r.changed_at, 'icon': 'calendar-event',
+                'title': f"{r.interview.get_round_type_display()} interview rescheduled",
+                'detail': r.summary, 'who': r.changed_by})
         for o in ctx['offers']:
             events.append({'when': o.sent_at or o.created_at, 'icon': 'file-earmark-text',
                            'title': f"Offer {o.get_status_display()}", 'detail': None, 'who': o.created_by})

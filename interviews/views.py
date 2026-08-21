@@ -12,7 +12,7 @@ from candidates.models import Candidate
 from candidates.permissions import ANY_STAFF, HR_ADMIN, INTERVIEWER, RECRUITER, GroupRequiredMixin
 
 from .forms import InterviewForm, InterviewResultForm
-from .models import Interview
+from .models import Interview, InterviewReschedule, open_interview_message
 
 
 class InterviewSchedulerListView(GroupRequiredMixin, ListView):
@@ -26,8 +26,7 @@ class InterviewSchedulerListView(GroupRequiredMixin, ListView):
 
     def get_queryset(self):
         qs = (Interview.objects.filter(
-                status__in=[Interview.Status.SCHEDULED, Interview.Status.RESCHEDULED],
-                result=Interview.Result.PENDING)
+                status__in=Interview.OPEN_STATUSES, result=Interview.Result.PENDING)
               .select_related('candidate', 'candidate__job', 'interviewer')
               .annotate(is_upcoming=Case(
                   When(scheduled_date__gt=timezone.now(), then=Value(True)),
@@ -48,6 +47,21 @@ class InterviewScheduleView(GroupRequiredMixin, CreateView):
         self.candidate = get_object_or_404(Candidate, pk=kwargs['candidate_id'])
         return super().dispatch(request, *args, **kwargs)
 
+    def get(self, request, *args, **kwargs):
+        # Turn the request away before the form is even shown, so HR sees why
+        # straight away instead of filling it in and being rejected on save.
+        # (The same rule is enforced on POST by InterviewForm.clean.)
+        open_interview = Interview.open_for(self.candidate).first()
+        if open_interview:
+            messages.error(request, open_interview_message(open_interview))
+            return redirect('candidate_timeline', pk=self.candidate.pk)
+        return super().get(request, *args, **kwargs)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['candidate'] = self.candidate
+        return kwargs
+
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx['candidate'] = self.candidate
@@ -63,11 +77,24 @@ class InterviewScheduleView(GroupRequiredMixin, CreateView):
         return reverse('candidate_timeline', args=[self.candidate.pk])
 
 
+def _same_minute(a, b):
+    """The date picker only offers minutes, so anything finer that a row happens
+    to carry (imported rows can have seconds) is not a move the user made."""
+    return a.replace(second=0, microsecond=0) == b.replace(second=0, microsecond=0)
+
+
 class InterviewRescheduleView(GroupRequiredMixin, UpdateView):
     model = Interview
     form_class = InterviewForm
     template_name = 'interviews/interview_form.html'
     allowed_groups = (HR_ADMIN, RECRUITER)
+
+    def get_object(self, queryset=None):
+        obj = super().get_object(queryset)
+        # Snapshot before the form writes over it - the row is rewritten in
+        # place, so this is the only chance to see what it used to say.
+        self.before = {'scheduled_date': obj.scheduled_date, 'interviewer_id': obj.interviewer_id}
+        return obj
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -75,9 +102,22 @@ class InterviewRescheduleView(GroupRequiredMixin, UpdateView):
         return ctx
 
     def form_valid(self, form):
-        form.instance.status = Interview.Status.RESCHEDULED
-        messages.success(self.request, 'Interview rescheduled.')
-        return super().form_valid(form)
+        moved = not _same_minute(form.instance.scheduled_date, self.before['scheduled_date'])
+        reassigned = form.instance.interviewer_id != self.before['interviewer_id']
+        if moved:
+            form.instance.status = Interview.Status.RESCHEDULED
+        response = super().form_valid(form)
+        if moved or reassigned:
+            InterviewReschedule.objects.create(
+                interview=self.object,
+                previous_date=self.before['scheduled_date'], new_date=self.object.scheduled_date,
+                previous_interviewer_id=self.before['interviewer_id'],
+                new_interviewer_id=self.object.interviewer_id,
+                changed_by=self.request.user)
+            messages.success(self.request, 'Interview rescheduled.')
+        else:
+            messages.success(self.request, 'Interview updated.')
+        return response
 
     def get_success_url(self):
         return reverse('candidate_timeline', args=[self.object.candidate_id])

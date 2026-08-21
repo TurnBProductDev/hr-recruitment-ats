@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 
 from candidates.permissions import INTERVIEWER
 
-from .models import Interview
+from .models import Interview, open_interview_message
 
 
 class BootstrapFormMixin:
@@ -26,8 +26,10 @@ class InterviewForm(BootstrapFormMixin, forms.ModelForm):
             'scheduled_date': forms.DateTimeInput(attrs={'type': 'datetime-local'}),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, candidate=None, **kwargs):
         super().__init__(*args, **kwargs)
+        # On a reschedule the candidate comes from the interview being edited.
+        self.candidate = candidate or (self.instance.candidate if self.instance.candidate_id else None)
         # Only people in the Interviewer group are assignable, ordered by name.
         User = get_user_model()
         self.fields['interviewer'].queryset = (
@@ -36,6 +38,19 @@ class InterviewForm(BootstrapFormMixin, forms.ModelForm):
             lambda u: u.get_full_name() or u.username)
         self.fields['interviewer'].empty_label = 'Unassigned'
         self._add_bootstrap_classes()
+
+    def clean(self):
+        # One open interview per candidate. Rescheduling the open interview is
+        # fine (it is excluded), scheduling a second one alongside it is not.
+        cleaned = super().clean()
+        if self.candidate:
+            clash = Interview.open_for(self.candidate)
+            if self.instance.pk:
+                clash = clash.exclude(pk=self.instance.pk)
+            clash = clash.first()
+            if clash:
+                raise forms.ValidationError(open_interview_message(clash))
+        return cleaned
 
 
 class InterviewResultForm(BootstrapFormMixin, forms.ModelForm):

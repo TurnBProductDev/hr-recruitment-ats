@@ -109,12 +109,18 @@
       <h5 class="mb-3">Interviews</h5>
       {% for i in interviews %}
         <div class="mb-2 pb-2 {% if not forloop.last %}border-bottom{% endif %}">
-          <strong>{{ i.get_round_type_display }}</strong> &middot; {{ i.scheduled_date|date:"d M Y" }} &middot; {{ i.get_mode_display }}<br>
+          <strong>{{ i.get_round_type_display }}</strong> &middot; {{ i.scheduled_date|date:"d M Y H:i" }} &middot; {{ i.get_mode_display }}<br>
           <span class="text-muted small">Interviewer: {{ i.interviewer|default:"Unassigned" }} &middot; Status: {{ i.get_status_display }} &middot; Result: {{ i.get_result_display }}</span>
           {% if i.feedback %}<div class="small mt-1">{{ i.feedback }}</div>{% endif %}
         </div>
       {% empty %}<p class="text-muted mb-0">No interviews scheduled.</p>{% endfor %}
+      {% if open_interview %}
+      {# An interview is awaiting a result, so it can be moved but not doubled up on. #}
+      <a href="{% url 'interview_reschedule' open_interview.pk %}" class="btn btn-sm btn-outline-app mt-2"
+         title="Change the date, time or interviewer"><i class="bi bi-calendar-event"></i> Reschedule</a>
+      {% else %}
       <a href="{% url 'interview_schedule' candidate.pk %}" class="btn btn-sm btn-outline-app mt-2">Schedule Interview</a>
+      {% endif %}
     </div>
 
     <div class="card app-card p-4 mb-3">

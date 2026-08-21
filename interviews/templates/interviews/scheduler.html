@@ -19,7 +19,7 @@
       <thead>
         <tr>
           <th>Candidate</th><th>Job</th><th>Round</th><th>Interview Date</th>
-          <th>Interviewer</th><th>Status</th><th>Update Status</th><th>Edit</th>
+          <th>Interviewer</th><th>Status</th><th>Update Status</th><th>Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -41,7 +41,7 @@
             <a href="{% url 'interview_result' iv.pk %}" class="btn btn-sm btn-fill-app">Update Status</a>
           </td>
           <td class="text-nowrap">
-            <a href="{% url 'interview_reschedule' iv.pk %}" class="btn btn-sm btn-outline-app" title="Reschedule / change interviewer"><i class="bi bi-pencil"></i> Edit</a>
+            <a href="{% url 'interview_reschedule' iv.pk %}" class="btn btn-sm btn-outline-app" title="Change the date, time or interviewer"><i class="bi bi-calendar-event"></i> Reschedule</a>
             <form method="post" action="{% url 'interview_send_invite' iv.pk %}" class="d-inline">
               {% csrf_token %}<button class="btn btn-sm btn-outline-app" title="Send invite email"><i class="bi bi-envelope"></i></button>
             </form>
@@ -54,5 +54,5 @@
     </table>
   </div>
 </div>
-<p class="small text-muted mt-2"><strong>Pass</strong> advances the candidate one stage (Round 1 → Round 2 → Final Selection, where HR makes the hire decision); <strong>Fail</strong> moves them to Rejected. Schedule new interviews from a candidate's page.</p>
+<p class="small text-muted mt-2"><strong>Pass</strong> advances the candidate one stage (Round 1 → Round 2 → Final Selection, where HR makes the hire decision); <strong>Fail</strong> moves them to Rejected. Schedule new interviews from a candidate's page — a candidate can only have one interview awaiting a result at a time, so mark this one's result before scheduling the next round.</p>
 {% endblock %}

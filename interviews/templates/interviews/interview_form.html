@@ -7,6 +7,10 @@
       <h4 class="mb-3">{% if object %}Reschedule{% else %}Schedule{% endif %} Interview - {{ candidate.full_name }}</h4>
       <form method="post">
         {% csrf_token %}
+        {% for e in form.non_field_errors %}<div class="alert alert-danger py-2">{{ e }}</div>{% endfor %}
+        {% for field in form %}{% for e in field.errors %}
+          <div class="alert alert-danger py-2">{{ field.label }}: {{ e }}</div>
+        {% endfor %}{% endfor %}
         <div class="row g-3">
           <div class="col-md-6"><label class="form-label">Round Type</label>{{ form.round_type }}</div>
           <div class="col-md-6"><label class="form-label">Interviewer</label>{{ form.interviewer }}</div>
