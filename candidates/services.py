@@ -62,12 +62,25 @@ def change_status(candidate, new_status, user=None, remarks=None, performed_by=N
     if old_status == new_status:
         return candidate
     candidate.status = new_status
-    candidate.save(update_fields=['status', 'updated_at'])
+    # Hold is available from every stage, so remember which one it was taken
+    # from - that is what names it ("Interview Hold"). Leaving hold clears it.
+    candidate.hold_from_status = old_status if new_status == STATUS.SCREENING_HOLD else ''
+    candidate.save(update_fields=['status', 'hold_from_status', 'updated_at'])
     CandidateStatusHistory.objects.create(
         candidate=candidate, old_status=old_status, new_status=new_status,
         changed_by=user, performed_by=performed_by, remarks=remarks,
     )
     return candidate
+
+
+def hold_source_from_history(candidate):
+    """Which stage the candidate's current hold was taken from, read back from
+    history. Used when a status is restored rather than changed (undo)."""
+    if candidate.status != STATUS.SCREENING_HOLD:
+        return ''
+    last_hold = (candidate.history.filter(new_status=STATUS.SCREENING_HOLD)
+                 .order_by('-changed_at', '-id').first())
+    return last_hold.old_status if last_hold else ''
 
 
 def blacklist_candidate(candidate, reason, user=None, performed_by=None):

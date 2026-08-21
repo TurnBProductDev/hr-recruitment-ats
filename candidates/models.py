@@ -77,7 +77,11 @@ class Candidate(models.Model):
         HIRED = 'HIRED', 'Hired'
         REJECTED = 'REJECTED', 'Rejected'
         BLACKLISTED = 'BLACKLISTED', 'Blacklisted'
-        SCREENING_HOLD = 'SCREENING_HOLD', 'Screening Hold'
+        # Hold can be applied from any stage, not just screening. The stored
+        # value stays SCREENING_HOLD so existing rows, links and the badge
+        # colour keep working; what the user sees is the stage they were held
+        # at - "Interview Hold", "Round 1 Hold" - see hold_label().
+        SCREENING_HOLD = 'SCREENING_HOLD', 'Hold'
 
     candidate_code = models.CharField(max_length=20, unique=True, blank=True)
     job = models.ForeignKey(Job, on_delete=models.SET_NULL, null=True, blank=True, related_name='candidates')
@@ -102,6 +106,10 @@ class Candidate(models.Model):
     current_salary = models.CharField(max_length=100, blank=True, null=True)
 
     status = models.CharField(max_length=30, choices=Status.choices, default=Status.OPEN)
+    # Which stage the candidate was at when put on Hold, so the hold can be
+    # named after it. Blank for anyone not on hold. Kept on the row (the same
+    # thing is derivable from history) so candidate lists need no extra query.
+    hold_from_status = models.CharField(max_length=30, blank=True, default='')
     source = models.CharField(max_length=255, blank=True, null=True)
     # The position the applicant actually asked for, as written on the CV / in the
     # application email. `job` is where we filed them, which is often
@@ -137,6 +145,14 @@ class Candidate(models.Model):
         return reverse('candidate_timeline', args=[self.pk])
 
     @property
+    def status_label(self):
+        """What the status is called on screen. A hold is named after the stage
+        it was taken at, so the badge reads "Interview Hold", not just "Hold"."""
+        if self.status == self.Status.SCREENING_HOLD:
+            return hold_label(self.hold_from_status)
+        return self.get_status_display()
+
+    @property
     def email_is_placeholder(self):
         """True when no real email was found (bulk upload / unparsed CV) - the
         row carries a pending-*@placeholder.local stand-in for HR to replace."""
@@ -147,6 +163,22 @@ class Candidate(models.Model):
         """Most recent interview (uses the prefetch cache when available)."""
         ivs = list(self.interviews.all())
         return ivs[-1] if ivs else None
+
+
+# A hold taken at the Open stage is what this app has always called a
+# "Screening Hold"; every other stage simply names itself.
+HOLD_STAGE_NAMES = {Candidate.Status.OPEN: 'Screening'}
+
+
+def hold_label(from_status):
+    """Name a hold after the stage it was taken at: held after an interview
+    reads "Interview Hold". Plain "Hold" when the stage was never recorded."""
+    plain = Candidate.Status.SCREENING_HOLD.label
+    if not from_status or from_status == Candidate.Status.SCREENING_HOLD:
+        return plain
+    stage = (HOLD_STAGE_NAMES.get(from_status)
+             or dict(Candidate.Status.choices).get(from_status, from_status))
+    return f'{stage} {plain}'
 
 
 class CandidateEducation(models.Model):

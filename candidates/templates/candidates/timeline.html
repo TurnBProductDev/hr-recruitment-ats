@@ -5,7 +5,7 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h3 class="mb-0">{{ candidate.full_name }} <span class="text-muted small">{{ candidate.candidate_code }}</span></h3>
   <div>
-    <span class="{{ candidate.status|badge_class }}">{{ candidate.get_status_display }}</span>
+    <span class="{{ candidate.status|badge_class }}">{{ candidate.status_label }}</span>
     {% if reapply %}<span class="badge-dup ms-2">Reapply</span>{% endif %}
     {% if candidate.is_blacklisted and candidate.status != 'BLACKLISTED' %}<span class="badge-status badge-blacklisted ms-2">Blacklisted</span>{% endif %}
     <a href="{% url 'candidate_edit' candidate.pk %}" class="btn btn-outline-app btn-sm ms-2">Edit</a>

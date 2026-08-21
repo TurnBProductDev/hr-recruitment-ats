@@ -17,7 +17,7 @@ from jobs.models import Job
 from . import bulk, cv_parser, services
 from .cv_parser import CVParseError
 from .models import BulkUploadBatch, BulkUploadItem, Candidate, EmailRegistry
-from .permissions import HIRING_MANAGER, INTERVIEWER, RECRUITER
+from .permissions import HIRING_MANAGER, HR_ADMIN, INTERVIEWER, RECRUITER
 
 PARSED = {
     'status': 'ok',
@@ -570,3 +570,113 @@ class BulkUploadViewTests(TestCase):
         self.assertEqual(item.status, BulkUploadItem.Status.PENDING)
         self.assertIsNone(item.error_message)
         start.assert_called_once()
+
+
+class HoldNamingTests(TestCase):
+    """Hold can be taken at any stage, and is named after the stage it was
+    taken at: held after an interview reads "Interview Hold"."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('hr', 'hr@example.com', 'pw')
+        self.user.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.client.force_login(self.user)
+        self.candidate = Candidate.objects.create(
+            full_name='Rose E G', email='rose@example.com')
+        services.record_creation(self.candidate)
+
+    def _hold(self):
+        return self.client.post(reverse('candidate_set_status', args=[self.candidate.pk]),
+                                {'status': Candidate.Status.SCREENING_HOLD})
+
+    def test_hold_after_an_interview_is_called_interview_hold(self):
+        services.change_status(self.candidate, Candidate.Status.INTERVIEW)
+        self._hold()
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.hold_from_status, Candidate.Status.INTERVIEW)
+        self.assertEqual(self.candidate.status_label, 'Interview Hold')
+
+    def test_hold_at_round1_is_called_round_1_hold(self):
+        services.change_status(self.candidate, Candidate.Status.ROUND1)
+        self._hold()
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.status_label, 'Round 1 Hold')
+
+    def test_hold_during_screening_keeps_the_name_screening_hold(self):
+        self._hold()
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.status_label, 'Screening Hold')
+
+    def test_hold_with_no_recorded_stage_is_just_hold(self):
+        self.candidate.status = Candidate.Status.SCREENING_HOLD
+        self.assertEqual(self.candidate.status_label, 'Hold')
+
+    def test_leaving_hold_clears_the_stage(self):
+        services.change_status(self.candidate, Candidate.Status.INTERVIEW)
+        self._hold()
+        self.candidate.refresh_from_db()
+        services.change_status(self.candidate, Candidate.Status.SHORTLISTED)
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.hold_from_status, '')
+        self.assertEqual(self.candidate.status_label, 'Shortlisted')
+
+    def test_activity_history_names_the_hold(self):
+        services.change_status(self.candidate, Candidate.Status.INTERVIEW)
+        self._hold()
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertContains(response, 'Status: Interview → Interview Hold')
+        self.assertEqual(response.context['last_status_label'], 'Interview Hold')
+
+    def test_activity_history_names_the_hold_being_left_too(self):
+        services.change_status(self.candidate, Candidate.Status.INTERVIEW)
+        self._hold()
+        self.candidate.refresh_from_db()
+        services.change_status(self.candidate, Candidate.Status.FINAL_SELECTION)
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertContains(response, 'Status: Interview Hold → Final Selection')
+
+    def test_the_action_is_offered_as_move_to_hold(self):
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertContains(response, 'Move to Hold')
+        self.assertNotContains(response, 'Move to Screening Hold')
+
+    def test_the_repository_tab_is_called_hold(self):
+        services.change_status(self.candidate, Candidate.Status.INTERVIEW)
+        self._hold()
+        response = self.client.get(f"{reverse('candidate_repository')}?tab=screening_hold")
+        self.assertContains(response, 'Interview Hold')
+        self.assertNotContains(response, 'Screening Hold')
+
+    def test_hold_is_offered_on_every_pipeline_tab(self):
+        hold_url = reverse('candidate_screening_hold', args=[self.candidate.pk])
+        stages = [('open', Candidate.Status.OPEN),
+                  ('shortlisted', Candidate.Status.SHORTLISTED),
+                  ('round1', Candidate.Status.ROUND1),
+                  ('interview', Candidate.Status.INTERVIEW),
+                  ('final_selection', Candidate.Status.FINAL_SELECTION)]
+        for tab, status in stages:
+            with self.subTest(tab=tab):
+                services.change_status(self.candidate, status)
+                response = self.client.get(f"{reverse('candidate_repository')}?tab={tab}")
+                self.assertContains(response, hold_url)
+
+    def test_hold_is_not_offered_on_terminal_tabs(self):
+        hold_url = reverse('candidate_screening_hold', args=[self.candidate.pk])
+        services.change_status(self.candidate, Candidate.Status.REJECTED)
+        response = self.client.get(f"{reverse('candidate_repository')}?tab=rejected")
+        self.assertNotContains(response, hold_url)
+
+    def test_holding_from_the_repository_names_the_stage(self):
+        services.change_status(self.candidate, Candidate.Status.ROUND1)
+        self.client.post(reverse('candidate_screening_hold', args=[self.candidate.pk]))
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.status_label, 'Round 1 Hold')
+
+    def test_undo_restores_the_hold_stage(self):
+        services.change_status(self.candidate, Candidate.Status.INTERVIEW)
+        self._hold()
+        self.candidate.refresh_from_db()
+        services.change_status(self.candidate, Candidate.Status.FINAL_SELECTION)
+        self.client.post(reverse('candidate_revert', args=[self.candidate.pk]))
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.status, Candidate.Status.SCREENING_HOLD)
+        self.assertEqual(self.candidate.status_label, 'Interview Hold')

@@ -23,7 +23,7 @@
           <td>{{ c.full_name }}</td>
           <td>{{ c.email }}</td>
           <td>{{ c.job.title|default:"-" }}</td>
-          <td><span class="{{ c.status|badge_class }}">{{ c.get_status_display }}</span></td>
+          <td><span class="{{ c.status|badge_class }}">{{ c.status_label }}</span></td>
           <td><a href="{% url 'candidate_timeline' c.id %}" class="btn btn-sm btn-outline-app">View</a></td>
         </tr>
         {% endfor %}

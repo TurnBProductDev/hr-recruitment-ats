@@ -101,7 +101,9 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
             {'name': 'Screening',
              'pending': ('Screening Pending', fc('open'), 'open'),
              'cleared': ('Screened & Shortlisted', shortlisted, shortlisted + unfit, 'ever_shortlisted'),
-             'drops': [('Screening Hold', screening_hold, 'screening_hold')]},
+             # Hold can be taken at any stage, so this counts every held
+             # candidate, not only the ones held during screening.
+             'drops': [('Hold', screening_hold, 'screening_hold')]},
             {'name': 'Call',
              'pending': ('Yet to Call', yet_call, 'call_pending'),
              'cleared': ('Shortlisted After Call', s_after_call, s_after_call + rej_call, 'shortlisted_after_call'),

@@ -152,7 +152,7 @@ class InterviewResultView(GroupRequiredMixin, UpdateView):
             next_status = self.PASS_NEXT.get(candidate.status, Candidate.Status.HIRED)
             services.change_status(candidate, next_status, user=self.request.user,
                                    remarks=f'{round_label} interview passed.', performed_by=performed_by)
-            messages.success(self.request, f'{candidate.full_name} passed — moved to "{candidate.get_status_display()}".')
+            messages.success(self.request, f'{candidate.full_name} passed — moved to "{candidate.status_label}".')
         elif interview.result == Interview.Result.FAIL:
             services.change_status(candidate, Candidate.Status.REJECTED, user=self.request.user,
                                    remarks=f'{round_label} interview failed.', performed_by=performed_by)

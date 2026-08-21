@@ -141,7 +141,7 @@
           <td>{{ c.created_at|date:"d M Y" }}</td>
           <td>{{ c.interview_at|date:"d M Y"|default:"-" }}</td>
           <td>{{ c.last_action_at|date:"d M Y"|default:"-" }}</td>
-          <td><span class="{{ c.status|badge_class }}">{{ c.get_status_display }}</span>
+          <td><span class="{{ c.status|badge_class }}">{{ c.status_label }}</span>
             {% if c.reapply %}<span class="badge-dup ms-1">Reapply</span>{% endif %}
             {% if c.called %}<span class="badge-dup ms-1" title="Already called — Unable to connect / Call back logged"><i class="bi bi-telephone-fill"></i></span>{% endif %}
             {% if c.is_blacklisted and c.status != 'BLACKLISTED' %}<span class="badge-status badge-blacklisted ms-1">Blacklisted</span>{% endif %}</td>
@@ -149,7 +149,6 @@
             <a href="{% url 'candidate_timeline' c.id %}" class="btn btn-sm btn-outline-app">View</a>
             {% if tab == 'open' %}
               <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url 'candidate_shortlist' c.id %}" data-title="Shortlist {{ c.full_name }}">Shortlist</button>
-              <button type="button" class="btn btn-sm btn-hold act" data-action="{% url 'candidate_screening_hold' c.id %}" data-title="Put {{ c.full_name }} on Screening Hold" data-btn="btn-hold" data-label="Screening Hold">Screening Hold</button>
             {% elif tab == 'shortlisted' %}
               <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url 'candidate_round1' c.id %}" data-title="Move {{ c.full_name }} to Round 1">Move to Round 1</button>
             {% elif tab == 'round1' %}
@@ -163,6 +162,8 @@
               <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url 'candidate_shortlist' c.id %}" data-title="Move {{ c.full_name }} to Shortlisted" data-msg="Decision changed? This moves the candidate into the Shortlisted pipeline.">Move to Shortlisted</button>
             {% endif %}
             {% if tab in 'open,shortlisted,round1,interview,final_selection' %}
+              {# Hold is available at every stage - it is named after the stage it is taken at. #}
+              <button type="button" class="btn btn-sm btn-hold act" data-action="{% url 'candidate_screening_hold' c.id %}" data-title="Put {{ c.full_name }} on Hold" data-btn="btn-hold" data-label="Hold">Hold</button>
               <button type="button" class="btn btn-sm btn-outline-danger act" data-action="{% url 'candidate_reject' c.id %}" data-title="Reject {{ c.full_name }}" data-require="1" data-btn="btn-outline-danger" data-label="Reject">Reject</button>
               <button type="button" class="btn btn-sm btn-dark act" data-action="{% url 'candidate_blacklist' c.id %}" data-title="Blacklist {{ c.full_name }}" data-require="1" data-btn="btn-dark" data-label="Blacklist">Blacklist</button>
             {% endif %}

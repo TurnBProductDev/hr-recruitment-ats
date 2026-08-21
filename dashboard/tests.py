@@ -44,7 +44,7 @@ class SummaryTableTests(TestCase):
 
     def test_by_job_buckets_have_the_agreed_membership(self):
         row = self._row('by_job')
-        self.assertEqual(row['open'], 2)          # Open + Screening Hold
+        self.assertEqual(row['open'], 2)          # Open + Hold
         self.assertEqual(row['shortlisted'], 5)   # Shortlisted, Round 1, Interview, Final, Hired
         self.assertEqual(row['rejected'], 2)      # Rejected + Blacklisted
 

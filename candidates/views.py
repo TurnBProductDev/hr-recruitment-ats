@@ -28,6 +28,7 @@ from .models import (
     CandidateStatusHistory,
     CommunicationLog,
     Note,
+    hold_label,
 )
 from .permissions import ANY_STAFF, HIRING_MANAGER, HR_ADMIN, RECRUITER, GroupRequiredMixin
 
@@ -48,7 +49,7 @@ REPOSITORY_TABS = [
     ('hired', 'Hired', STATUS.HIRED),
     ('rejected', 'Rejected', STATUS.REJECTED),
     ('blacklisted', 'Blacklisted', STATUS.BLACKLISTED),
-    ('screening_hold', 'Screening Hold', STATUS.SCREENING_HOLD),
+    ('screening_hold', 'Hold', STATUS.SCREENING_HOLD),
 ]
 TAB_STATUS_MAP = {key: status for key, _, status in REPOSITORY_TABS}
 STATUS_TAB_MAP = {status: key for key, _, status in REPOSITORY_TABS}
@@ -101,7 +102,7 @@ FLOW_TITLES = {
     'r2_yet': 'Round 2 — Yet to Schedule', 'r2_cleared': 'Round 2 Cleared',
     'r2_scheduled': 'Round 2 Scheduled', 'r2_no_show': 'Round 2 — Not Turned Up',
     'on_hold': 'On Hold', 'hired': 'Hired', 'rejected': 'Rejected', 'blacklisted': 'Blacklisted',
-    'screening_hold': 'Screening Hold',
+    'screening_hold': 'Hold',
 }
 
 
@@ -364,11 +365,26 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
         # Unified activity feed: every action (status changes, notes, calls,
         # interviews, offers) in one chronological list with remarks.
         labels = dict(Candidate.Status.choices)
+        # A hold is named after the stage it was taken at ("Interview Hold"), so
+        # walk history oldest-first to note which stage each hold came from -
+        # a row that *leaves* a hold has to name it the same way it was entered.
+        held_from, hold_source = '', {}
+        for h in sorted(ctx['history'], key=lambda h: (h.changed_at, h.id)):
+            hold_source[h.id] = held_from
+            if h.new_status == STATUS.SCREENING_HOLD:
+                held_from = h.old_status
+
+        def status_label(status, came_from=''):
+            if status == STATUS.SCREENING_HOLD:
+                return hold_label(came_from)
+            return labels.get(status, status)
+
         events = []
         for h in ctx['history']:
+            was = status_label(h.old_status, hold_source[h.id]) if h.old_status else '—'
             events.append({
                 'when': h.changed_at, 'icon': 'arrow-right-circle',
-                'title': f"Status: {labels.get(h.old_status, h.old_status or '—')} → {labels.get(h.new_status, h.new_status)}",
+                'title': f"Status: {was} → {status_label(h.new_status, h.old_status)}",
                 'detail': h.remarks, 'who': h.performed_by or h.changed_by})
         for n in ctx['notes']:
             events.append({'when': n.created_at, 'icon': 'sticky',
@@ -402,7 +418,7 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
         # see the current state and who set it (history is ordered -changed_at)
         last = ctx['history'].first()
         ctx['last_status'] = last
-        ctx['last_status_label'] = labels.get(last.new_status, last.new_status) if last else ''
+        ctx['last_status_label'] = status_label(last.new_status, last.old_status) if last else ''
 
         u = self.request.user
         ctx['is_hr_admin'] = u.is_superuser or u.groups.filter(name=HR_ADMIN).exists()
@@ -489,7 +505,7 @@ class CandidateSetStatusView(GroupRequiredMixin, View):
         else:
             services.change_status(candidate, target, user=request.user,
                                    remarks=reason or None, performed_by=performed_by)
-        messages.success(request, f'{candidate.full_name} moved to "{candidate.get_status_display()}".')
+        messages.success(request, f'{candidate.full_name} moved to "{candidate.status_label}".')
         return redirect('candidate_timeline', pk=pk)
 
 
@@ -544,7 +560,7 @@ class CandidateStatusActionView(GroupRequiredMixin, View):
         else:
             services.change_status(candidate, self.target_status, user=request.user,
                                    remarks=reason or None, performed_by=performed_by)
-        messages.success(request, f'{candidate.full_name} moved to "{candidate.get_status_display()}".')
+        messages.success(request, f'{candidate.full_name} moved to "{candidate.status_label}".')
         next_url = request.POST.get('next')
         return redirect(next_url or reverse('candidate_timeline', args=[pk]))
 
@@ -570,8 +586,9 @@ class CandidateRevertLastActionView(GroupRequiredMixin, View):
             if bl:
                 bl.delete()
         candidate.status = prev_status
-        candidate.save(update_fields=['status', 'is_blacklisted', 'updated_at'])
-        messages.success(request, f'Last action undone — {candidate.full_name} is back to "{candidate.get_status_display()}".')
+        candidate.hold_from_status = services.hold_source_from_history(candidate)
+        candidate.save(update_fields=['status', 'hold_from_status', 'is_blacklisted', 'updated_at'])
+        messages.success(request, f'Last action undone — {candidate.full_name} is back to "{candidate.status_label}".')
         return redirect(next_url)
 
 
