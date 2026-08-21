@@ -26,6 +26,7 @@ from .models import (
     BulkUploadItem,
     Candidate,
     CandidateStatusHistory,
+    HOLD_STAGES,
     CommunicationLog,
     Note,
     hold_label,
@@ -51,6 +52,7 @@ REPOSITORY_TABS = [
     ('blacklisted', 'Blacklisted', STATUS.BLACKLISTED),
     ('screening_hold', 'Hold', STATUS.SCREENING_HOLD),
 ]
+HOLD_TAB = 'screening_hold'
 TAB_STATUS_MAP = {key: status for key, _, status in REPOSITORY_TABS}
 STATUS_TAB_MAP = {status: key for key, _, status in REPOSITORY_TABS}
 
@@ -220,9 +222,15 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
         if source:
             qs = qs.filter(source=source)
 
-        min_experience = self.request.GET.get('min_experience')
-        if min_experience:
-            qs = qs.filter(total_experience_years__gte=min_experience)
+        # Status filter. On the Hold tab every row is the same stored status, so
+        # what distinguishes them - and what the dropdown offers - is the stage
+        # the hold was taken at ("Round 1 Hold").
+        status_filter = self.request.GET.get('status')
+        if status_filter:
+            if self.get_tab() == HOLD_TAB and not flow:
+                qs = qs.filter(hold_from_status=status_filter)
+            else:
+                qs = qs.filter(status=status_filter)
 
         date_from = self.request.GET.get('date_from')
         if date_from:
@@ -258,10 +266,17 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
         ctx['scope'] = scope
         ctx['sources'] = (Candidate.objects.exclude(source__isnull=True).exclude(source='')
                           .values_list('source', flat=True).distinct().order_by('source'))
+        # The Hold tab lists one stored status, so it offers the named holds
+        # instead; every other tab offers the pipeline statuses.
+        if ctx['tab'] == HOLD_TAB:
+            ctx['status_options'] = [(s, hold_label(s)) for s in HOLD_STAGES]
+        else:
+            ctx['status_options'] = list(Candidate.Status.choices)
         # every current filter except the tab, so switching tabs keeps the vacancy/scope/search
-        # (the tab-specific switches are dropped so they reset when you leave their tab)
+        # (the tab-specific switches are dropped so they reset when you leave their tab;
+        # so is the status, which means a different thing on the Hold tab)
         params = self.request.GET.copy()
-        for key in ('tab', 'hide_reapply', 'hide_called'):
+        for key in ('tab', 'hide_reapply', 'hide_called', 'status'):
             params.pop(key, None)
         ctx['preserved_qs'] = params.urlencode()
         u = self.request.user

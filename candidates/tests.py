@@ -18,6 +18,7 @@ from . import bulk, cv_parser, services
 from .cv_parser import CVParseError
 from .models import BulkUploadBatch, BulkUploadItem, Candidate, EmailRegistry
 from .permissions import HIRING_MANAGER, HR_ADMIN, INTERVIEWER, RECRUITER
+from .views import HOLD_TAB
 
 PARSED = {
     'status': 'ok',
@@ -643,8 +644,8 @@ class HoldNamingTests(TestCase):
         services.change_status(self.candidate, Candidate.Status.INTERVIEW)
         self._hold()
         response = self.client.get(f"{reverse('candidate_repository')}?tab=screening_hold")
-        self.assertContains(response, 'Interview Hold')
-        self.assertNotContains(response, 'Screening Hold')
+        self.assertContains(response, '>Hold</a>')  # the tab itself
+        self.assertContains(response, 'badge-screening_hold">Interview Hold')
 
     def test_hold_is_offered_on_every_pipeline_tab(self):
         hold_url = reverse('candidate_screening_hold', args=[self.candidate.pk])
@@ -680,3 +681,106 @@ class HoldNamingTests(TestCase):
         self.candidate.refresh_from_db()
         self.assertEqual(self.candidate.status, Candidate.Status.SCREENING_HOLD)
         self.assertEqual(self.candidate.status_label, 'Interview Hold')
+
+
+class HoldResumeActionTests(TestCase):
+    """Taking a candidate off hold puts them back in the pipeline at the stage
+    after the one they were held at - a Round 1 Hold resumes at Interview."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('hr', 'hr@example.com', 'pw')
+        self.user.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.client.force_login(self.user)
+        self.candidate = Candidate.objects.create(
+            full_name='Rose E G', email='rose@example.com')
+        services.record_creation(self.candidate)
+
+    def _hold_at(self, stage):
+        if stage != Candidate.Status.OPEN:
+            services.change_status(self.candidate, stage)
+        services.change_status(self.candidate, Candidate.Status.SCREENING_HOLD)
+        self.candidate.refresh_from_db()
+
+    def test_the_offered_move_follows_the_stage_held_at(self):
+        expected = {
+            Candidate.Status.OPEN: ('Move to Shortlisted', 'candidate_shortlist'),
+            Candidate.Status.SHORTLISTED: ('Move to Round 1', 'candidate_round1'),
+            Candidate.Status.ROUND1: ('Move to Interview', 'candidate_interview_stage'),
+            Candidate.Status.INTERVIEW: ('Move to Final Selection', 'candidate_final_selection'),
+            Candidate.Status.FINAL_SELECTION: ('Move to Hired', 'candidate_hire'),
+        }
+        for stage, (label, url_name) in expected.items():
+            with self.subTest(stage=stage):
+                self.candidate.hold_from_status = stage
+                self.assertEqual(self.candidate.resume_action['label'], label)
+                self.assertEqual(self.candidate.resume_action['url_name'], url_name)
+
+    def test_an_unrecorded_stage_falls_back_to_shortlisted(self):
+        self.candidate.hold_from_status = ''
+        self.assertEqual(self.candidate.resume_action['label'], 'Move to Shortlisted')
+
+    def test_the_hold_tab_shows_the_matching_button(self):
+        self._hold_at(Candidate.Status.ROUND1)
+        response = self.client.get(f"{reverse('candidate_repository')}?tab={HOLD_TAB}")
+        self.assertContains(response, 'Move to Interview')
+        self.assertContains(
+            response, reverse('candidate_interview_stage', args=[self.candidate.pk]))
+        self.assertNotContains(response, 'Move to Shortlisted')
+
+    def test_the_button_actually_resumes_the_pipeline(self):
+        self._hold_at(Candidate.Status.ROUND1)
+        self.client.post(reverse('candidate_interview_stage', args=[self.candidate.pk]))
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.status, Candidate.Status.INTERVIEW)
+        self.assertEqual(self.candidate.hold_from_status, '')
+
+
+class RepositoryStatusFilterTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('hr', 'hr@example.com', 'pw')
+        self.user.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.client.force_login(self.user)
+
+    def _candidate(self, name, stage, held=False):
+        c = Candidate.objects.create(full_name=name, email=f'{name}@example.com')
+        services.record_creation(c)
+        if stage != Candidate.Status.OPEN:
+            services.change_status(c, stage)
+        if held:
+            services.change_status(c, Candidate.Status.SCREENING_HOLD)
+        return c
+
+    def test_min_experience_filter_is_gone(self):
+        response = self.client.get(reverse('candidate_repository'))
+        self.assertNotContains(response, 'Min Exp.')
+        self.assertNotContains(response, 'min_experience')
+        self.assertContains(response, 'All statuses')
+
+    def test_hold_tab_filters_by_the_stage_held_at(self):
+        self._candidate('Held at round 1', Candidate.Status.ROUND1, held=True)
+        self._candidate('Held at screening', Candidate.Status.OPEN, held=True)
+        response = self.client.get(
+            f"{reverse('candidate_repository')}?tab={HOLD_TAB}&status={Candidate.Status.ROUND1}")
+        self.assertContains(response, 'Held at round 1')
+        self.assertNotContains(response, 'Held at screening')
+
+    def test_hold_tab_offers_the_named_holds(self):
+        response = self.client.get(f"{reverse('candidate_repository')}?tab={HOLD_TAB}")
+        self.assertContains(response, 'Round 1 Hold')
+        self.assertContains(response, 'Screening Hold')
+
+    def test_flow_view_filters_by_status(self):
+        self._candidate('Shortlisted one', Candidate.Status.SHORTLISTED)
+        self._candidate('Open one', Candidate.Status.OPEN)
+        response = self.client.get(
+            f"{reverse('candidate_repository')}?flow=all&status={Candidate.Status.SHORTLISTED}")
+        self.assertContains(response, 'Shortlisted one')
+        self.assertNotContains(response, 'Open one')
+
+    def test_the_status_resets_when_switching_tabs(self):
+        """It means the held-at stage on the Hold tab and the current status
+        everywhere else, so carrying it across would empty the next list."""
+        response = self.client.get(
+            f"{reverse('candidate_repository')}?tab={HOLD_TAB}&status={Candidate.Status.ROUND1}&q=rose")
+        self.assertNotIn('status', response.context['preserved_qs'])
+        self.assertIn('q=rose', response.context['preserved_qs'])

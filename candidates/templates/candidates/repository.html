@@ -82,8 +82,13 @@
       </select>
     </div>
     <div class="col-md-2">
-      <label class="form-label small text-muted mb-0">Min Exp.</label>
-      <input type="number" step="0.5" name="min_experience" value="{{ request.GET.min_experience|default:'' }}" class="form-control">
+      <label class="form-label small text-muted mb-0">Status</label>
+      <select name="status" class="form-select" onchange="this.form.submit()">
+        <option value="">All statuses</option>
+        {% for value, label in status_options %}
+        <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
     </div>
     <div class="col-md-2">
       <label class="form-label small text-muted mb-0">Applied From</label>
@@ -158,7 +163,10 @@
             {% elif tab == 'final_selection' %}
               <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url 'candidate_hire' c.id %}" data-title="Hire {{ c.full_name }}?">Hire</button>
             {% endif %}
-            {% if tab == 'rejected' or tab == 'screening_hold' %}
+            {% if tab == 'screening_hold' %}
+              {# Off hold resumes the pipeline at the stage after the one they were held at. #}
+              <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url c.resume_action.url_name c.id %}" data-title="Move {{ c.full_name }} to {{ c.resume_action.stage }}" data-msg="Taking {{ c.full_name }} off hold — this moves them on to {{ c.resume_action.stage }}.">{{ c.resume_action.label }}</button>
+            {% elif tab == 'rejected' %}
               <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url 'candidate_shortlist' c.id %}" data-title="Move {{ c.full_name }} to Shortlisted" data-msg="Decision changed? This moves the candidate into the Shortlisted pipeline.">Move to Shortlisted</button>
             {% endif %}
             {% if tab in 'open,shortlisted,round1,interview,final_selection' %}

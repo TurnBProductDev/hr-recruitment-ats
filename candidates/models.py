@@ -153,6 +153,15 @@ class Candidate(models.Model):
         return self.get_status_display()
 
     @property
+    def resume_action(self):
+        """The move offered to a held candidate: the stage after the one they
+        were held at, so a Round 1 Hold is taken off hold into Interview.
+        Falls back to Shortlisted when the stage was never recorded."""
+        url_name, stage = HOLD_RESUME_ACTIONS.get(
+            self.hold_from_status, HOLD_RESUME_ACTIONS[self.Status.OPEN])
+        return {'url_name': url_name, 'stage': stage, 'label': f'Move to {stage}'}
+
+    @property
     def email_is_placeholder(self):
         """True when no real email was found (bulk upload / unparsed CV) - the
         row carries a pending-*@placeholder.local stand-in for HR to replace."""
@@ -168,6 +177,17 @@ class Candidate(models.Model):
 # A hold taken at the Open stage is what this app has always called a
 # "Screening Hold"; every other stage simply names itself.
 HOLD_STAGE_NAMES = {Candidate.Status.OPEN: 'Screening'}
+
+# The pipeline stages a hold can be taken at, and where lifting it goes: back
+# into the pipeline at the next stage, so a Round 1 Hold resumes at Interview.
+HOLD_RESUME_ACTIONS = {
+    Candidate.Status.OPEN: ('candidate_shortlist', 'Shortlisted'),
+    Candidate.Status.SHORTLISTED: ('candidate_round1', 'Round 1'),
+    Candidate.Status.ROUND1: ('candidate_interview_stage', 'Interview'),
+    Candidate.Status.INTERVIEW: ('candidate_final_selection', 'Final Selection'),
+    Candidate.Status.FINAL_SELECTION: ('candidate_hire', 'Hired'),
+}
+HOLD_STAGES = tuple(HOLD_RESUME_ACTIONS)
 
 
 def hold_label(from_status):
