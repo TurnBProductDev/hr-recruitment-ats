@@ -76,11 +76,11 @@ BEGIN
 
     INSERT INTO dbo.candidates_candidate
         (candidate_code, full_name, email, phone, qualification, resume_url,
-         source, status, is_duplicate, is_blacklisted, is_on_hold,
+         source, status, is_duplicate, is_blacklisted, is_on_hold, hold_from_status,
          created_at, updated_at, job_id, cv_summary, role_applied)
     VALUES
         (@code, @full_name, @email_norm, @phone, @education, @cv_link,
-         @src, @status, @is_dup, @is_black, 0,
+         @src, @status, @is_dup, @is_black, 0, '',
          @created, @now, @job_id, @cv_summary, @role);
     DECLARE @cid bigint = SCOPE_IDENTITY();
 
