@@ -20,6 +20,8 @@
   background: none; border: 0; text-align: left; cursor: pointer;
 }
 .fnl-row2:hover { background: #f8fafa; }
+.fnl-row2-static { cursor: default; }
+.fnl-row2-static:hover { background: none; }
 .fnl-row2 .lbl { flex: 0 0 132px; font-size: .72rem; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: #4a5a60; }
 .fnl-row2 .track { flex: 1 1 auto; min-width: 0; height: 28px; background: #f0f3f3; border-radius: 4px; overflow: hidden; }
 .fnl-row2 .fill { display: block; height: 100%; }
@@ -41,7 +43,6 @@
 .fnl-chip .n { font-weight: 700; font-size: 1rem; color: #1f2a2a; }
 .fnl-chip .t { font-size: .66rem; text-transform: uppercase; letter-spacing: .3px; color: #7a8a8a; }
 
-.fnl-foot { display: flex; justify-content: space-between; padding-top: 14px; font-size: .78rem; color: #8a9a9a; }
 @media (max-width: 700px) {
   .fnl-panel-head { flex-direction: column; gap: 10px; }
   .fnl-stats { align-self: flex-start; }
@@ -180,11 +181,18 @@
           <span class="fnl-hint">Click a stage for its breakdown</span>
         </div>
         <div class="fnl-stats">
-          <div class="fnl-stat"><div class="n">{{ funnel_top.total }}</div><div class="t">Resumes</div></div>
           <div class="fnl-stat"><div class="n">{{ funnel_top.requirement }}</div><div class="t">Openings</div></div>
         </div>
       </div>
       <div id="funnelAccordion">
+        <div class="fnl-stagewrap">
+          <div class="fnl-row2 fnl-row2-static">
+            <span class="lbl">Total Candidates</span>
+            <span class="track"><span class="fill" style="width:100%;background:{{ funnel_total_color }}"></span></span>
+            <span class="val">{{ funnel_top.total }}</span>
+            <span class="caret"></span>
+          </div>
+        </div>
         {% for stage in funnel %}
         <div class="fnl-stagewrap">
           <button type="button" class="fnl-row2" aria-expanded="{% if forloop.first %}true{% else %}false{% endif %}">
@@ -202,10 +210,6 @@
           </div>
         </div>
         {% endfor %}
-      </div>
-      <div class="fnl-foot">
-        <span>{{ funnel_top.requirement }} openings to fill</span>
-        <span>{{ funnel_top.unfit }} marked unfit</span>
       </div>
     </div>
     {% endwith %}
@@ -256,6 +260,8 @@ document.querySelectorAll('#funnelAccordion .fnl-stagewrap').forEach(function (w
   var row = wrap.querySelector('.fnl-row2');
   var chips = wrap.querySelector('.fnl-chips');
   var caret = wrap.querySelector('.caret');
+  // The static "Total Candidates" row has no breakdown to expand.
+  if (!chips) { return; }
   row.addEventListener('click', function () {
     var willOpen = chips.hidden;
     chips.hidden = !willOpen;

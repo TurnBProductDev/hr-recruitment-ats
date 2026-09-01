@@ -144,6 +144,7 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
         # and the row narrows the way a funnel should) and every pending/hold/
         # drop count flattened into clickable chips for the expanded breakdown.
         BAR_COLORS = ('#0e6f6b', '#1a8b84', '#2ba49b', '#4cbdb3', '#8ad6ce')
+        ctx['funnel_total_color'] = BAR_COLORS[0]
         peak = base.count() or 1
         for i, stage in enumerate(ctx['funnel']):
             label, value, _decided, flow = stage['cleared']
@@ -151,11 +152,17 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
             if 'pending2' in stage:
                 chips.append({'label': stage['pending2'][0], 'count': stage['pending2'][1], 'flow': stage['pending2'][2]})
             chips += [{'label': d[0], 'count': d[1], 'flow': d[2]} for d in stage['drops']]
+            pct = round(value / peak * 100)
+            # A stage with a handful of candidates against a peak of hundreds
+            # rounds to 0% and the bar reads as empty - give any nonzero stage
+            # a sliver so it's still visible.
+            if value > 0 and pct < 2:
+                pct = 2
             stage.update(
                 value=value,
                 value_label=label,
                 value_flow=flow,
-                pct=round(value / peak * 100),
+                pct=pct,
                 chips=chips,
                 color=BAR_COLORS[i % len(BAR_COLORS)],
             )
