@@ -11,34 +11,46 @@ from jobs.models import Job
 STATUS = Candidate.Status
 
 
-# The By Job/Role and By Source tables roll the nine statuses into three buckets
+# The By Job/Role and By Source tables roll the nine statuses into four buckets
 # so the columns always add up to Total. Every status belongs to exactly one
 # bucket - add any new status here or the row stops balancing.
 OPEN_GROUP = (STATUS.OPEN, STATUS.SCREENING_HOLD)
 SHORTLISTED_GROUP = (STATUS.SHORTLISTED, STATUS.ROUND1, STATUS.INTERVIEW,
-                     STATUS.FINAL_SELECTION, STATUS.HIRED)
+                     STATUS.FINAL_SELECTION)
 REJECTED_GROUP = (STATUS.REJECTED, STATUS.BLACKLISTED)
+HIRED_GROUP = (STATUS.HIRED,)
+
+# Composition-bar segment colors, shared by the top summary panel and every
+# By Job / By Source row (dashboard Summary tab).
+BUCKET_COLORS = {'open': '#0e6f6b', 'shortlisted': '#4cbdb3', 'rejected': '#d9534f', 'hired': '#1d3f4a'}
 
 
 def _grouped_counts():
-    """Count kwargs shared by the two breakdown tables."""
+    """Count kwargs shared by the summary panel and the two breakdown tables."""
     return dict(
         total=Count('id'),
         open=Count('id', filter=Q(status__in=OPEN_GROUP)),
         shortlisted=Count('id', filter=Q(status__in=SHORTLISTED_GROUP)),
         rejected=Count('id', filter=Q(status__in=REJECTED_GROUP)),
+        hired=Count('id', filter=Q(status__in=HIRED_GROUP)),
     )
+
+
+def _with_bucket_pct(row):
+    """Attach each bucket's share of the row's total, as whole percents, plus
+    a shortlist-rate figure. Used for both the composition bars and the
+    single-row summary strip."""
+    total = row['total'] or 1
+    for key in ('open', 'shortlisted', 'rejected', 'hired'):
+        row[f'{key}_pct'] = round(row[key] / total * 100)
+    row['shortlist_rate'] = round(row['shortlisted'] / total * 100) if row['total'] else 0
+    return row
 
 
 def _summary_counts_qs(qs):
-    """Total / Open / Shortlisted / Rejected / Hired for a candidate queryset (one query)."""
-    return qs.aggregate(
-        total=Count('id'),
-        open=Count('id', filter=Q(status=STATUS.OPEN)),
-        shortlisted=Count('id', filter=Q(status=STATUS.SHORTLISTED)),
-        rejected=Count('id', filter=Q(status=STATUS.REJECTED)),
-        hired=Count('id', filter=Q(status=STATUS.HIRED)),
-    )
+    """Total / Open / Shortlisted / Rejected / Hired for a candidate queryset (one query),
+    with each bucket's percent share of the total for the composition bar."""
+    return _with_bucket_pct(qs.aggregate(**_grouped_counts()))
 
 
 class HRDashboardView(GroupRequiredMixin, TemplateView):
@@ -65,13 +77,12 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
 
         # ---------- Summary ----------
         ctx['summary'] = _summary_counts_qs(base)
-        ctx['by_job'] = (base.values('job__title')
-                         .annotate(**_grouped_counts())
-                         .order_by('-total'))
-        ctx['by_source'] = (base.exclude(source__isnull=True).exclude(source='')
-                            .values('source')
-                            .annotate(**_grouped_counts())
-                            .order_by('-total'))
+        ctx['bucket_colors'] = BUCKET_COLORS
+        ctx['by_job'] = [_with_bucket_pct(dict(r)) for r in
+                         base.values('job__title').annotate(**_grouped_counts()).order_by('-total')]
+        ctx['by_source'] = [_with_bucket_pct(dict(r)) for r in
+                            base.exclude(source__isnull=True).exclude(source='')
+                            .values('source').annotate(**_grouped_counts()).order_by('-total')]
 
         # ---------- Overview: recruitment funnel (Power BI style). Counts come
         # from candidates.flows so a card and its drill-down list always match. ----------
@@ -128,6 +139,29 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
              'cleared': ('Hired', hired, hired + rej_r2 + rej_final, 'hired'),
              'drops': []},
         ]
+
+        # Collapsed-accordion view of the same numbers: one bar per stage
+        # (width relative to the first stage's cleared count, so the row
+        # narrows the way a funnel should), a pass-rate badge, and every
+        # pending/hold/drop count flattened into clickable chips for the
+        # expanded breakdown.
+        BAR_COLORS = ('#0e6f6b', '#1a8b84', '#2ba49b', '#4cbdb3', '#8ad6ce')
+        peak = ctx['funnel'][0]['cleared'][1] or 1
+        for i, stage in enumerate(ctx['funnel']):
+            label, value, decided, flow = stage['cleared']
+            chips = [{'label': stage['pending'][0], 'count': stage['pending'][1], 'flow': stage['pending'][2]}]
+            if 'pending2' in stage:
+                chips.append({'label': stage['pending2'][0], 'count': stage['pending2'][1], 'flow': stage['pending2'][2]})
+            chips += [{'label': d[0], 'count': d[1], 'flow': d[2]} for d in stage['drops']]
+            stage.update(
+                value=value,
+                value_label=label,
+                value_flow=flow,
+                pct=round(value / peak * 100),
+                conv=round(value / decided * 100) if i > 0 and decided else None,
+                chips=chips,
+                color=BAR_COLORS[i % len(BAR_COLORS)],
+            )
 
         ctx['upcoming_interviews'] = Interview.objects.select_related('candidate', 'interviewer').filter(
             status=Interview.Status.SCHEDULED, scheduled_date__gte=timezone.now()

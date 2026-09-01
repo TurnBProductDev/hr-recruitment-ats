@@ -10,14 +10,14 @@ from django.urls import reverse
 from candidates.models import Candidate
 from jobs.models import Job
 
-from .views import OPEN_GROUP, REJECTED_GROUP, SHORTLISTED_GROUP
+from .views import HIRED_GROUP, OPEN_GROUP, REJECTED_GROUP, SHORTLISTED_GROUP
 
 
 class StatusBucketTests(TestCase):
     def test_every_status_lands_in_exactly_one_bucket(self):
         """If a new status is added without slotting it into a bucket, the
         By Job / By Source rows silently stop adding up to Total."""
-        buckets = list(OPEN_GROUP) + list(SHORTLISTED_GROUP) + list(REJECTED_GROUP)
+        buckets = list(OPEN_GROUP) + list(SHORTLISTED_GROUP) + list(REJECTED_GROUP) + list(HIRED_GROUP)
         all_statuses = [value for value, _label in Candidate.Status.choices]
         self.assertCountEqual(buckets, all_statuses)
 
@@ -40,14 +40,15 @@ class SummaryTableTests(TestCase):
     def test_by_job_columns_add_up_to_total(self):
         row = self._row('by_job')
         self.assertEqual(row['total'], 9)
-        self.assertEqual(row['open'] + row['shortlisted'] + row['rejected'], row['total'])
+        self.assertEqual(row['open'] + row['shortlisted'] + row['rejected'] + row['hired'], row['total'])
 
     def test_by_job_buckets_have_the_agreed_membership(self):
         row = self._row('by_job')
         self.assertEqual(row['open'], 2)          # Open + Hold
-        self.assertEqual(row['shortlisted'], 5)   # Shortlisted, Round 1, Interview, Final, Hired
+        self.assertEqual(row['shortlisted'], 4)   # Shortlisted, Round 1, Interview, Final
         self.assertEqual(row['rejected'], 2)      # Rejected + Blacklisted
+        self.assertEqual(row['hired'], 1)         # Hired
 
     def test_by_source_columns_add_up_to_total(self):
         row = self._row('by_source')
-        self.assertEqual(row['open'] + row['shortlisted'] + row['rejected'], row['total'])
+        self.assertEqual(row['open'] + row['shortlisted'] + row['rejected'] + row['hired'], row['total'])

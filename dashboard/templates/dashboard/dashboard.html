@@ -16,51 +16,65 @@
 .fnl-kpi .val  { font-size: 1.9rem; font-weight: 700; color: #1f2a2a; }
 .fnl-kpi a, .fnl-kpi { text-decoration: none; }
 
-.fnl-scroll { overflow-x: auto; padding-bottom: 10px; }
-.fnl-row { display: flex; gap: 18px; min-width: min-content; }
-.fnl-col { flex: 1 0 200px; display: flex; flex-direction: column; }
-.fnl-stage {
-  text-align: center; font-size: .74rem; font-weight: 700; text-transform: uppercase;
-  letter-spacing: .6px; color: #008C8C; margin-bottom: 10px;
+/* ---- Accordion funnel: one bar per stage, click to expand its breakdown ---- */
+.fnl-panel { background: #fff; border: 1px solid #e2ebeb; border-radius: 12px; padding: 22px 24px 18px; }
+.fnl-panel-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+.fnl-panel-head h5 { margin: 0; }
+.fnl-hint { font-size: .76rem; color: #8a9a9a; }
+
+.fnl-stagewrap { border-bottom: 1px solid #eef2f2; }
+.fnl-stagewrap:last-of-type { border-bottom: none; }
+
+.fnl-row2 {
+  display: flex; align-items: center; gap: 16px; width: 100%; padding: 13px 2px;
+  background: none; border: 0; text-align: left; cursor: pointer;
 }
-.fnl-box { display: block; text-decoration: none; color: inherit; transition: transform .12s ease, box-shadow .12s ease; }
-.fnl-box:hover { transform: translateY(-2px); }
+.fnl-row2:hover { background: #f8fafa; }
+.fnl-row2 .lbl { flex: 0 0 132px; font-size: .72rem; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: #4a5a60; }
+.fnl-row2 .track { flex: 1 1 auto; min-width: 0; height: 28px; background: #f0f3f3; border-radius: 4px; overflow: hidden; }
+.fnl-row2 .fill { display: block; height: 100%; }
+.fnl-row2 .val { flex: 0 0 56px; text-align: right; font-weight: 700; font-size: 1.15rem; color: #1f2a2a; }
+.fnl-row2 .conv { flex: 0 0 68px; text-align: right; font-size: .72rem; color: #8a9a9a; }
+.fnl-row2 .caret { flex: 0 0 18px; text-align: right; font-size: .9rem; color: #9aabab; }
 
-/* Pending cards sit side by side so the big "cleared" card below starts at the
-   same height in every stage column. */
-.fnl-pendrow { display: flex; gap: 8px; align-items: stretch; }
-.fnl-pendrow > .fnl-box { flex: 1; min-width: 0; }
-
-.fnl-pending {
-  background: #eaf5f5; border: 1px solid #cfe6e6; border-radius: 10px;
-  padding: 10px 8px; text-align: center; height: 100%;
+.fnl-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 2px 2px 16px 148px; }
+.fnl-chip {
+  display: block; text-decoration: none; color: inherit; min-width: 92px;
+  padding: 8px 12px; background: #f6f8f8; border: 1px solid #e2ebeb; border-radius: 6px;
+  transition: box-shadow .12s ease, border-color .12s ease;
 }
-.fnl-pending .n { font-size: 1.5rem; font-weight: 700; color: #0a6b6b; line-height: 1.1; }
-.fnl-pending .t { font-size: .66rem; text-transform: uppercase; letter-spacing: .4px; color: #5f7373; }
-.fnl-pending:hover { box-shadow: 0 4px 12px rgba(0,140,140,.15); }
+.fnl-chip:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color: #cbd9d9; }
+.fnl-chip .n { font-weight: 700; font-size: 1rem; color: #1f2a2a; }
+.fnl-chip .t { font-size: .66rem; text-transform: uppercase; letter-spacing: .3px; color: #7a8a8a; }
 
-.fnl-link { width: 2px; height: 18px; background: #cfe0e0; margin: 4px auto; }
-
-.fnl-big {
-  position: relative; background: #fff; border: 2px solid #008C8C; border-radius: 12px;
-  padding: 18px 12px 26px; text-align: center; min-height: 128px;
-  display: flex; flex-direction: column; justify-content: center;
+.fnl-foot { display: flex; justify-content: space-between; padding-top: 14px; font-size: .78rem; color: #8a9a9a; }
+@media (max-width: 700px) {
+  .fnl-kpis { grid-template-columns: 1fr; }
+  .fnl-row2 .lbl { flex-basis: 90px; }
+  .fnl-chips { padding-left: 106px; }
 }
-.fnl-big:hover { box-shadow: 0 6px 18px rgba(0,140,140,.20); }
-.fnl-big .t { font-size: .68rem; text-transform: uppercase; letter-spacing: .4px; color: #5f7373; margin-bottom: 4px; }
-.fnl-big .n { font-size: 2.3rem; font-weight: 700; color: #1f2a2a; line-height: 1; }
-.fnl-big .of { position: absolute; right: 12px; bottom: 8px; font-size: .8rem; color: #9aabab; }
-.fnl-big .of small { color: #b7c5c5; }
 
-.fnl-drops { display: flex; gap: 8px; margin-top: 12px; }
-.fnl-drop {
-  flex: 1; background: #f6f8f8; border: 1px solid #e2ebeb; border-radius: 9px;
-  padding: 8px 4px; text-align: center;
-}
-.fnl-drop:hover { box-shadow: 0 3px 10px rgba(16,24,40,.10); border-color: #cbd9d9; }
-.fnl-drop .n { font-size: 1.15rem; font-weight: 700; color: #3a4a4a; }
-.fnl-drop .t { font-size: .6rem; text-transform: uppercase; letter-spacing: .3px; color: #7a8a8a; }
-@media (max-width: 700px) { .fnl-kpis { grid-template-columns: 1fr; } }
+/* ---- Summary tab: composition bars ---- */
+.sum-panel { background: #fff; border: 1px solid #e2ebeb; border-radius: 12px; padding: 22px 24px 20px; }
+.sum-stats { display: flex; flex-wrap: wrap; gap: 30px; margin-bottom: 18px; }
+.sum-stat .lbl { font-size: .72rem; text-transform: uppercase; letter-spacing: .5px; color: #6b7a7a; font-weight: 600; }
+.sum-stat .val { font-size: 1.9rem; font-weight: 700; color: #1f2a2a; }
+.sum-stat .pct { font-size: .8rem; font-weight: 600; color: #8a9a9a; margin-left: 4px; }
+
+.sum-bar { display: flex; height: 26px; border-radius: 5px; overflow: hidden; background: #f0f3f3; margin-bottom: 14px; }
+.sum-bar .seg { display: block; height: 100%; }
+
+.sum-legend { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; font-size: .76rem; color: #5a6a6a; }
+.sum-legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+
+.sum-row { padding: 12px 2px; border-bottom: 1px solid #eef2f2; }
+.sum-row:last-child { border-bottom: none; }
+.sum-row-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+.sum-row-name { font-weight: 600; font-size: .85rem; color: #1f2a2a; }
+.sum-row-count { font-size: .72rem; color: #8a9a9a; margin-left: 6px; font-weight: 400; }
+.sum-row-rate { font-size: .78rem; font-weight: 600; color: #4a5a60; white-space: nowrap; }
+.sum-row-bar { display: flex; height: 22px; border-radius: 4px; overflow: hidden; background: #f0f3f3; }
+.sum-row-bar .seg { display: flex; align-items: center; justify-content: center; overflow: hidden; height: 100%; color: #fff; font-size: .68rem; font-weight: 700; }
 </style>
 {% endblock %}
 
@@ -104,53 +118,86 @@
 <div class="tab-content">
   <!-- ===================== SUMMARY ===================== -->
   <div class="tab-pane fade {% if view != 'overview' %}show active{% endif %}" id="summaryPane">
-    <div class="row g-3 mb-4">
-      {% with s=summary %}
-      <div class="col-6 col-md"><div class="card app-card stat-card p-3 text-center h-100"><div class="text-muted small">Total Applicants</div><h2 class="mb-0">{{ s.total }}</h2></div></div>
-      <div class="col-6 col-md"><div class="card app-card stat-card p-3 text-center h-100"><div class="text-muted small">Open</div><h2 class="mb-0">{{ s.open }}</h2></div></div>
-      <div class="col-6 col-md"><div class="card app-card stat-card p-3 text-center h-100"><div class="text-muted small">Shortlisted</div><h2 class="mb-0">{{ s.shortlisted }}</h2></div></div>
-      <div class="col-6 col-md"><div class="card app-card stat-card p-3 text-center h-100"><div class="text-muted small">Rejected</div><h2 class="mb-0">{{ s.rejected }}</h2></div></div>
-      <div class="col-6 col-md"><div class="card app-card stat-card p-3 text-center h-100"><div class="text-muted small">Hired</div><h2 class="mb-0">{{ s.hired }}</h2></div></div>
-      {% endwith %}
+    {% with s=summary c=bucket_colors %}
+    <div class="sum-panel mb-4">
+      <div class="sum-stats">
+        <div class="sum-stat"><div class="lbl">Total Applicants</div><div class="val">{{ s.total }}</div></div>
+        <div class="sum-stat"><div class="lbl">Open</div><div class="val">{{ s.open }}<span class="pct">{{ s.open_pct }}%</span></div></div>
+        <div class="sum-stat"><div class="lbl">Shortlisted</div><div class="val">{{ s.shortlisted }}<span class="pct">{{ s.shortlisted_pct }}%</span></div></div>
+        <div class="sum-stat"><div class="lbl">Rejected</div><div class="val">{{ s.rejected }}<span class="pct">{{ s.rejected_pct }}%</span></div></div>
+        <div class="sum-stat"><div class="lbl">Hired</div><div class="val">{{ s.hired }}<span class="pct">{{ s.hired_pct }}%</span></div></div>
+      </div>
+      <div class="sum-bar">
+        {% if s.open %}<span class="seg" style="width:{{ s.open_pct }}%;background:{{ c.open }}"></span>{% endif %}
+        {% if s.shortlisted %}<span class="seg" style="width:{{ s.shortlisted_pct }}%;background:{{ c.shortlisted }}"></span>{% endif %}
+        {% if s.rejected %}<span class="seg" style="width:{{ s.rejected_pct }}%;background:{{ c.rejected }}"></span>{% endif %}
+        {% if s.hired %}<span class="seg" style="width:{{ s.hired_pct }}%;background:{{ c.hired }}"></span>{% endif %}
+      </div>
+      <div class="sum-legend">
+        <span><span class="sw" style="background:{{ c.open }}"></span>Open</span>
+        <span><span class="sw" style="background:{{ c.shortlisted }}"></span>Shortlisted</span>
+        <span><span class="sw" style="background:{{ c.rejected }}"></span>Rejected</span>
+        <span><span class="sw" style="background:{{ c.hired }}"></span>Hired</span>
+      </div>
     </div>
+
     <div class="row g-3">
       <div class="col-lg-6">
         <div class="card app-card p-3">
           <h5 class="mb-3">By Job / Role</h5>
-          <div class="table-responsive">
-            <table class="table table-hover align-middle w-100">
-              <thead><tr><th>Role</th><th>Total</th>
-                <th title="Open + Hold">Open</th>
-                <th title="Shortlisted + Round 1 + Interview + Final Selection + Hired">Shortlisted</th>
-                <th title="Rejected + Blacklisted">Rejected</th></tr></thead>
-              <tbody>
-                {% for r in by_job %}
-                <tr><td>{{ r.job__title|default:"Unassigned" }}</td><td>{{ r.total }}</td><td>{{ r.open }}</td><td>{{ r.shortlisted }}</td><td>{{ r.rejected }}</td></tr>
-                {% empty %}<tr><td colspan="5" class="text-muted text-center">No data.</td></tr>{% endfor %}
-              </tbody>
-            </table>
+          {% for r in by_job %}
+          <div class="sum-row">
+            <div class="sum-row-head">
+              <span><span class="sum-row-name">{{ r.job__title|default:"Unassigned" }}</span><span class="sum-row-count">{{ r.total }} applicant{{ r.total|pluralize }}</span></span>
+              <span class="sum-row-rate">Shortlist rate {{ r.shortlist_rate }}%</span>
+            </div>
+            <div class="sum-row-bar">
+              {% if r.open %}<span class="seg" style="width:{{ r.open_pct }}%;background:{{ c.open }}">{{ r.open }}</span>{% endif %}
+              {% if r.shortlisted %}<span class="seg" style="width:{{ r.shortlisted_pct }}%;background:{{ c.shortlisted }}">{{ r.shortlisted }}</span>{% endif %}
+              {% if r.rejected %}<span class="seg" style="width:{{ r.rejected_pct }}%;background:{{ c.rejected }}">{{ r.rejected }}</span>{% endif %}
+              {% if r.hired %}<span class="seg" style="width:{{ r.hired_pct }}%;background:{{ c.hired }}">{{ r.hired }}</span>{% endif %}
+            </div>
           </div>
+          {% empty %}<div class="text-muted text-center py-3">No data.</div>{% endfor %}
+          {% if by_job %}
+          <div class="sum-legend mt-3">
+            <span><span class="sw" style="background:{{ c.open }}"></span>Open</span>
+            <span><span class="sw" style="background:{{ c.shortlisted }}"></span>Shortlisted</span>
+            <span><span class="sw" style="background:{{ c.rejected }}"></span>Rejected</span>
+            <span><span class="sw" style="background:{{ c.hired }}"></span>Hired</span>
+          </div>
+          {% endif %}
         </div>
       </div>
       <div class="col-lg-6">
         <div class="card app-card p-3">
           <h5 class="mb-3">By Source</h5>
-          <div class="table-responsive">
-            <table class="table table-hover align-middle w-100">
-              <thead><tr><th>Source</th><th>Total</th>
-                <th title="Open + Hold">Open</th>
-                <th title="Shortlisted + Round 1 + Interview + Final Selection + Hired">Shortlisted</th>
-                <th title="Rejected + Blacklisted">Rejected</th></tr></thead>
-              <tbody>
-                {% for r in by_source %}
-                <tr><td>{{ r.source }}</td><td>{{ r.total }}</td><td>{{ r.open }}</td><td>{{ r.shortlisted }}</td><td>{{ r.rejected }}</td></tr>
-                {% empty %}<tr><td colspan="5" class="text-muted text-center">No data.</td></tr>{% endfor %}
-              </tbody>
-            </table>
+          {% for r in by_source %}
+          <div class="sum-row">
+            <div class="sum-row-head">
+              <span><span class="sum-row-name">{{ r.source }}</span><span class="sum-row-count">{{ r.total }} applicant{{ r.total|pluralize }}</span></span>
+              <span class="sum-row-rate">Shortlist rate {{ r.shortlist_rate }}%</span>
+            </div>
+            <div class="sum-row-bar">
+              {% if r.open %}<span class="seg" style="width:{{ r.open_pct }}%;background:{{ c.open }}">{{ r.open }}</span>{% endif %}
+              {% if r.shortlisted %}<span class="seg" style="width:{{ r.shortlisted_pct }}%;background:{{ c.shortlisted }}">{{ r.shortlisted }}</span>{% endif %}
+              {% if r.rejected %}<span class="seg" style="width:{{ r.rejected_pct }}%;background:{{ c.rejected }}">{{ r.rejected }}</span>{% endif %}
+              {% if r.hired %}<span class="seg" style="width:{{ r.hired_pct }}%;background:{{ c.hired }}">{{ r.hired }}</span>{% endif %}
+            </div>
           </div>
+          {% empty %}<div class="text-muted text-center py-3">No data.</div>{% endfor %}
+          {% if by_source %}
+          <div class="sum-legend mt-3">
+            <span><span class="sw" style="background:{{ c.open }}"></span>Open</span>
+            <span><span class="sw" style="background:{{ c.shortlisted }}"></span>Shortlisted</span>
+            <span><span class="sw" style="background:{{ c.rejected }}"></span>Rejected</span>
+            <span><span class="sw" style="background:{{ c.hired }}"></span>Hired</span>
+          </div>
+          {% endif %}
         </div>
       </div>
     </div>
+    {% endwith %}
   </div>
 
   <!-- ===================== OVERVIEW (recruitment funnel) ===================== -->
@@ -164,41 +211,34 @@
       </a>
     </div>
 
-    <div class="fnl-scroll">
-      <div class="fnl-row">
+    <div class="fnl-panel">
+      <div class="fnl-panel-head">
+        <h5>Hiring funnel</h5>
+        <span class="fnl-hint">Click a stage for its breakdown</span>
+      </div>
+      <div id="funnelAccordion">
         {% for stage in funnel %}
-        <div class="fnl-col">
-          <div class="fnl-stage">{{ stage.name }}</div>
-          {# pending cards share one row, so every stage's big card stays aligned #}
-          <div class="fnl-pendrow">
-            <a class="fnl-box" href="{% url 'candidate_repository' %}?flow={{ stage.pending.2 }}{% if jobq %}&job={{ jobq }}{% endif %}">
-              <div class="fnl-pending"><div class="n">{{ stage.pending.1 }}</div><div class="t">{{ stage.pending.0 }}</div></div>
-            </a>
-            {% if stage.pending2 %}
-            <a class="fnl-box" href="{% url 'candidate_repository' %}?flow={{ stage.pending2.2 }}{% if jobq %}&job={{ jobq }}{% endif %}">
-              <div class="fnl-pending"><div class="n">{{ stage.pending2.1 }}</div><div class="t">{{ stage.pending2.0 }}</div></div>
-            </a>
-            {% endif %}
-          </div>
-          <div class="fnl-link"></div>
-          <a class="fnl-box" href="{% url 'candidate_repository' %}?flow={{ stage.cleared.3 }}{% if jobq %}&job={{ jobq }}{% endif %}">
-            <div class="fnl-big">
-              <div class="t">{{ stage.cleared.0 }}</div>
-              <div class="n">{{ stage.cleared.1 }}</div>
-              <div class="of">{{ stage.cleared.2 }} <small>total</small></div>
-            </div>
-          </a>
-          {% if stage.drops %}
-          <div class="fnl-drops">
-            {% for d in stage.drops %}
-            <a class="fnl-box" style="flex:1" href="{% url 'candidate_repository' %}?flow={{ d.2 }}{% if jobq %}&job={{ jobq }}{% endif %}">
-              <div class="fnl-drop"><div class="n">{{ d.1 }}</div><div class="t">{{ d.0 }}</div></div>
+        <div class="fnl-stagewrap">
+          <button type="button" class="fnl-row2" aria-expanded="{% if forloop.first %}true{% else %}false{% endif %}">
+            <span class="lbl">{{ stage.name }}</span>
+            <span class="track"><span class="fill" style="width:{{ stage.pct }}%;background:{{ stage.color }}"></span></span>
+            <span class="val">{{ stage.value }}</span>
+            <span class="conv">{% if stage.conv is not None %}{{ stage.conv }}% pass{% endif %}</span>
+            <span class="caret">{% if forloop.first %}&minus;{% else %}+{% endif %}</span>
+          </button>
+          <div class="fnl-chips" {% if not forloop.first %}hidden{% endif %}>
+            {% for chip in stage.chips %}
+            <a class="fnl-chip" href="{% url 'candidate_repository' %}?flow={{ chip.flow }}{% if jobq %}&job={{ jobq }}{% endif %}">
+              <div class="n">{{ chip.count }}</div><div class="t">{{ chip.label }}</div>
             </a>
             {% endfor %}
           </div>
-          {% endif %}
         </div>
         {% endfor %}
+      </div>
+      <div class="fnl-foot">
+        <span>{{ funnel_top.requirement }} openings to fill</span>
+        <span>{{ funnel_top.unfit }} marked unfit</span>
       </div>
     </div>
     {% endwith %}
@@ -240,6 +280,27 @@ document.querySelectorAll('#dashTabs button[data-bs-toggle="tab"]').forEach(func
     var url = new URL(window.location);
     url.searchParams.set('view', v);
     window.history.replaceState(null, '', url);
+  });
+});
+
+// Funnel accordion: clicking a stage row expands its breakdown chips and
+// collapses whichever stage was open before (one at a time).
+document.querySelectorAll('#funnelAccordion .fnl-stagewrap').forEach(function (wrap) {
+  var row = wrap.querySelector('.fnl-row2');
+  var chips = wrap.querySelector('.fnl-chips');
+  var caret = wrap.querySelector('.caret');
+  row.addEventListener('click', function () {
+    var willOpen = chips.hidden;
+    document.querySelectorAll('#funnelAccordion .fnl-stagewrap').forEach(function (w) {
+      w.querySelector('.fnl-chips').hidden = true;
+      w.querySelector('.caret').textContent = '+';
+      w.querySelector('.fnl-row2').setAttribute('aria-expanded', 'false');
+    });
+    if (willOpen) {
+      chips.hidden = false;
+      caret.textContent = '−';
+      row.setAttribute('aria-expanded', 'true');
+    }
   });
 });
 </script>
