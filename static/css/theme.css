@@ -17,12 +17,12 @@ body {
 }
 
 /* Headings: tighter, less shouty */
-h1, .h1 { font-size: 1.6rem; }
-h2, .h2 { font-size: 1.35rem; }
-h3, .h3 { font-size: 1.15rem; font-weight: 600; }
-h4, .h4 { font-size: 1.05rem; }
-h5, .h5 { font-size: 0.95rem; font-weight: 600; }
-.small, small { font-size: 0.8rem; }
+h1, .h1 { font-size: 24px; font-weight: 700; }
+h2, .h2 { font-size: 20px; font-weight: 700; }
+h3, .h3 { font-size: 17px; font-weight: 600; }
+h4, .h4 { font-size: 15px; font-weight: 600; }
+h5, .h5 { font-size: 16px; font-weight: 600; }
+.small, small { font-size: 12px; }
 
 main.container-fluid { max-width: 1600px; }
 
@@ -34,10 +34,12 @@ main.container-fluid { max-width: 1600px; }
 }
 .app-navbar .navbar-brand {
   color: var(--dark-green);
-  font-weight: 600;
+  font-size: 17px;
+  font-weight: 700;
 }
 .app-navbar .nav-link {
   color: #495057;
+  font-size: 13px;
   font-weight: 500;
 }
 .app-navbar .nav-link:hover,
@@ -91,8 +93,7 @@ td .btn-sm { margin: 1px 0; }
 
 /* Navbar refinements */
 .app-navbar { padding: 0.5rem 1rem; box-shadow: 0 1px 3px rgba(16,24,40,0.05); }
-.app-navbar .navbar-brand { font-size: 1.05rem; letter-spacing: 0.2px; }
-.app-navbar .nav-link { font-size: 0.88rem; padding: 0.4rem 0.7rem; }
+.app-navbar .nav-link { padding: 0.4rem 0.7rem; }
 
 /* Nav tabs (dashboard) */
 .nav-tabs .nav-link {
@@ -182,7 +183,8 @@ table.dataTable tbody td {
 
 .stat-card h2 {
   color: var(--dark-green);
-  font-weight: 600;
+  font-size: 26px;
+  font-weight: 700;
 }
 .stat-card .text-primary-app { color: var(--primary-green); font-weight: 500; }
 .dash-clickable { transition: box-shadow .12s ease, transform .12s ease; }
