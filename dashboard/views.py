@@ -94,13 +94,13 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
         ctx['funnel_top'] = {'total': base.count(), 'requirement': requirement, 'unfit': unfit}
         # Corner "total" = everyone who got a decision at that stage (cleared + rejected-there)
         ctx['funnel'] = [
-            {'name': 'Screening',
+            {'name': 'Screened & Shortlisted',
              'pending': ('Screening Pending', fc('open'), 'open'),
              'cleared': ('Screened & Shortlisted', shortlisted, shortlisted + unfit, 'ever_shortlisted'),
              # Hold can be taken at any stage, so this counts every held
              # candidate, not only the ones held during screening.
              'drops': [('Hold', screening_hold, 'screening_hold')]},
-            {'name': 'Call',
+            {'name': 'Shortlisted After Call',
              'pending': ('Yet to Call', yet_call, 'call_pending'),
              'cleared': ('Shortlisted After Call', s_after_call, s_after_call + rej_call, 'shortlisted_after_call'),
              # To Re-call sits beside Yet to Call: both are still-to-reach candidates,
@@ -109,17 +109,17 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
              'pending2': ('To Re-call', to_recall, 'to_recall'),
              'drops': [('Decision Pending', call_dp, 'call_decision_pending'),
                        ('Unable to Connect', unable, 'unable_to_connect')]},
-            {'name': 'Round 1',
+            {'name': 'Round 1 Cleared',
              'pending': ('Yet to Schedule', r1_yet, 'r1_yet'),
              'cleared': ('Round 1 Cleared', r1_cleared, r1_cleared + rej_r1, 'r1_cleared'),
              'drops': [('Scheduled', r1_sched, 'r1_scheduled'), ('Not Turned Up', r1_ns, 'r1_no_show'),
                        ('Decision Pending', r1_dp, 'r1_decision_pending')]},
-            {'name': 'Round 2',
+            {'name': 'Round 2 Cleared',
              'pending': ('Yet to Schedule', r2_yet, 'r2_yet'),
              'cleared': ('Round 2 Cleared', r2_cleared, r2_cleared + rej_r2, 'r2_cleared'),
              'drops': [('Scheduled', r2_sched, 'r2_scheduled'), ('Not Turned Up', r2_ns, 'r2_no_show'),
                        ('Decision Pending', r2_dp, 'r2_decision_pending')]},
-            {'name': 'Final Decision',
+            {'name': 'Hired',
              'pending': ('On Hold', on_hold, 'on_hold'),
              'cleared': ('Hired', hired, hired + rej_r2 + rej_final, 'hired'),
              'drops': []},
