@@ -140,14 +140,13 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
         ]
 
         # Collapsed-accordion view of the same numbers: one bar per stage
-        # (width relative to the first stage's cleared count, so the row
-        # narrows the way a funnel should), a pass-rate badge, and every
-        # pending/hold/drop count flattened into clickable chips for the
-        # expanded breakdown.
+        # (width relative to total resumes, so every bar shares the same base
+        # and the row narrows the way a funnel should) and every pending/hold/
+        # drop count flattened into clickable chips for the expanded breakdown.
         BAR_COLORS = ('#0e6f6b', '#1a8b84', '#2ba49b', '#4cbdb3', '#8ad6ce')
-        peak = ctx['funnel'][0]['cleared'][1] or 1
+        peak = base.count() or 1
         for i, stage in enumerate(ctx['funnel']):
-            label, value, decided, flow = stage['cleared']
+            label, value, _decided, flow = stage['cleared']
             chips = [{'label': stage['pending'][0], 'count': stage['pending'][1], 'flow': stage['pending'][2]}]
             if 'pending2' in stage:
                 chips.append({'label': stage['pending2'][0], 'count': stage['pending2'][1], 'flow': stage['pending2'][2]})
@@ -157,7 +156,6 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
                 value_label=label,
                 value_flow=flow,
                 pct=round(value / peak * 100),
-                conv=round(value / decided * 100) if i > 0 and decided else None,
                 chips=chips,
                 color=BAR_COLORS[i % len(BAR_COLORS)],
             )

@@ -4,22 +4,11 @@
 {% block extra_css %}
 <style>
 /* ===== Recruitment funnel (self-contained so it never depends on cached CSS) ===== */
-.fnl-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 22px; }
-.fnl-kpi {
-  background: #fff; border: 1px solid #e2ebeb; border-left: 5px solid #008C8C;
-  border-radius: 12px; padding: 16px 20px; display: flex; align-items: center;
-  justify-content: space-between; box-shadow: 0 1px 3px rgba(16,24,40,.05);
-}
-.fnl-kpi.blue  { border-left-color: #2f6fed; }
-.fnl-kpi.red   { border-left-color: #e5484d; }
-.fnl-kpi .lbl  { font-size: .72rem; text-transform: uppercase; letter-spacing: .5px; color: #6b7a7a; font-weight: 600; }
-.fnl-kpi .val  { font-size: 1.9rem; font-weight: 700; color: #1f2a2a; }
-.fnl-kpi a, .fnl-kpi { text-decoration: none; }
 
 /* ---- Accordion funnel: one bar per stage, click to expand its breakdown ---- */
 .fnl-panel { background: #fff; border: 1px solid #e2ebeb; border-radius: 12px; padding: 22px 24px 18px; }
-.fnl-panel-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
-.fnl-panel-head h5 { margin: 0; }
+.fnl-panel-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 8px; }
+.fnl-panel-head h5 { margin: 0 0 2px; }
 .sm-panel-head h5 { font-size: 1.05rem; }
 .fnl-hint { font-size: .76rem; color: #8a9a9a; }
 
@@ -35,8 +24,12 @@
 .fnl-row2 .track { flex: 1 1 auto; min-width: 0; height: 28px; background: #f0f3f3; border-radius: 4px; overflow: hidden; }
 .fnl-row2 .fill { display: block; height: 100%; }
 .fnl-row2 .val { flex: 0 0 56px; text-align: right; font-weight: 700; font-size: 1.15rem; color: #1f2a2a; }
-.fnl-row2 .conv { flex: 0 0 68px; text-align: right; font-size: .72rem; color: #8a9a9a; }
 .fnl-row2 .caret { flex: 0 0 18px; text-align: right; font-size: .9rem; color: #9aabab; }
+
+.fnl-stats { display: flex; gap: 22px; }
+.fnl-stat { text-align: right; }
+.fnl-stat .n { font-size: 1.3rem; font-weight: 700; color: #1f2a2a; }
+.fnl-stat .t { font-size: .66rem; text-transform: uppercase; letter-spacing: .4px; color: #8a9a9a; }
 
 .fnl-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 2px 2px 16px 148px; }
 .fnl-chip {
@@ -50,7 +43,8 @@
 
 .fnl-foot { display: flex; justify-content: space-between; padding-top: 14px; font-size: .78rem; color: #8a9a9a; }
 @media (max-width: 700px) {
-  .fnl-kpis { grid-template-columns: 1fr; }
+  .fnl-panel-head { flex-direction: column; gap: 10px; }
+  .fnl-stats { align-self: flex-start; }
   .fnl-row2 .lbl { flex-basis: 90px; }
   .fnl-chips { padding-left: 106px; }
 }
@@ -179,18 +173,16 @@
   <!-- ===================== OVERVIEW (recruitment funnel) ===================== -->
   <div class="tab-pane fade {% if view == 'overview' %}show active{% endif %}" id="overviewPane">
     {% with jobq=selected_job %}
-    <div class="fnl-kpis">
-      <div class="fnl-kpi"><div><div class="lbl">Total Resumes</div></div><div class="val">{{ funnel_top.total }}</div></div>
-      <div class="fnl-kpi blue"><div><div class="lbl">Requirement</div></div><div class="val">{{ funnel_top.requirement }}</div></div>
-      <a class="fnl-kpi red" href="{% url 'candidate_repository' %}?flow=unfit{% if jobq %}&job={{ jobq }}{% endif %}">
-        <div><div class="lbl">Unfit Resumes</div></div><div class="val">{{ funnel_top.unfit }}</div>
-      </a>
-    </div>
-
     <div class="fnl-panel">
       <div class="fnl-panel-head">
-        <h5>Hiring funnel</h5>
-        <span class="fnl-hint">Click a stage for its breakdown</span>
+        <div>
+          <h5>Hiring funnel</h5>
+          <span class="fnl-hint">Click a stage for its breakdown</span>
+        </div>
+        <div class="fnl-stats">
+          <div class="fnl-stat"><div class="n">{{ funnel_top.total }}</div><div class="t">Resumes</div></div>
+          <div class="fnl-stat"><div class="n">{{ funnel_top.requirement }}</div><div class="t">Openings</div></div>
+        </div>
       </div>
       <div id="funnelAccordion">
         {% for stage in funnel %}
@@ -199,7 +191,6 @@
             <span class="lbl">{{ stage.name }}</span>
             <span class="track"><span class="fill" style="width:{{ stage.pct }}%;background:{{ stage.color }}"></span></span>
             <span class="val">{{ stage.value }}</span>
-            <span class="conv">{% if stage.conv is not None %}{{ stage.conv }}% pass{% endif %}</span>
             <span class="caret">{% if forloop.first %}&minus;{% else %}+{% endif %}</span>
           </button>
           <div class="fnl-chips" {% if not forloop.first %}hidden{% endif %}>
@@ -259,24 +250,17 @@ document.querySelectorAll('#dashTabs button[data-bs-toggle="tab"]').forEach(func
   });
 });
 
-// Funnel accordion: clicking a stage row expands its breakdown chips and
-// collapses whichever stage was open before (one at a time).
+// Funnel accordion: clicking a stage row toggles its own breakdown chips,
+// independently of every other stage - any number can be open at once.
 document.querySelectorAll('#funnelAccordion .fnl-stagewrap').forEach(function (wrap) {
   var row = wrap.querySelector('.fnl-row2');
   var chips = wrap.querySelector('.fnl-chips');
   var caret = wrap.querySelector('.caret');
   row.addEventListener('click', function () {
     var willOpen = chips.hidden;
-    document.querySelectorAll('#funnelAccordion .fnl-stagewrap').forEach(function (w) {
-      w.querySelector('.fnl-chips').hidden = true;
-      w.querySelector('.caret').textContent = '+';
-      w.querySelector('.fnl-row2').setAttribute('aria-expanded', 'false');
-    });
-    if (willOpen) {
-      chips.hidden = false;
-      caret.textContent = '−';
-      row.setAttribute('aria-expanded', 'true');
-    }
+    chips.hidden = !willOpen;
+    caret.textContent = willOpen ? '−' : '+';
+    row.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
   });
 });
 </script>
