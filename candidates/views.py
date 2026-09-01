@@ -263,6 +263,13 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
         ctx['flow'] = self.request.GET.get('flow', '')
         ctx['flow_title'] = FLOW_TITLES.get(ctx['flow'])
         ctx['tabs'] = REPOSITORY_TABS
+        # Counts for the tab pills - total per current status, independent of
+        # whatever tab/search/date filters are active, so the pills read as a
+        # stable map of the whole pipeline (not "matches in this view").
+        ctx['tab_counts'] = {row['status']: row['n'] for row in
+                            Candidate.objects.values('status').annotate(n=Count('id'))}
+        ctx['total_candidates'] = sum(ctx['tab_counts'].values())
+        ctx['awaiting_count'] = ctx['tab_counts'].get(STATUS.OPEN, 0)
         scope = self.request.GET.get('scope', '')
         job_list = Job.objects.all().order_by('title')
         if scope == 'open':
@@ -655,6 +662,68 @@ class CandidateBulkRejectView(GroupRequiredMixin, View):
             messages.success(request, message)
         else:
             messages.info(request, 'No candidates were rejected.')
+        next_url = request.POST.get('next')
+        return redirect(next_url or _remembered_list_url(request) or reverse('candidate_repository'))
+
+
+class CandidateBulkStatusActionView(GroupRequiredMixin, View):
+    """Move several ticked candidates to the same status at once (Shortlist,
+    Hold, ...). Each one still gets its own history entry, exactly as acting
+    on them one by one would; candidates already at that status or in a
+    terminal one (Rejected/Blacklisted/Hired) are left untouched."""
+    target_status = None
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
+
+    def post(self, request):
+        ids = request.POST.getlist('ids')
+        reason = request.POST.get('reason', '').strip()
+        performed_by = _performed_by(request)
+        candidates = Candidate.objects.filter(pk__in=ids).exclude(
+            status__in=[STATUS.REJECTED, STATUS.BLACKLISTED, STATUS.HIRED, self.target_status])
+
+        moved = 0
+        for candidate in candidates:
+            services.change_status(candidate, self.target_status, user=request.user,
+                                   remarks=reason or None, performed_by=performed_by)
+            moved += 1
+
+        skipped = len(ids) - moved
+        label = self.target_status.label
+        if moved:
+            message = f'{moved} candidate{"s" if moved != 1 else ""} moved to {label}.'
+            if skipped:
+                message += f' {skipped} left unchanged (already {label} or a terminal status).'
+            messages.success(request, message)
+        else:
+            messages.info(request, 'No candidates were updated.')
+        next_url = request.POST.get('next')
+        return redirect(next_url or _remembered_list_url(request) or reverse('candidate_repository'))
+
+
+class CandidateBulkBlacklistView(GroupRequiredMixin, View):
+    """Blacklist several ticked candidates at once - a reason is required,
+    same as blacklisting one from their own page."""
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
+
+    def post(self, request):
+        ids = request.POST.getlist('ids')
+        reason = request.POST.get('reason', '').strip()
+        performed_by = _performed_by(request)
+        if not reason:
+            messages.error(request, 'A reason is required.')
+            return redirect(request.POST.get('next') or reverse('candidate_repository'))
+
+        candidates = Candidate.objects.filter(pk__in=ids).exclude(status=STATUS.BLACKLISTED)
+        blacklisted = 0
+        for candidate in candidates:
+            services.blacklist_candidate(candidate, reason, user=request.user, performed_by=performed_by)
+            blacklisted += 1
+
+        if blacklisted:
+            messages.success(
+                request, f'{blacklisted} candidate{"s" if blacklisted != 1 else ""} blacklisted.')
+        else:
+            messages.info(request, 'No candidates were updated.')
         next_url = request.POST.get('next')
         return redirect(next_url or _remembered_list_url(request) or reverse('candidate_repository'))
 

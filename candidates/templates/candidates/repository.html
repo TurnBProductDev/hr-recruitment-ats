@@ -1,19 +1,88 @@
 {% extends "hr_base.html" %}
 {% load candidates_extras %}
 {% block title %}Candidate Repository{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ===== Candidate Repository (self-contained so it never depends on cached CSS) ===== */
+.repo-head { display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:16px; margin-bottom:18px; }
+.repo-title { font-size:1.5rem; font-weight:700; color:#1a2e35; margin:0; }
+.repo-title a { color:inherit; text-decoration:none; }
+.repo-title a:hover { color:var(--dark-green); }
+.repo-subtitle { font-size:.8rem; color:#6b7a7a; margin-top:2px; }
+.repo-filters { display:flex; align-items:flex-end; gap:18px; flex-wrap:wrap; }
+.repo-filters .form-label { font-size:.72rem; text-transform:uppercase; letter-spacing:.4px; color:#6b7a7a; font-weight:600; margin-bottom:3px; }
+.repo-switches { display:flex; flex-direction:column; gap:6px; padding-bottom:2px; }
+.repo-switches .form-check { min-height:0; }
+
+.repo-tabs { display:flex; flex-wrap:wrap; column-gap:26px; row-gap:0; border-bottom:1px solid var(--border-color); margin-bottom:18px; overflow-x:auto; }
+.repo-tab-item { display:flex; align-items:center; gap:7px; }
+.repo-tab { padding:10px 0; font-size:.85rem; font-weight:600; color:#5a6b73; text-decoration:none; border-bottom:3px solid transparent; white-space:nowrap; }
+.repo-tab:hover { color:var(--dark-green); }
+.repo-tab.active { color:var(--dark-green); border-bottom-color:var(--primary-green); }
+.repo-tab-count { padding:2px 8px; border-radius:10px; background:#eef1f1; color:#5a6b73; font-size:.68rem; font-weight:700; margin-bottom:9px; }
+.repo-tab-count.active { background:var(--primary-green); color:#fff; }
+
+.repo-flow-banner { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:12px 18px; border-left:4px solid var(--primary-green); margin-bottom:18px; }
+.repo-flow-banner .flow-eyebrow { font-size:.7rem; text-transform:uppercase; letter-spacing:.5px; color:#8a969b; }
+.repo-flow-banner .flow-title { font-weight:600; color:var(--dark-green); }
+
+.repo-toolbar { display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap; padding:14px 18px; border-bottom:1px solid var(--border-color); }
+.repo-search-wrap { position:relative; flex:1 1 220px; max-width:280px; }
+.repo-search-wrap .bi-search { position:absolute; left:11px; top:50%; transform:translateY(-50%); color:#8a969b; font-size:.8rem; pointer-events:none; }
+.repo-search-wrap input { padding-left:30px; }
+.repo-date-group { display:flex; align-items:center; gap:6px; }
+.repo-date-group input { max-width:135px; }
+.repo-toolbar .form-select, .repo-toolbar .form-control { font-size:.82rem; }
+.repo-export-slot { margin-left:auto; }
+.repo-export-slot .dt-buttons .btn { white-space:nowrap; }
+
+.repo-bulkbar { display:none; align-items:center; gap:14px; padding:10px 18px; background:#eef6f5; border-bottom:1px solid #dbe9e7; flex-wrap:wrap; }
+.repo-bulkbar.show { display:flex; }
+.repo-bulkbar .bulk-actions { display:flex; gap:8px; flex-wrap:wrap; margin-left:auto; }
+
+.kebab-btn { padding:0.25rem 0.55rem; line-height:1; }
+.repo-name a { font-weight:600; }
+.repo-meta { font-size:.72rem; color:#8a969b; }
+.repo-pill-reapply {
+  display:inline-block; margin-left:6px; padding:1px 7px; border-radius:4px;
+  background:#fbf1d6; color:#8a6a12; font-size:.62rem; font-weight:700;
+  letter-spacing:.3px; text-transform:uppercase; vertical-align:middle;
+}
+.repo-called-icon { color:#8a969b; margin-left:4px; }
+
+#candidateTable_wrapper { display:flex; flex-wrap:wrap; }
+#candidateTable_wrapper > table { width:100% !important; order:1; }
+#candidateTable_wrapper > .dataTables_processing { order:0; width:100%; }
+#candidateTable_wrapper > .dataTables_info { order:2; flex:1; padding:14px 18px 16px; font-size:.78rem; color:#8a969b; }
+#candidateTable_wrapper > .dataTables_paginate { order:3; padding:10px 18px 12px; }
+.dataTables_wrapper .pagination { justify-content:flex-end; margin-bottom:0; }
+.dataTables_wrapper .pagination .page-link { border-radius:6px; margin-left:4px; border-color:var(--border-color); color:var(--dark-green); font-size:.78rem; }
+.dataTables_wrapper .pagination .page-item.active .page-link { background:var(--primary-green); border-color:var(--primary-green); color:#fff; }
+.dataTables_wrapper .pagination .page-item.disabled .page-link { color:#c3cbcb; }
+
+@media (max-width: 900px) {
+  .repo-toolbar { align-items:stretch; }
+  .repo-export-slot { margin-left:0; }
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<form method="get">
+<form method="get" id="repoFilterForm">
   <input type="hidden" name="tab" value="{{ tab }}">
 
-  {# Heading on the left; vacancy + scope on the top-right, staying selected across tabs #}
-  <div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-3">
-    <h3 class="mb-0">
-      <a href="{% url 'candidate_all' %}" class="text-decoration-none" style="color: inherit;"
-         title="Open the full list of all candidates (downloadable to Excel)">Candidate Repository <i class="bi bi-box-arrow-up-right small"></i></a>
-    </h3>
-    <div class="d-flex align-items-end gap-3">
+  <div class="repo-head">
+    <div>
+      <h3 class="repo-title mb-0">
+        <a href="{% url 'candidate_all' %}"
+           title="Open the full list of all candidates (downloadable to Excel)">Candidate Repository <i class="bi bi-box-arrow-up-right small"></i></a>
+      </h3>
+      <div class="repo-subtitle">{{ total_candidates }} candidate{{ total_candidates|pluralize }} &middot; {{ awaiting_count }} awaiting action</div>
+    </div>
+    <div class="repo-filters">
       <div>
-        <label class="form-label small text-muted mb-0">Job Code</label>
+        <label class="form-label mb-0">Job Code</label>
         <select class="form-select form-select-sm" onchange="this.form.job.value=this.value; this.form.submit();" style="min-width: 130px;">
           <option value="">All codes</option>
           {% for job in jobs %}
@@ -22,169 +91,204 @@
         </select>
       </div>
       <div>
-        <label class="form-label small text-muted mb-0">Vacancy</label>
-        <select name="job" class="form-select form-select-sm" onchange="this.form.submit()" style="min-width: 260px;">
+        <label class="form-label mb-0">Vacancy</label>
+        <select name="job" class="form-select form-select-sm" onchange="this.form.submit()" style="min-width: 240px;">
           <option value="">All vacancies</option>
           {% for job in jobs %}
           <option value="{{ job.id }}" {% if request.GET.job == job.id|stringformat:"s" %}selected{% endif %}>{{ job.title }}</option>
           {% endfor %}
         </select>
       </div>
-      <div class="form-check form-switch mb-1">
-        <input type="checkbox" class="form-check-input" role="switch" id="scopeSwitch"
-               name="scope" value="open" {% if scope == 'open' %}checked{% endif %} onchange="this.form.submit()">
-        <label class="form-check-label small text-muted" for="scopeSwitch">Open vacancies only</label>
+      <div class="repo-switches">
+        <div class="form-check form-switch mb-0">
+          <input type="checkbox" class="form-check-input" role="switch" id="scopeSwitch"
+                 name="scope" value="open" {% if scope == 'open' %}checked{% endif %} onchange="this.form.submit()">
+          <label class="form-check-label small text-muted" for="scopeSwitch">Open vacancies only</label>
+        </div>
+        {% if tab == 'open' %}
+        <div class="form-check form-switch mb-0">
+          <input type="checkbox" class="form-check-input" role="switch" id="hideReapplySwitch"
+                 name="hide_reapply" value="1" {% if request.GET.hide_reapply %}checked{% endif %} onchange="this.form.submit()">
+          <label class="form-check-label small text-muted" for="hideReapplySwitch">Hide reapply</label>
+        </div>
+        {% elif tab == 'shortlisted' %}
+        <div class="form-check form-switch mb-0">
+          <input type="checkbox" class="form-check-input" role="switch" id="hideCalledSwitch"
+                 name="hide_called" value="1" {% if request.GET.hide_called %}checked{% endif %} onchange="this.form.submit()">
+          <label class="form-check-label small text-muted" for="hideCalledSwitch">Hide already-called</label>
+        </div>
+        {% endif %}
       </div>
-      {% if tab == 'open' %}
-      <div class="form-check form-switch mb-1">
-        <input type="checkbox" class="form-check-input" role="switch" id="hideReapplySwitch"
-               name="hide_reapply" value="1" {% if request.GET.hide_reapply %}checked{% endif %} onchange="this.form.submit()">
-        <label class="form-check-label small text-muted" for="hideReapplySwitch">Hide reapply</label>
-      </div>
-      {% elif tab == 'shortlisted' %}
-      <div class="form-check form-switch mb-1">
-        <input type="checkbox" class="form-check-input" role="switch" id="hideCalledSwitch"
-               name="hide_called" value="1" {% if request.GET.hide_called %}checked{% endif %} onchange="this.form.submit()">
-        <label class="form-check-label small text-muted" for="hideCalledSwitch">Hide already-called</label>
-      </div>
-      {% endif %}
     </div>
   </div>
 
   {% if flow %}
-  <div class="d-flex align-items-center flex-wrap gap-2 mb-3">
-    <span class="text-muted small text-uppercase">Showing</span>
-    <h5 class="mb-0" style="color: var(--dark-green);">{{ flow_title|default:"Filtered list" }}</h5>
+  <div class="repo-flow-banner app-card">
+    <div>
+      <div class="flow-eyebrow">Showing</div>
+      <div class="flow-title">{{ flow_title|default:"Filtered list" }}</div>
+    </div>
     <a href="{% url 'hr_dashboard' %}?view=overview{% if request.GET.job %}&job={{ request.GET.job }}{% endif %}"
        class="btn btn-sm btn-outline-app ms-auto"><i class="bi bi-arrow-left"></i> Back to Overview</a>
   </div>
   {% else %}
-  <ul class="nav nav-tabs mb-3 flex-nowrap overflow-auto">
+  <div class="repo-tabs">
     {% for key, label, status in tabs %}
-    <li class="nav-item"><a class="nav-link text-nowrap {% if tab == key %}active{% endif %}"
-        href="?tab={{ key }}{% if preserved_qs %}&{{ preserved_qs }}{% endif %}">{{ label }}</a></li>
+    <div class="repo-tab-item">
+      <a class="repo-tab {% if tab == key %}active{% endif %}"
+         href="?tab={{ key }}{% if preserved_qs %}&{{ preserved_qs }}{% endif %}">{{ label }}</a><span class="repo-tab-count {% if tab == key %}active{% endif %}">{{ tab_counts|dict_get:status|default:0 }}</span>
+    </div>
     {% endfor %}
-  </ul>
+  </div>
   {% endif %}
 
-  <div class="row g-2 mb-3 align-items-end">
-    <div class="col-md-3">
-      <label class="form-label small text-muted mb-0">Search</label>
-      <input type="text" name="q" value="{{ request.GET.q|default:'' }}" class="form-control" placeholder="Name or email">
+  <div class="app-card">
+    <div class="repo-toolbar">
+      <div class="repo-search-wrap">
+        <i class="bi bi-search"></i>
+        <input type="text" name="q" value="{{ request.GET.q|default:'' }}" class="form-control form-control-sm" placeholder="Name, email or code">
+      </div>
+      <div>
+        <label class="form-label mb-0 d-block">Source</label>
+        <select name="source" class="form-select form-select-sm" onchange="this.form.submit()" style="min-width:140px;">
+          <option value="">All sources</option>
+          {% for s in sources %}
+          <option value="{{ s }}" {% if request.GET.source == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="form-label mb-0 d-block">Status</label>
+        <select name="status" class="form-select form-select-sm" onchange="this.form.submit()" style="min-width:140px;">
+          <option value="">All statuses</option>
+          {% for value, label in status_options %}
+          <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="form-label mb-0 d-block">Applied</label>
+        <div class="repo-date-group">
+          <input type="date" name="date_from" value="{{ request.GET.date_from|default:'' }}" class="form-control form-control-sm" title="Applied from">
+          <span class="text-muted small">&ndash;</span>
+          <input type="date" name="date_to" value="{{ request.GET.date_to|default:'' }}" class="form-control form-control-sm" title="Applied to">
+        </div>
+      </div>
+      <button type="submit" class="btn btn-sm btn-outline-app"><i class="bi bi-search"></i> Search</button>
+      <div class="repo-export-slot" id="exportSlot"></div>
     </div>
-    <div class="col-md-2">
-      <label class="form-label small text-muted mb-0">Source</label>
-      <select name="source" class="form-select" onchange="this.form.submit()">
-        <option value="">All sources</option>
-        {% for s in sources %}
-        <option value="{{ s }}" {% if request.GET.source == s %}selected{% endif %}>{{ s }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="col-md-2">
-      <label class="form-label small text-muted mb-0">Status</label>
-      <select name="status" class="form-select" onchange="this.form.submit()">
-        <option value="">All statuses</option>
-        {% for value, label in status_options %}
-        <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="col-md-2">
-      <label class="form-label small text-muted mb-0">Applied From</label>
-      <input type="date" name="date_from" value="{{ request.GET.date_from|default:'' }}" class="form-control">
-    </div>
-    <div class="col-md-2">
-      <label class="form-label small text-muted mb-0">Applied To</label>
-      <input type="date" name="date_to" value="{{ request.GET.date_to|default:'' }}" class="form-control">
-    </div>
-    <div class="col-md-1">
-      <button type="submit" class="btn btn-primary-app w-100"><i class="bi bi-search"></i></button>
-    </div>
-  </div>
-</form>
 
-{% if is_hr_admin %}
-<div id="bulkBar" class="alert alert-secondary d-none d-flex justify-content-between align-items-center py-2">
-  <span><strong id="bulkCount">0</strong> candidate(s) selected</span>
-  <span>
-    <button type="button" class="btn btn-sm btn-outline-secondary" id="bulkClear">Clear selection</button>
-    <button type="button" class="btn btn-sm btn-danger" id="bulkDelete">Delete selected</button>
-  </span>
-</div>
-<form method="post" action="{% url 'candidate_bulk_delete' %}" id="bulkDeleteForm" class="d-none">
-  {% csrf_token %}
-  <input type="hidden" name="next" value="{{ request.get_full_path }}">
-  <div id="bulkDeleteIds"></div>
-</form>
-{% endif %}
-
-<div class="card app-card p-3">
-  <div class="table-responsive">
-    <table id="candidateTable" class="table table-hover align-middle w-100">
-      <thead>
-        <tr>
-          {% if is_hr_admin %}<th class="no-export" style="width:2rem">
-            <input type="checkbox" class="form-check-input" id="selectAll" title="Select all on this page">
-          </th>{% endif %}
-          <th>Code</th><th>Name</th><th>Job</th><th>Exp.</th>
-          <th>Applied</th><th>Interview</th><th>Last Action</th><th>Status</th><th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for c in candidates %}
-        <tr>
-          {% if is_hr_admin %}<td class="no-export">
-            <input type="checkbox" class="form-check-input row-select" value="{{ c.id }}"
-                   aria-label="Select {{ c.full_name }}">
-          </td>{% endif %}
-          <td class="text-muted">{{ c.candidate_code }}</td>
-          <td><a href="{% url 'candidate_timeline' c.id %}">{{ c.full_name }}</a>
-            <div class="small text-muted">{{ c.email }}</div></td>
-          <td>{{ c.job.title|default:"-" }}</td>
-          <td>{{ c.total_experience_years|default:"-" }}</td>
-          <td>{{ c.created_at|date:"d M Y" }}</td>
-          <td>{{ c.interview_at|date:"d M Y"|default:"-" }}</td>
-          <td>{{ c.last_action_at|date:"d M Y"|default:"-" }}</td>
-          <td><span class="{{ c.status|badge_class }}">{{ c.status_label }}</span>
-            {% if c.reapply %}<span class="badge-dup ms-1">Reapply</span>{% endif %}
-            {% if c.called %}<span class="badge-dup ms-1" title="Already called — Unable to connect / Call back logged"><i class="bi bi-telephone-fill"></i></span>{% endif %}
-            {% if c.is_blacklisted and c.status != 'BLACKLISTED' %}<span class="badge-status badge-blacklisted ms-1">Blacklisted</span>{% endif %}</td>
-          <td class="text-nowrap">
-            <a href="{% url 'candidate_timeline' c.id %}" class="btn btn-sm btn-outline-app">View</a>
-            {% if tab == 'open' %}
-              <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url 'candidate_shortlist' c.id %}" data-title="Shortlist {{ c.full_name }}">Shortlist</button>
-            {% elif tab == 'shortlisted' %}
-              <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url 'candidate_round1' c.id %}" data-title="Move {{ c.full_name }} to Round 1">Move to Round 1</button>
-            {% elif tab == 'round1' %}
-              <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url 'candidate_interview_stage' c.id %}" data-title="Move {{ c.full_name }} to Interview">Move to Interview</button>
-            {% elif tab == 'interview' %}
-              <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url 'candidate_final_selection' c.id %}" data-title="Move {{ c.full_name }} to Final Selection">Final Selection</button>
-            {% elif tab == 'final_selection' %}
-              <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url 'candidate_hire' c.id %}" data-title="Hire {{ c.full_name }}?">Hire</button>
-            {% endif %}
-            {% if tab == 'screening_hold' %}
-              {# Off hold resumes the pipeline at the stage after the one they were held at. #}
-              <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url c.resume_action.url_name c.id %}" data-title="Move {{ c.full_name }} to {{ c.resume_action.stage }}" data-msg="Taking {{ c.full_name }} off hold — this moves them on to {{ c.resume_action.stage }}.">{{ c.resume_action.label }}</button>
-            {% elif tab == 'rejected' %}
-              <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url 'candidate_shortlist' c.id %}" data-title="Move {{ c.full_name }} to Shortlisted" data-msg="Decision changed? This moves the candidate into the Shortlisted pipeline.">Move to Shortlisted</button>
-            {% endif %}
+    {% if is_hr_admin %}
+    <div id="bulkBar" class="repo-bulkbar">
+      <span><strong id="bulkCount">0</strong> selected</span>
+      <div class="bulk-actions">
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="bulkClear">Clear</button>
+        {% if tab in 'open,rejected' %}
+        <button type="button" class="btn btn-sm btn-fill-app bulk-act" id="bulkShortlist"
+                data-action="{% url 'candidate_bulk_shortlist' %}" data-title="Shortlist the selected candidates">Shortlist</button>
+        {% endif %}
+        {% if tab in 'open,shortlisted,round1,interview,final_selection' %}
+        <button type="button" class="btn btn-sm btn-hold bulk-act" id="bulkHold"
+                data-action="{% url 'candidate_bulk_hold' %}" data-title="Put the selected candidates on Hold">Hold</button>
+        <button type="button" class="btn btn-sm btn-outline-danger bulk-act" id="bulkReject"
+                data-action="{% url 'candidate_bulk_reject' %}" data-title="Reject the selected candidates" data-require="1">Reject</button>
+        {% endif %}
+        <div class="dropdown d-inline-block">
+          <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">More</button>
+          <ul class="dropdown-menu dropdown-menu-end">
             {% if tab in 'open,shortlisted,round1,interview,final_selection' %}
-              {# Hold is available at every stage - it is named after the stage it is taken at. #}
-              <button type="button" class="btn btn-sm btn-hold act" data-action="{% url 'candidate_screening_hold' c.id %}" data-title="Put {{ c.full_name }} on Hold" data-btn="btn-hold" data-label="Hold">Hold</button>
-              <button type="button" class="btn btn-sm btn-outline-danger act" data-action="{% url 'candidate_reject' c.id %}" data-title="Reject {{ c.full_name }}" data-require="1" data-btn="btn-outline-danger" data-label="Reject">Reject</button>
-              <button type="button" class="btn btn-sm btn-dark act" data-action="{% url 'candidate_blacklist' c.id %}" data-title="Blacklist {{ c.full_name }}" data-require="1" data-btn="btn-dark" data-label="Blacklist">Blacklist</button>
+            <li><button type="button" class="dropdown-item bulk-act" id="bulkBlacklist"
+                        data-action="{% url 'candidate_bulk_blacklist' %}" data-title="Blacklist the selected candidates" data-require="1">Blacklist</button></li>
             {% endif %}
-            {% if is_hr_admin %}
-              <button type="button" class="btn btn-sm btn-outline-secondary act" data-action="{% url 'candidate_delete' c.id %}" data-title="Delete {{ c.full_name }}?" data-nofields="1" data-btn="btn-danger" data-label="Delete permanently" data-msg="This permanently deletes the candidate and all their interviews, notes and history. This cannot be undone.">Delete</button>
-            {% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+            <li><button type="button" class="dropdown-item text-danger" id="bulkDelete">Delete</button></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <form method="post" action="{% url 'candidate_bulk_delete' %}" id="bulkDeleteForm" class="d-none">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+      <div id="bulkDeleteIds"></div>
+    </form>
+    {% endif %}
+
+    <div class="table-responsive">
+      <table id="candidateTable" class="table table-hover align-middle w-100">
+        <thead>
+          <tr>
+            {% if is_hr_admin %}<th class="no-export" style="width:2rem">
+              <input type="checkbox" class="form-check-input" id="selectAll" title="Select all on this page">
+            </th>{% endif %}
+            <th>Candidate</th><th>Role</th><th>Exp.</th><th>Applied</th><th>Status</th><th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in candidates %}
+          <tr>
+            {% if is_hr_admin %}<td class="no-export">
+              <input type="checkbox" class="form-check-input row-select" value="{{ c.id }}"
+                     aria-label="Select {{ c.full_name }}">
+            </td>{% endif %}
+            <td class="repo-name">
+              <a href="{% url 'candidate_timeline' c.id %}">{{ c.full_name }}</a>
+              {% if c.reapply %}<span class="repo-pill-reapply">Reapply</span>{% endif %}
+              {% if c.called %}<i class="bi bi-telephone-fill repo-called-icon" title="Already called — Unable to connect / Call back logged"></i>{% endif %}
+              <div class="repo-meta">{{ c.email }} &middot; {{ c.candidate_code }}</div>
+            </td>
+            <td>{{ c.job.title|default:"-" }}</td>
+            <td>{{ c.total_experience_years|default:"-" }}</td>
+            <td>
+              {{ c.created_at|date:"d M Y" }}
+              <div class="repo-meta">{{ c.created_at|timesince }} ago</div>
+            </td>
+            <td>
+              <span class="{{ c.status|badge_class }}">{{ c.status_label }}</span>
+              {% if c.is_blacklisted and c.status != 'BLACKLISTED' %}<span class="badge-status badge-blacklisted ms-1">Blacklisted</span>{% endif %}
+            </td>
+            <td class="text-nowrap text-end">
+              <a href="{% url 'candidate_timeline' c.id %}" class="btn btn-sm btn-outline-app">View</a>
+              {% if tab == 'open' %}
+                <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url 'candidate_shortlist' c.id %}" data-title="Shortlist {{ c.full_name }}">Shortlist</button>
+              {% elif tab == 'shortlisted' %}
+                <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url 'candidate_round1' c.id %}" data-title="Move {{ c.full_name }} to Round 1">Move to Round 1</button>
+              {% elif tab == 'round1' %}
+                <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url 'candidate_interview_stage' c.id %}" data-title="Move {{ c.full_name }} to Interview">Move to Interview</button>
+              {% elif tab == 'interview' %}
+                <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url 'candidate_final_selection' c.id %}" data-title="Move {{ c.full_name }} to Final Selection">Final Selection</button>
+              {% elif tab == 'final_selection' %}
+                <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url 'candidate_hire' c.id %}" data-title="Hire {{ c.full_name }}?">Hire</button>
+              {% endif %}
+              {% if tab == 'screening_hold' %}
+                {# Off hold resumes the pipeline at the stage after the one they were held at. #}
+                <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url c.resume_action.url_name c.id %}" data-title="Move {{ c.full_name }} to {{ c.resume_action.stage }}" data-msg="Taking {{ c.full_name }} off hold — this moves them on to {{ c.resume_action.stage }}.">{{ c.resume_action.label }}</button>
+              {% elif tab == 'rejected' %}
+                <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url 'candidate_shortlist' c.id %}" data-title="Move {{ c.full_name }} to Shortlisted" data-msg="Decision changed? This moves the candidate into the Shortlisted pipeline.">Move to Shortlisted</button>
+              {% endif %}
+              {% if tab in 'open,shortlisted,round1,interview,final_selection' or is_hr_admin %}
+              <div class="dropdown d-inline-block">
+                <button class="btn btn-sm btn-outline-app kebab-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">&#8942;</button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                  {% if tab in 'open,shortlisted,round1,interview,final_selection' %}
+                  {# Hold is available at every stage - it is named after the stage it is taken at. #}
+                  <li><button type="button" class="dropdown-item act" data-action="{% url 'candidate_screening_hold' c.id %}" data-title="Put {{ c.full_name }} on Hold">Hold</button></li>
+                  <li><button type="button" class="dropdown-item text-danger act" data-action="{% url 'candidate_reject' c.id %}" data-title="Reject {{ c.full_name }}" data-require="1" data-btn="btn-outline-danger" data-label="Reject">Reject</button></li>
+                  <li><button type="button" class="dropdown-item act" data-action="{% url 'candidate_blacklist' c.id %}" data-title="Blacklist {{ c.full_name }}" data-require="1" data-btn="btn-dark" data-label="Blacklist">Blacklist</button></li>
+                  {% endif %}
+                  {% if is_hr_admin %}
+                    {% if tab in 'open,shortlisted,round1,interview,final_selection' %}<li><hr class="dropdown-divider"></li>{% endif %}
+                    <li><button type="button" class="dropdown-item text-danger act" data-action="{% url 'candidate_delete' c.id %}" data-title="Delete {{ c.full_name }}?" data-nofields="1" data-btn="btn-danger" data-label="Delete permanently" data-msg="This permanently deletes the candidate and all their interviews, notes and history. This cannot be undone.">Delete</button></li>
+                  {% endif %}
+                </ul>
+              </div>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
-</div>
+</form>
 
 {# Single reusable action modal: confirmation + remarks + done-by #}
 <div class="modal fade" id="actionModal" tabindex="-1">
@@ -192,6 +296,7 @@
     <form method="post" id="actionForm">
       {% csrf_token %}
       <input type="hidden" name="next" value="{{ request.get_full_path }}">
+      <div id="actionBulkIds"></div>
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title" id="actionModalTitle">Confirm action</h5>
@@ -224,22 +329,27 @@
 {% block extra_js %}
 <script>
 $(function () {
-  $('#candidateTable').DataTable({
-    order: [], dom: 'Bfrtip', pageLength: 25,
+  var table = $('#candidateTable').DataTable({
+    order: [], dom: 'rtip', pageLength: 25,
     // The tick-box column is neither sortable nor worth exporting.
     columnDefs: [{ targets: 'no-export', orderable: false, searchable: false }],
-    buttons: [{ extend: 'excelHtml5', exportOptions: { columns: ':not(.no-export)' } }]
+    language: { info: 'Showing _START_ to _END_ of _TOTAL_', infoEmpty: 'No candidates', zeroRecords: 'No candidates match this filter.' },
+    buttons: [{ extend: 'excelHtml5', text: '<i class="bi bi-file-earmark-excel"></i> Export to Excel',
+               className: 'btn btn-outline-app btn-sm', exportOptions: { columns: ':not(.no-export)' } }]
   });
+  // Move the auto-generated Export button into our own toolbar row instead of
+  // DataTables' default position, so it sits with the rest of the filters.
+  table.buttons().container().appendTo('#exportSlot');
 
   {% if is_hr_admin %}
-  // --- Multi-select delete -------------------------------------------------
+  // --- Multi-select bulk bar -------------------------------------------------
   function selectedIds() {
     return $('#candidateTable').find('.row-select:checked').map(function () { return this.value; }).get();
   }
   function refreshBulkBar() {
     var n = selectedIds().length;
     $('#bulkCount').text(n);
-    $('#bulkBar').toggleClass('d-none', n === 0);
+    $('#bulkBar').toggleClass('show', n > 0);
   }
   $('#candidateTable').on('change', '.row-select', refreshBulkBar);
   $('#selectAll').on('change', function () {
@@ -262,10 +372,28 @@ $(function () {
     });
     $('#bulkDeleteForm').trigger('submit');
   });
+
+  // Shortlist / Hold / Reject / Blacklist selected: reuse the same confirm
+  // modal as a single row, just posting to the bulk endpoint with every
+  // ticked id attached.
+  $('.bulk-act').on('click', function () {
+    var ids = selectedIds();
+    if (!ids.length) { return; }
+    var holder = $('#actionBulkIds').empty();
+    ids.forEach(function (id) {
+      $('<input>').attr({ type: 'hidden', name: 'ids', value: id }).appendTo(holder);
+    });
+    var btn = this;
+    btn.setAttribute('data-msg', ids.length + ' candidate(s) selected.');
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('actionModal')).show(btn);
+  });
   {% endif %}
 
   $('#actionModal').on('show.bs.modal', function (event) {
     var b = event.relatedTarget;
+    // A single-row action never carries bulk ids - clear any left over from
+    // the previous time the modal was used for a bulk action.
+    if (!b.classList.contains('bulk-act')) { $('#actionBulkIds').empty(); }
     $('#actionForm').attr('action', b.getAttribute('data-action'));
     $('#actionModalTitle').text(b.getAttribute('data-title') || 'Confirm action');
     $('#actionModalMsg').text(b.getAttribute('data-msg') || '');

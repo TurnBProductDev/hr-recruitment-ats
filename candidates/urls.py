@@ -19,6 +19,12 @@ urlpatterns = [
          name='candidate_bulk_delete'),
     path('hr/candidates/reject-selected/', views.CandidateBulkRejectView.as_view(),
          name='candidate_bulk_reject'),
+    path('hr/candidates/shortlist-selected/', views.CandidateBulkStatusActionView.as_view(
+        target_status=STATUS.SHORTLISTED), name='candidate_bulk_shortlist'),
+    path('hr/candidates/hold-selected/', views.CandidateBulkStatusActionView.as_view(
+        target_status=STATUS.SCREENING_HOLD), name='candidate_bulk_hold'),
+    path('hr/candidates/blacklist-selected/', views.CandidateBulkBlacklistView.as_view(),
+         name='candidate_bulk_blacklist'),
     path('hr/candidates/<int:pk>/', views.CandidateTimelineView.as_view(), name='candidate_timeline'),
     path('hr/candidates/<int:pk>/edit/', views.CandidateUpdateView.as_view(), name='candidate_edit'),
     path('hr/candidates/<int:pk>/change-job/', views.CandidateChangeJobView.as_view(), name='candidate_change_job'),
