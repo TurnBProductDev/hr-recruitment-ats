@@ -20,10 +20,6 @@ SHORTLISTED_GROUP = (STATUS.SHORTLISTED, STATUS.ROUND1, STATUS.INTERVIEW,
 REJECTED_GROUP = (STATUS.REJECTED, STATUS.BLACKLISTED)
 HIRED_GROUP = (STATUS.HIRED,)
 
-# Composition-bar segment colors, shared by the top summary panel and every
-# By Job / By Source row (dashboard Summary tab).
-BUCKET_COLORS = {'open': '#0e6f6b', 'shortlisted': '#4cbdb3', 'rejected': '#d9534f', 'hired': '#1d3f4a'}
-
 
 def _grouped_counts():
     """Count kwargs shared by the summary panel and the two breakdown tables."""
@@ -36,21 +32,9 @@ def _grouped_counts():
     )
 
 
-def _with_bucket_pct(row):
-    """Attach each bucket's share of the row's total, as whole percents, plus
-    a shortlist-rate figure. Used for both the composition bars and the
-    single-row summary strip."""
-    total = row['total'] or 1
-    for key in ('open', 'shortlisted', 'rejected', 'hired'):
-        row[f'{key}_pct'] = round(row[key] / total * 100)
-    row['shortlist_rate'] = round(row['shortlisted'] / total * 100) if row['total'] else 0
-    return row
-
-
 def _summary_counts_qs(qs):
-    """Total / Open / Shortlisted / Rejected / Hired for a candidate queryset (one query),
-    with each bucket's percent share of the total for the composition bar."""
-    return _with_bucket_pct(qs.aggregate(**_grouped_counts()))
+    """Total / Open / Shortlisted / Rejected / Hired for a candidate queryset (one query)."""
+    return qs.aggregate(**_grouped_counts())
 
 
 class HRDashboardView(GroupRequiredMixin, TemplateView):
@@ -77,12 +61,13 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
 
         # ---------- Summary ----------
         ctx['summary'] = _summary_counts_qs(base)
-        ctx['bucket_colors'] = BUCKET_COLORS
-        ctx['by_job'] = [_with_bucket_pct(dict(r)) for r in
-                         base.values('job__title').annotate(**_grouped_counts()).order_by('-total')]
-        ctx['by_source'] = [_with_bucket_pct(dict(r)) for r in
-                            base.exclude(source__isnull=True).exclude(source='')
-                            .values('source').annotate(**_grouped_counts()).order_by('-total')]
+        ctx['by_job'] = (base.values('job__title')
+                         .annotate(**_grouped_counts())
+                         .order_by('-total'))
+        ctx['by_source'] = (base.exclude(source__isnull=True).exclude(source='')
+                            .values('source')
+                            .annotate(**_grouped_counts())
+                            .order_by('-total'))
 
         # ---------- Overview: recruitment funnel (Power BI style). Counts come
         # from candidates.flows so a card and its drill-down list always match. ----------
@@ -185,11 +170,16 @@ class ReportsView(GroupRequiredMixin, TemplateView):
         total = base.count()
         rejected = base.filter(status=STATUS.REJECTED).count()
         ctx['rejection_ratio'] = round(rejected / total * 100, 1) if total else 0
+        ctx['total_applicants'] = total
+        ctx['rejected_count'] = rejected
 
         jobs_qs = Job.objects.filter(pk=job_id) if job_id else Job.objects.all()
         total_jobs = jobs_qs.count()
         jobs_with_hire = jobs_qs.filter(candidates__status=STATUS.HIRED).distinct().count()
         ctx['fill_rate'] = round(jobs_with_hire / total_jobs * 100, 1) if total_jobs else 0
+        ctx['jobs_with_hire'] = jobs_with_hire
+        ctx['total_jobs'] = total_jobs
+        ctx['fill_dots'] = [True] * jobs_with_hire + [False] * (total_jobs - jobs_with_hire)
 
         hire_hist = CandidateStatusHistory.objects.filter(new_status=STATUS.HIRED)
         if job_id:
@@ -215,5 +205,15 @@ class ReportsView(GroupRequiredMixin, TemplateView):
             data.append({**r,
                          'shortlist_pct': round(r['shortlisted'] / t * 100, 1) if t else 0,
                          'conversion_pct': round(r['hired'] / t * 100, 1) if t else 0})
-        ctx['source_effectiveness'] = data
+
+        # "Where applicants come from": one bar per source, scaled to the busiest source.
+        max_total = max((r['total'] for r in data), default=0) or 1
+        ctx['source_volume'] = [
+            {**r,
+             'bar_w': round(r['total'] / max_total * 100, 1),
+             'share_pct': round(r['total'] / total * 100, 1) if total else 0}
+            for r in data
+        ]
+        # Source effectiveness table: ranked by shortlist rate, not volume.
+        ctx['source_effectiveness'] = sorted(data, key=lambda r: r['shortlist_pct'], reverse=True)
         return ctx

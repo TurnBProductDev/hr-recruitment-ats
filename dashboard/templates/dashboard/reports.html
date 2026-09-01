@@ -1,5 +1,45 @@
 {% extends "hr_base.html" %}
 {% block title %}Reports{% endblock %}
+
+{% block extra_css %}
+<style>
+.rep-kpi { background: #fff; border: 1px solid #e2ebeb; border-radius: 12px; padding: 18px 22px; height: 100%; }
+.rep-kpi .lbl { font-size: .72rem; text-transform: uppercase; letter-spacing: .5px; color: #6b7a7a; font-weight: 600; }
+.rep-kpi .val-row { display: flex; align-items: baseline; gap: 8px; margin-top: 10px; }
+.rep-kpi .val { font-size: 1.9rem; font-weight: 700; color: #1f2a2a; }
+.rep-kpi .val.muted { color: #b0bcc0; }
+.rep-kpi .hint { font-size: .76rem; color: #8a9a9a; }
+.rep-kpi .note { font-size: .74rem; color: #8a9a9a; margin-top: 8px; }
+.rep-fill { display: flex; gap: 5px; margin-top: 12px; }
+.rep-fill .seg { flex: 1; height: 8px; border-radius: 2px; background: #e8ecec; }
+.rep-fill .seg.on { background: #0e6f6b; }
+.rep-bar-track { height: 8px; border-radius: 2px; overflow: hidden; background: #e8ecec; margin-top: 12px; }
+.rep-bar-track .fill { display: block; height: 100%; background: #d9534f; }
+
+.rep-panel { background: #fff; border: 1px solid #e2ebeb; border-radius: 12px; padding: 22px 24px 18px; height: 100%; }
+.rep-panel h5 { margin: 0; }
+
+.rep-vol-row { display: flex; align-items: center; gap: 14px; padding: 9px 0; }
+.rep-vol-row .name { flex: 0 0 110px; font-size: .85rem; font-weight: 500; color: #1f2a2a; }
+.rep-vol-row .track { flex: 1; height: 22px; background: #f2f4f4; border-radius: 3px; overflow: hidden; }
+.rep-vol-row .track .fill { display: block; height: 100%; background: #0e6f6b; }
+.rep-vol-row .count { flex: 0 0 52px; text-align: right; font-size: .9rem; font-weight: 600; color: #1f2a2a; }
+.rep-vol-row .share { flex: 0 0 56px; text-align: right; font-size: .74rem; color: #8a9a9a; }
+
+.rep-thead { display: flex; align-items: center; gap: 14px; padding: 10px 0 8px; border-bottom: 1px solid #e2ebeb; margin-top: 14px; font-size: .68rem; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: #6b7a7a; }
+.rep-row { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-bottom: 1px solid #eef2f2; }
+.rep-row:last-child { border-bottom: none; }
+.rep-row .name { flex: 0 0 92px; font-size: .85rem; font-weight: 500; color: #1f2a2a; }
+.rep-row .num { flex: 0 0 52px; text-align: right; font-size: .85rem; font-weight: 500; color: #1f2a2a; }
+.rep-row .rate { flex: 1; display: flex; align-items: center; gap: 10px; }
+.rep-row .rate .track { flex: 1; height: 18px; background: #f2f4f4; border-radius: 3px; overflow: hidden; }
+.rep-row .rate .track .fill { display: block; height: 100%; background: #4cbdb3; }
+.rep-row .rate .pct { flex: 0 0 52px; text-align: right; font-size: .78rem; font-weight: 600; color: #0e6f6b; }
+.rep-row .hired { flex: 0 0 46px; text-align: right; font-size: .85rem; color: #1f2a2a; }
+.rep-row .conv { flex: 0 0 62px; text-align: right; font-size: .8rem; color: #8a9a9a; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
   <h3 class="mb-0">Reports</h3>
@@ -28,47 +68,73 @@
 
 <div class="row g-3 mb-4">
   <div class="col-md-4">
-    <div class="card app-card stat-card p-3 text-center h-100">
-      <div class="text-muted small">Avg. Time to Hire</div>
-      <h2 class="mb-0">{% if avg_time_to_hire_days is not None %}{{ avg_time_to_hire_days }}d{% else %}-{% endif %}</h2>
+    <div class="rep-kpi">
+      <div class="lbl">Avg. Time to Hire</div>
+      {% if avg_time_to_hire_days is not None %}
+        <div class="val-row"><span class="val">{{ avg_time_to_hire_days }}d</span></div>
+      {% else %}
+        <div class="val-row"><span class="val muted">&mdash;</span><span class="hint">no completed hires</span></div>
+      {% endif %}
     </div>
   </div>
   <div class="col-md-4">
-    <div class="card app-card stat-card p-3 text-center h-100">
-      <div class="text-muted small">Vacancy Fill Rate</div>
-      <h2 class="mb-0">{{ fill_rate }}%</h2>
+    <div class="rep-kpi">
+      <div class="lbl">Vacancy Fill Rate</div>
+      <div class="val-row"><span class="val">{{ fill_rate }}%</span><span class="hint">{{ jobs_with_hire }} of {{ total_jobs }} filled</span></div>
+      <div class="rep-fill">
+        {% for filled in fill_dots %}<div class="seg {% if filled %}on{% endif %}"></div>{% endfor %}
+      </div>
     </div>
   </div>
   <div class="col-md-4">
-    <div class="card app-card stat-card p-3 text-center h-100">
-      <div class="text-muted small">Rejection Ratio</div>
-      <h2 class="mb-0">{{ rejection_ratio }}%</h2>
+    <div class="rep-kpi">
+      <div class="lbl">Rejection Ratio</div>
+      <div class="val-row"><span class="val">{{ rejection_ratio }}%</span><span class="hint">{{ rejected_count }} of {{ total_applicants }}</span></div>
+      <div class="rep-bar-track"><span class="fill" style="width:{{ rejection_ratio }}%"></span></div>
     </div>
   </div>
 </div>
 
-<div class="card app-card p-4">
-  <h5 class="mb-3">Source Effectiveness</h5>
-  <div class="table-responsive">
-    <table class="table table-hover align-middle w-100">
-      <thead><tr>
-        <th>Source</th><th>Total Applicants</th><th>Shortlisted</th><th>Shortlisting %</th><th>Hired</th><th>Conversion %</th>
-      </tr></thead>
-      <tbody>
-        {% for row in source_effectiveness %}
-        <tr>
-          <td>{{ row.source }}</td>
-          <td>{{ row.total }}</td>
-          <td>{{ row.shortlisted }}</td>
-          <td>{{ row.shortlist_pct }}%</td>
-          <td>{{ row.hired }}</td>
-          <td>{{ row.conversion_pct }}%</td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="6" class="text-muted text-center">No data yet.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+<div class="row g-3">
+  <div class="col-lg-5">
+    <div class="rep-panel">
+      <h5>Where applicants come from</h5>
+      {% for r in source_volume %}
+      <div class="rep-vol-row">
+        <span class="name">{{ r.source }}</span>
+        <span class="track"><span class="fill" style="width:{{ r.bar_w }}%"></span></span>
+        <span class="count">{{ r.total }}</span>
+        <span class="share">{{ r.share_pct }}%</span>
+      </div>
+      {% empty %}<div class="text-muted text-center py-3">No data.</div>{% endfor %}
+    </div>
+  </div>
+  <div class="col-lg-7">
+    <div class="rep-panel">
+      <div class="d-flex justify-content-between align-items-baseline">
+        <h5>Source effectiveness</h5>
+        <span class="text-muted small">Ranked by shortlist rate</span>
+      </div>
+      <div class="rep-thead">
+        <span style="flex:0 0 92px">Source</span>
+        <span style="flex:0 0 52px;text-align:right">Total</span>
+        <span style="flex:1">Shortlist rate</span>
+        <span style="flex:0 0 46px;text-align:right">Hired</span>
+        <span style="flex:0 0 62px;text-align:right">Conv.</span>
+      </div>
+      {% for r in source_effectiveness %}
+      <div class="rep-row">
+        <span class="name">{{ r.source }}</span>
+        <span class="num">{{ r.total }}</span>
+        <span class="rate">
+          <span class="track"><span class="fill" style="width:{{ r.shortlist_pct }}%"></span></span>
+          <span class="pct">{{ r.shortlist_pct }}%</span>
+        </span>
+        <span class="hired">{{ r.hired }}</span>
+        <span class="conv">{{ r.conversion_pct }}%</span>
+      </div>
+      {% empty %}<div class="text-muted text-center py-3">No data yet.</div>{% endfor %}
+    </div>
   </div>
 </div>
 {% endblock %}
