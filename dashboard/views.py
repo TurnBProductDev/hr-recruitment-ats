@@ -82,14 +82,22 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
         unfit = fc('unfit')
         s_after_call, unable = fc('shortlisted_after_call'), fc('unable_to_connect')
         yet_call, rej_call = fc('call_pending'), fc('rejected_after_call')
-        to_recall, call_dp = fc('to_recall'), fc('call_decision_pending')
+        call_dp = fc('call_decision_pending')
         r1_dp, r2_dp = fc('r1_decision_pending'), fc('r2_decision_pending')
         r1_cleared, r1_sched, r1_ns, r1_yet, rej_r1 = (
             fc('r1_cleared'), fc('r1_scheduled'), fc('r1_no_show'), fc('r1_yet'), fc('rejected_after_round1'))
         r2_cleared, r2_sched, r2_ns, r2_yet, rej_r2 = (
             fc('r2_cleared'), fc('r2_scheduled'), fc('r2_no_show'), fc('r2_yet'), fc('rejected_after_round2'))
         on_hold, hired, rej_final = fc('on_hold'), fc('hired'), fc('rejected_after_final')
-        screening_hold = fc('screening_hold')
+        # On-Hold-status carve-outs, one per stage, keyed to the status the
+        # candidate was held from - so nobody who gets put on Hold disappears
+        # from the funnel, and nobody is double-counted against both their
+        # Hold chip and the "cleared" stage they'd already passed.
+        hold_before_shortlist = fc('hold_before_shortlist')
+        hold_before_round1 = fc('hold_before_round1')
+        hold_before_round2 = fc('hold_before_round2')
+        hold_before_final = fc('hold_before_final')
+        hold_after_final = fc('hold_after_final')
 
         ctx['funnel_top'] = {'total': base.count(), 'requirement': requirement, 'unfit': unfit}
         # Corner "total" = everyone who got a decision at that stage (cleared + rejected-there)
@@ -97,32 +105,38 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
             {'name': 'Screened & Shortlisted',
              'pending': ('Screening Pending', fc('open'), 'open'),
              'cleared': ('Screened & Shortlisted', shortlisted, shortlisted + unfit, 'ever_shortlisted'),
-             # Hold can be taken at any stage, so this counts every held
-             # candidate, not only the ones held during screening.
-             'drops': [('Hold', screening_hold, 'screening_hold')]},
+             # Hold here is held straight out of screening only - candidates held
+             # after clearing shortlist/round1/etc are already inside 'shortlisted'
+             # above (ever_shortlisted is history-based), so counting them here
+             # too would double-count against Screened & Shortlisted.
+             'drops': [('Hold', hold_before_shortlist, 'hold_before_shortlist'),
+                       ('Rejected', unfit, 'unfit')]},
             {'name': 'Shortlisted After Call',
              'pending': ('Yet to Call', yet_call, 'call_pending'),
              'cleared': ('Shortlisted After Call', s_after_call, s_after_call + rej_call, 'shortlisted_after_call'),
-             # To Re-call sits beside Yet to Call: both are still-to-reach candidates,
-             # kept separate so Yet to Call stays "never attempted". Rejected-after-call
-             # has no card of its own — it is already inside the "total" corner above.
-             'pending2': ('To Re-call', to_recall, 'to_recall'),
              'drops': [('Decision Pending', call_dp, 'call_decision_pending'),
-                       ('Unable to Connect', unable, 'unable_to_connect')]},
+                       ('Unable to Connect', unable, 'unable_to_connect'),
+                       ('Hold', hold_before_round1, 'hold_before_round1'),
+                       ('Rejected', rej_call, 'rejected_after_call')]},
             {'name': 'Round 1 Cleared',
              'pending': ('Yet to Schedule', r1_yet, 'r1_yet'),
              'cleared': ('Round 1 Cleared', r1_cleared, r1_cleared + rej_r1, 'r1_cleared'),
              'drops': [('Scheduled', r1_sched, 'r1_scheduled'), ('Not Turned Up', r1_ns, 'r1_no_show'),
-                       ('Decision Pending', r1_dp, 'r1_decision_pending')]},
+                       ('Decision Pending', r1_dp, 'r1_decision_pending'),
+                       ('Hold', hold_before_round2, 'hold_before_round2'),
+                       ('Rejected', rej_r1, 'rejected_after_round1')]},
             {'name': 'Round 2 Cleared',
              'pending': ('Yet to Schedule', r2_yet, 'r2_yet'),
              'cleared': ('Round 2 Cleared', r2_cleared, r2_cleared + rej_r2, 'r2_cleared'),
              'drops': [('Scheduled', r2_sched, 'r2_scheduled'), ('Not Turned Up', r2_ns, 'r2_no_show'),
-                       ('Decision Pending', r2_dp, 'r2_decision_pending')]},
+                       ('Decision Pending', r2_dp, 'r2_decision_pending'),
+                       ('Hold', hold_before_final, 'hold_before_final'),
+                       ('Rejected', rej_r2, 'rejected_after_round2')]},
             {'name': 'Hired',
              'pending': ('On Hold', on_hold, 'on_hold'),
              'cleared': ('Hired', hired, hired + rej_r2 + rej_final, 'hired'),
-             'drops': []},
+             'drops': [('Hold', hold_after_final, 'hold_after_final'),
+                       ('Rejected', rej_final, 'rejected_after_final')]},
         ]
 
         # Collapsed-accordion view of the same numbers: one bar per stage

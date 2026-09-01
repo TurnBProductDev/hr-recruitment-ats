@@ -95,16 +95,21 @@ FLOW_TITLES = {
     'all': 'All Candidates', 'open': 'Screening Pending', 'unfit': 'Unfit Resumes',
     'ever_shortlisted': 'Screened & Shortlisted', 'call_pending': 'Yet to Call',
     'shortlisted_after_call': 'Shortlisted After Call', 'unable_to_connect': 'Unable to Connect',
-    'to_recall': 'To Re-call — Attempted, Not Reached',
     'call_decision_pending': 'Call — Decision Pending',
+    'rejected_after_call': 'Rejected After Call',
     'r1_decision_pending': 'Round 1 — Decision Pending',
     'r2_decision_pending': 'Round 2 — Decision Pending',
     'r1_yet': 'Round 1 — Yet to Schedule', 'r1_cleared': 'Round 1 Cleared',
     'r1_scheduled': 'Round 1 Scheduled', 'r1_no_show': 'Round 1 — Not Turned Up',
+    'rejected_after_round1': 'Rejected After Round 1',
     'r2_yet': 'Round 2 — Yet to Schedule', 'r2_cleared': 'Round 2 Cleared',
     'r2_scheduled': 'Round 2 Scheduled', 'r2_no_show': 'Round 2 — Not Turned Up',
+    'rejected_after_round2': 'Rejected After Round 2',
     'on_hold': 'On Hold', 'hired': 'Hired', 'rejected': 'Rejected', 'blacklisted': 'Blacklisted',
-    'screening_hold': 'Hold',
+    'rejected_after_final': 'Rejected After Final Round',
+    'screening_hold': 'Hold', 'hold_before_shortlist': 'Hold (Before Shortlist)',
+    'hold_before_round1': 'Hold (Before Round 1)', 'hold_before_round2': 'Hold (Before Round 2)',
+    'hold_before_final': 'Hold (Before Final Decision)', 'hold_after_final': 'Hold (After Final Decision)',
 }
 
 
