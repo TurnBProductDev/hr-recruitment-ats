@@ -1,4 +1,4 @@
-# HR Recruitment Portal (ATS)
+# HireB
 
 Django + Bootstrap 5 Applicant Tracking System.
 
