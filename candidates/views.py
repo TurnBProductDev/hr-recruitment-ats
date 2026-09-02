@@ -186,6 +186,37 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
         from .flows import flow_filter
         return flow_filter(qs, flow)
 
+    def _filtered_queryset(self):
+        """Candidates matching every filter that applies across tabs (vacancy,
+        open-vacancies-only, source, applied date range, search) but not the
+        tab/status itself. Shared by get_queryset() and the tab-pill counts,
+        so switching a filter updates both the list and the counts together."""
+        qs = Candidate.objects.all()
+
+        job_id = self.request.GET.get('job')
+        if job_id:
+            qs = qs.filter(job_id=job_id)
+
+        if self.request.GET.get('scope') == 'open':
+            qs = qs.filter(job__status=Job.Status.OPEN, job__is_archived=False)
+
+        source = self.request.GET.get('source')
+        if source:
+            qs = qs.filter(source=source)
+
+        date_from = self.request.GET.get('date_from')
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+        date_to = self.request.GET.get('date_to')
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
+
+        q = self.request.GET.get('q')
+        if q:
+            qs = qs.filter(Q(full_name__icontains=q) | Q(email__icontains=q))
+
+        return qs
+
     def get_queryset(self):
         last_action = (CandidateStatusHistory.objects
                        .filter(candidate=OuterRef('pk')).order_by('-changed_at', '-id')
@@ -200,7 +231,7 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
         called = CommunicationLog.objects.filter(
             candidate=OuterRef('pk'), channel=CommunicationLog.Channel.PHONE,
             outcome__in=[CommunicationLog.Outcome.UNABLE, CommunicationLog.Outcome.CALLBACK])
-        qs = (Candidate.objects.select_related('job')
+        qs = (self._filtered_queryset().select_related('job')
               .annotate(last_action_at=Subquery(last_action),
                         interview_at=Subquery(next_interview),
                         reapply=Exists(dup),
@@ -216,17 +247,6 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
             if status is not None:
                 qs = qs.filter(status=status)
 
-        job_id = self.request.GET.get('job')
-        if job_id:
-            qs = qs.filter(job_id=job_id)
-
-        if self.request.GET.get('scope') == 'open':
-            qs = qs.filter(job__status=Job.Status.OPEN, job__is_archived=False)
-
-        source = self.request.GET.get('source')
-        if source:
-            qs = qs.filter(source=source)
-
         # Status filter. On the Hold tab every row is the same stored status, so
         # what distinguishes them - and what the dropdown offers - is the stage
         # the hold was taken at ("Round 1 Hold").
@@ -236,17 +256,6 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
                 qs = qs.filter(hold_from_status=status_filter)
             else:
                 qs = qs.filter(status=status_filter)
-
-        date_from = self.request.GET.get('date_from')
-        if date_from:
-            qs = qs.filter(created_at__date__gte=date_from)
-        date_to = self.request.GET.get('date_to')
-        if date_to:
-            qs = qs.filter(created_at__date__lte=date_to)
-
-        q = self.request.GET.get('q')
-        if q:
-            qs = qs.filter(Q(full_name__icontains=q) | Q(email__icontains=q))
 
         # Tab-specific switches: hide reapplicants (Open list) / hide already-called (Shortlisted)
         if self.request.GET.get('hide_reapply'):
@@ -263,11 +272,11 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
         ctx['flow'] = self.request.GET.get('flow', '')
         ctx['flow_title'] = FLOW_TITLES.get(ctx['flow'])
         ctx['tabs'] = REPOSITORY_TABS
-        # Counts for the tab pills - total per current status, independent of
-        # whatever tab/search/date filters are active, so the pills read as a
-        # stable map of the whole pipeline (not "matches in this view").
+        # Counts for the tab pills - per status, under the vacancy/source/date/search
+        # filters currently applied (but not the tab or its own status/hide switches,
+        # so every pill stays comparable to the others).
         ctx['tab_counts'] = {row['status']: row['n'] for row in
-                            Candidate.objects.values('status').annotate(n=Count('id'))}
+                            self._filtered_queryset().values('status').annotate(n=Count('id'))}
         ctx['total_candidates'] = sum(ctx['tab_counts'].values())
         ctx['awaiting_count'] = ctx['tab_counts'].get(STATUS.OPEN, 0)
         scope = self.request.GET.get('scope', '')
