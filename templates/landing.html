@@ -6,55 +6,205 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Applicant Tracking System</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link href="{% static 'css/theme.css' %}?v=2" rel="stylesheet">
 <style>
-  body { background: linear-gradient(160deg, #f0f7f7 0%, #f8f9fa 60%); min-height: 100vh; }
-  .landing-wrap { max-width: 960px; margin: 0 auto; padding: 4rem 1rem; }
-  .login-card {
-    display: block; text-decoration: none; color: inherit;
-    background: #fff; border: 1px solid var(--border-color); border-radius: 14px;
-    padding: 2rem 1.25rem; text-align: center; height: 100%;
-    transition: box-shadow .15s ease, transform .15s ease, border-color .15s ease;
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: 'Poppins', system-ui, sans-serif;
+    background: #fff;
   }
-  .login-card:hover {
-    box-shadow: 0 10px 26px rgba(0,140,140,0.16); transform: translateY(-4px);
-    border-color: var(--primary-green); color: inherit;
+  .login-shell {
+    display: flex;
+    min-height: 100vh;
   }
-  .login-card .bi { font-size: 2.4rem; color: var(--primary-green); }
-  .login-card h5 { margin: .8rem 0 .3rem; font-weight: 600; }
-  .login-card p { color: #7a8686; font-size: .85rem; margin: 0; }
+  .login-brand {
+    width: 42%;
+    min-width: 320px;
+    background: var(--dark-green, #006666);
+    color: #fff;
+    padding: 44px 40px;
+    display: flex;
+    flex-direction: column;
+  }
+  .login-brand-mark {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+  }
+  .login-brand-mark .badge-mark {
+    width: 34px;
+    height: 34px;
+    border-radius: 7px;
+    background: rgba(255,255,255,.18);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 12.5px;
+    letter-spacing: .02em;
+  }
+  .login-brand-mark .brand-name {
+    font-weight: 600;
+    font-size: 15px;
+    line-height: 1.25;
+  }
+  .login-brand-tagline {
+    margin-top: auto;
+  }
+  .login-brand-tagline h1 {
+    font-weight: 600;
+    font-size: 30px;
+    line-height: 1.25;
+    margin: 0;
+  }
+  .login-brand-tagline p {
+    font-weight: 400;
+    font-size: 13.5px;
+    line-height: 1.8;
+    color: rgba(255,255,255,.75);
+    margin: 14px 0 0;
+  }
+  .login-panel {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 44px 32px;
+  }
+  .login-form-wrap {
+    width: 100%;
+    max-width: 360px;
+  }
+  .login-form-wrap h2 {
+    font-weight: 700;
+    font-size: 25px;
+    color: #1a2e35;
+    margin: 0;
+  }
+  .login-form-wrap .subtitle {
+    font-size: 13px;
+    color: #7a8a90;
+    margin: 8px 0 0;
+  }
+  .role-choices {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 26px;
+  }
+  .role-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 18px;
+    border-radius: 10px;
+    text-decoration: none;
+    color: inherit;
+    transition: border-color .15s, box-shadow .15s, background .15s;
+  }
+  .role-card.is-primary {
+    border: 1.5px solid var(--primary-green, #008C8C);
+    background: #f4faf9;
+    box-shadow: 0 0 0 3px rgba(0, 140, 140, .1);
+  }
+  .role-card.is-secondary {
+    border: 1px solid #e0e7e8;
+  }
+  .role-card.is-secondary:hover {
+    border-color: var(--primary-green, #008C8C);
+    background: #f9fcfc;
+  }
+  .role-card .role-icon {
+    flex: none;
+    width: 38px;
+    height: 38px;
+    border-radius: 9px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .role-card.is-primary .role-icon {
+    background: var(--primary-green, #008C8C);
+    color: #fff;
+  }
+  .role-card.is-secondary .role-icon {
+    background: #eef3f3;
+    color: #4a5f66;
+    font-size: 12px;
+  }
+  .role-card .role-body {
+    flex: 1;
+    min-width: 0;
+  }
+  .role-card .role-title {
+    font-weight: 600;
+    font-size: 15px;
+    color: #1a2e35;
+  }
+  .role-card .role-desc {
+    font-weight: 400;
+    font-size: 12px;
+    line-height: 1.6;
+    color: #7a8a90;
+    margin-top: 2px;
+  }
+  .role-card .role-arrow {
+    flex: none;
+    font-weight: 500;
+    font-size: 16px;
+  }
+  .role-card.is-primary .role-arrow { color: var(--primary-green, #008C8C); }
+  .role-card.is-secondary .role-arrow { color: #b0bcc0; }
+
+  @media (max-width: 860px) {
+    .login-shell { flex-direction: column; }
+    .login-brand { width: 100%; min-width: 0; padding: 32px 28px; }
+    .login-brand-tagline { margin-top: 28px; }
+    .login-panel { padding: 32px 24px; }
+  }
 </style>
 </head>
 <body>
-<div class="landing-wrap">
-  <div class="text-center mb-5">
-    <h1 style="color: var(--dark-green); font-weight: 700;">Applicant Tracking System</h1>
-    <p class="text-muted">Choose how you'd like to sign in</p>
+<div class="login-shell">
+  <div class="login-brand">
+    <div class="login-brand-mark">
+      <span class="badge-mark">ATS</span>
+      <span class="brand-name">Applicant Tracking<br>System</span>
+    </div>
+    <div class="login-brand-tagline">
+      <h1>Your own HR partner.</h1>
+      <p>Screening to final offer &mdash; your recruitment journey, made easier.</p>
+    </div>
   </div>
-  <div class="row g-4 justify-content-center">
-    <div class="col-md-4">
-      <a href="{% url 'vacancy_list' %}" class="login-card">
-        <i class="bi bi-person-badge"></i>
-        <h5>Candidate Login</h5>
-        <p>Browse open positions and apply for jobs.</p>
-      </a>
-    </div>
-    <div class="col-md-4">
-      <a href="{% url 'login' %}?next={% url 'hr_dashboard' %}" class="login-card">
-        <i class="bi bi-people"></i>
-        <h5>HR Login</h5>
-        <p>Manage candidates, interviews and the pipeline.</p>
-      </a>
-    </div>
-    <div class="col-md-4">
-      <a href="/admin/" class="login-card">
-        <i class="bi bi-gear-wide-connected"></i>
-        <h5>Admin Login</h5>
-        <p>System administration and configuration.</p>
-      </a>
+
+  <div class="login-panel">
+    <div class="login-form-wrap">
+      <h2>Sign in</h2>
+      <p class="subtitle">Choose your account type.</p>
+
+      <div class="role-choices">
+        <a href="{% url 'login' %}" class="role-card is-primary">
+          <span class="role-icon">HR</span>
+          <div class="role-body">
+            <div class="role-title">HR Login</div>
+            <div class="role-desc">Candidates, interviews and the pipeline</div>
+          </div>
+          <span class="role-arrow">&rarr;</span>
+        </a>
+        <a href="/admin/login/" class="role-card is-secondary">
+          <span class="role-icon">ADM</span>
+          <div class="role-body">
+            <div class="role-title">Admin Login</div>
+            <div class="role-desc">System administration and configuration</div>
+          </div>
+          <span class="role-arrow">&rarr;</span>
+        </a>
+      </div>
     </div>
   </div>
 </div>
