@@ -1,7 +1,7 @@
 {% extends "admin/base.html" %}
 {% load static %}
 
-{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('Applicant Tracking System') }}{% endblock %}
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('HireB') }}{% endblock %}
 
 {% block extrastyle %}
 {{ block.super }}
@@ -106,8 +106,8 @@
 
 {% block branding %}
 <a href="{% url 'admin:index' %}" class="ats-brand">
-  <span class="ats-brand-mark">ATS</span>
-  <span class="ats-brand-name">Applicant Tracking System</span>
+  <span class="ats-brand-mark">H</span>
+  <span class="ats-brand-name">HireB</span>
   <span class="ats-role-pill">ADMIN</span>
 </a>
 {% endblock %}

@@ -10,12 +10,40 @@
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
 <link href="{% static 'css/theme.css' %}?v=2" rel="stylesheet">
+<style>
+  .hireb-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 11px 6px 13px;
+    border-radius: 8px;
+    background: var(--dark-green, #006666);
+    text-decoration: none;
+  }
+  .hireb-brand-hire {
+    font: 700 15px/1 'Poppins', sans-serif;
+    color: #fff;
+  }
+  .hireb-brand-b {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 5px;
+    background: var(--primary-green, #008C8C);
+    font: 700 12px/1 'Poppins', sans-serif;
+    color: #fff;
+  }
+</style>
 {% block extra_css %}{% endblock %}
 </head>
 <body>
 <nav class="navbar navbar-expand-lg app-navbar">
   <div class="container-fluid">
-    <a class="navbar-brand" href="{% url 'vacancy_list' %}">Applicant Tracking System</a>
+    <a class="navbar-brand hireb-brand" href="{% url 'vacancy_list' %}">
+      <span class="hireb-brand-hire">Hire</span><span class="hireb-brand-b">B</span>
+    </a>
     <div class="ms-auto d-flex align-items-center gap-2">
       <span class="navbar-text">Careers</span>
       {% if user.is_authenticated %}

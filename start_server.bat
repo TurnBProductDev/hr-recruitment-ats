@@ -1,6 +1,6 @@
 @echo off
 REM ================================================================
-REM  Applicant Tracking System - local launcher
+REM  HireB - local launcher
 REM  Double-click this file to start the website on your PC.
 REM ================================================================
 cd /d "%~dp0"
@@ -23,9 +23,9 @@ REM --- Apply any pending database changes ---
 
 echo.
 echo ================================================================
-echo   Applicant Tracking System is starting...
+echo   HireB is starting...
 echo   Open in your browser:  http://localhost:8000/
-echo   (Choose Candidate / HR / Admin login)
+echo   (Choose HR / Admin login)
 echo.
 echo   Leave this window OPEN while you use the site.
 echo   Close this window (or press Ctrl+C) to stop the server.
