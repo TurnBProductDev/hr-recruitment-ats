@@ -19,14 +19,14 @@
 .app-nav-brand { display: flex; align-items: center; gap: 10px; text-decoration: none; white-space: nowrap; }
 .app-nav-mark { width: 30px; height: 30px; border-radius: 7px; background: rgba(255,255,255,.18); display: inline-flex; align-items: center; justify-content: center; font: 700 12px/1 'Poppins', sans-serif; color: #fff; letter-spacing: .02em; }
 .app-nav-title { font: 700 16.5px/1 'Poppins', sans-serif; color: #fff; }
-.app-nav-collapse { flex: 1; }
+.app-nav-collapse { flex: 0 1 auto; min-width: 0; }
 .app-nav-links { display: flex; align-items: center; gap: 3px; flex-wrap: wrap; }
 .app-nav-link { display: inline-flex; align-items: center; gap: 5px; padding: 7px 13px; border-radius: 6px; font: 500 13px/1 'Poppins', sans-serif; color: rgba(255,255,255,.82); text-decoration: none; white-space: nowrap; border: none; background: none; }
 .app-nav-link:hover { color: #fff; background: rgba(255,255,255,.1); }
 .app-nav-link.active { background: #fff; color: var(--primary-green); font-weight: 600; }
 .app-nav-drop .dropdown-toggle::after { margin-left: 4px; vertical-align: 1px; }
 .app-nav-drop .dropdown-menu, .app-nav-account .dropdown-menu { border-radius: 8px; border: 1px solid var(--border-color); box-shadow: 0 6px 18px rgba(0,0,0,.12); margin-top: 6px; font-size: 13px; }
-.app-nav-right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.app-nav-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; margin-left: auto; }
 .app-nav-account-toggle { display: flex; align-items: center; gap: 9px; text-decoration: none; color: #fff; padding: 4px 8px 4px 4px; border-radius: 8px; }
 .app-nav-account-toggle:hover { background: rgba(255,255,255,.1); }
 .app-nav-account-toggle::after { margin-left: 2px; }
