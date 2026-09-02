@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Login - Applicant Tracking System</title>
+<title>Admin Login - Applicant Tracking System</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link href="{% static 'css/theme.css' %}?v=2" rel="stylesheet">
@@ -23,7 +23,7 @@
   .login-brand {
     width: 42%;
     min-width: 320px;
-    background: var(--dark-green, #006666);
+    background: #0e3f3d;
     color: #fff;
     padding: 44px 40px;
     display: flex;
@@ -51,6 +51,15 @@
     font-size: 15px;
     line-height: 1.25;
   }
+  .login-brand-mark .role-pill {
+    padding: 4px 9px;
+    border-radius: 5px;
+    background: rgba(255,255,255,.16);
+    font-weight: 600;
+    font-size: 10px;
+    letter-spacing: .07em;
+    color: #fff;
+  }
   .login-brand-tagline {
     margin-top: auto;
   }
@@ -64,8 +73,16 @@
     font-weight: 400;
     font-size: 13.5px;
     line-height: 1.8;
-    color: rgba(255,255,255,.75);
+    color: rgba(255,255,255,.66);
     margin: 14px 0 0;
+  }
+  .login-brand-footer {
+    margin-top: auto;
+    padding-top: 34px;
+    font-weight: 400;
+    font-size: 11.5px;
+    line-height: 1.7;
+    color: rgba(255,255,255,.45);
   }
   .login-panel {
     flex: 1;
@@ -123,8 +140,8 @@
     transition: border-color .15s, box-shadow .15s;
   }
   .login-input:focus {
-    border-color: var(--primary-green, #008C8C);
-    box-shadow: 0 0 0 3px rgba(0, 140, 140, .12);
+    border-color: #0e6f6b;
+    box-shadow: 0 0 0 3px rgba(14, 111, 107, .12);
   }
   .login-submit {
     width: 100%;
@@ -150,21 +167,24 @@
     color: #a13a3a;
     font-size: 13px;
   }
-  .login-back {
+  .login-switch {
     margin-top: 20px;
     text-align: center;
-  }
-  .login-back a {
     font-size: 13px;
     color: #8a969b;
+  }
+  .login-switch a {
+    font-weight: 500;
+    color: var(--primary-green, #008C8C);
     text-decoration: none;
   }
-  .login-back a:hover { color: var(--primary-green, #008C8C); }
+  .login-switch a:hover { text-decoration: underline; }
 
   @media (max-width: 860px) {
     .login-shell { flex-direction: column; }
     .login-brand { width: 100%; min-width: 0; padding: 32px 28px; }
     .login-brand-tagline { margin-top: 28px; }
+    .login-brand-footer { padding-top: 20px; }
     .login-panel { padding: 32px 24px; }
   }
 </style>
@@ -175,23 +195,28 @@
     <div class="login-brand-mark">
       <span class="badge-mark">ATS</span>
       <span class="brand-name">Applicant Tracking<br>System</span>
+      <span class="role-pill">ADMIN</span>
     </div>
     <div class="login-brand-tagline">
-      <h1>Your own HR partner.</h1>
-      <p>Screening to final offer &mdash; your recruitment journey, made easier.</p>
+      <h1>System administration.</h1>
+      <p>Users, roles and configuration for the whole hiring system.</p>
     </div>
+    <div class="login-brand-footer">Restricted access. Sessions are logged.</div>
   </div>
 
   <div class="login-panel">
     <div class="login-form-wrap">
-      <h2>HR sign in</h2>
-      <p class="subtitle">Use your recruiter account.</p>
+      <h2>Admin sign in</h2>
+      <p class="subtitle">Use your administrator account.</p>
 
       {% if form.errors %}
-        <div class="login-error">Invalid username or password.</div>
+        <div class="login-error">Please enter a correct username and password.</div>
+      {% endif %}
+      {% if user.is_authenticated %}
+        <div class="login-error">You are authenticated as {{ username }}, but are not authorized to access this page.</div>
       {% endif %}
 
-      <form method="post">
+      <form action="{{ app_path }}" method="post">
         {% csrf_token %}
         <div class="login-field">
           <label for="id_username">Username</label>
@@ -204,12 +229,10 @@
           <input type="password" id="id_password" name="password" class="login-input" required>
         </div>
         <input type="hidden" name="next" value="{{ next }}">
-        <button type="submit" class="login-submit">Login</button>
+        <button type="submit" class="login-submit">Log in</button>
       </form>
 
-      <div class="login-back">
-        <a href="{% url 'landing' %}">&larr; Back to home</a>
-      </div>
+      <div class="login-switch">Not an admin? <a href="{% url 'login' %}">HR sign in</a></div>
     </div>
   </div>
 </div>

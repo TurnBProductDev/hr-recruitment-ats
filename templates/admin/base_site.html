@@ -1,0 +1,130 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('Applicant Tracking System') }}{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="{% static 'css/theme.css' %}?v=2" rel="stylesheet">
+<style>
+  :root {
+    --ats-teal: var(--primary-green, #008C8C);
+    --ats-teal-dark: var(--dark-green, #006666);
+  }
+  body { font-family: 'Poppins', system-ui, sans-serif; }
+
+  #header {
+    background: var(--ats-teal-dark);
+    color: #fff;
+    padding: 0 24px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    box-shadow: none;
+  }
+  #branding { padding: 0; }
+  #branding h1, #branding h1 a:link, #branding h1 a:visited { color: #fff; }
+  #branding .ats-brand {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    text-decoration: none;
+    color: #fff;
+  }
+  #branding .ats-brand-mark {
+    width: 32px;
+    height: 32px;
+    border-radius: 7px;
+    background: rgba(255,255,255,.18);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: .02em;
+    flex: none;
+  }
+  #branding .ats-brand-name {
+    font-weight: 700;
+    font-size: 16px;
+  }
+  #branding .ats-role-pill {
+    padding: 4px 9px;
+    border-radius: 5px;
+    background: rgba(255,255,255,.16);
+    font-weight: 600;
+    font-size: 10px;
+    letter-spacing: .07em;
+    color: #fff;
+  }
+  #user-tools {
+    padding: 0;
+    font-size: 12.5px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  #user-tools a, #user-tools a:link, #user-tools a:visited {
+    color: rgba(255,255,255,.85);
+    text-decoration: none;
+  }
+  #user-tools a:hover { color: #fff; text-decoration: underline; }
+  #user-tools form#logout-form { display: inline; }
+  #user-tools form#logout-form button {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    color: rgba(255,255,255,.85);
+    cursor: pointer;
+  }
+  #user-tools form#logout-form button:hover { color: #fff; text-decoration: underline; }
+  #user-tools .ats-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: rgba(255,255,255,.18);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 11.5px;
+    color: #fff;
+  }
+  #user-tools .ats-user {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #fff;
+    font-weight: 500;
+  }
+</style>
+{% endblock %}
+
+{% block branding %}
+<a href="{% url 'admin:index' %}" class="ats-brand">
+  <span class="ats-brand-mark">ATS</span>
+  <span class="ats-brand-name">Applicant Tracking System</span>
+  <span class="ats-role-pill">ADMIN</span>
+</a>
+{% endblock %}
+
+{% block welcome-msg %}{% endblock %}
+
+{% block userlinks %}
+{% if site_url %}<a href="{{ site_url }}">View site</a>{% endif %}
+{% if user.has_usable_password %}<a href="{% url 'admin:password_change' %}">Change password</a>{% endif %}
+<form id="logout-form" method="post" action="{% url 'admin:logout' %}">
+  {% csrf_token %}
+  <button type="submit">Log out</button>
+</form>
+<span class="ats-user">
+  <span class="ats-avatar">{{ user.get_username|slice:":2"|upper }}</span>
+  {{ user.get_short_name|default:user.get_username }}
+</span>
+{% endblock %}
+
+{% block nav-global %}{% endblock %}
