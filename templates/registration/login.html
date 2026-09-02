@@ -126,22 +126,6 @@
     border-color: var(--primary-green, #008C8C);
     box-shadow: 0 0 0 3px rgba(0, 140, 140, .12);
   }
-  .login-remember {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    margin-top: 18px;
-  }
-  .login-remember input {
-    width: 16px;
-    height: 16px;
-    accent-color: var(--primary-green, #008C8C);
-  }
-  .login-remember label {
-    font-size: 13px;
-    color: #3d4f57;
-    margin: 0;
-  }
   .login-submit {
     width: 100%;
     margin-top: 24px;
@@ -218,10 +202,6 @@
             <label for="id_password">Password</label>
           </div>
           <input type="password" id="id_password" name="password" class="login-input" required>
-        </div>
-        <div class="login-remember">
-          <input type="checkbox" id="id_remember" name="remember">
-          <label for="id_remember">Keep me signed in</label>
         </div>
         <input type="hidden" name="next" value="{{ next }}">
         <button type="submit" class="login-submit">Login</button>
