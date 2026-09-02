@@ -1,0 +1,63 @@
+{% extends "hr_base.html" %}
+{% block title %}Score Candidates{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <div class="card app-card p-4">
+      <h4 class="mb-1">Score Candidates</h4>
+      <p class="text-muted small mb-3">
+        Select a role. Every candidate mapped to it is scored 0-100 against its job
+        description, using their CV summary, skills, qualification and experience.
+        "General Application" candidates aren't mapped to a role, so they never appear here.
+      </p>
+
+      {% if not scoring_configured %}
+      <div class="alert alert-warning small">
+        Scoring is not configured yet (<code>AZURE_OPENAI_ENDPOINT</code> / <code>AZURE_OPENAI_KEY</code>
+        are not set), so Score will fail until these are added. See <code>.env.example</code>.
+      </div>
+      {% endif %}
+
+      <table class="table table-hover align-middle w-100 mb-0">
+        <thead>
+          <tr><th>Role</th><th>Candidates</th><th>Scored</th><th>Pending</th><th class="text-end">Action</th></tr>
+        </thead>
+        <tbody>
+          {% for job in jobs %}
+          <tr>
+            <td>
+              {{ job.title }}
+              <div class="text-muted small">{{ job.job_code }}</div>
+            </td>
+            <td>{{ job.candidate_total }}</td>
+            <td>{{ job.candidate_scored }}</td>
+            <td>
+              {% if job.candidate_pending %}
+                <span class="badge bg-info text-dark">{{ job.candidate_pending }} pending</span>
+              {% else %}
+                <span class="text-muted small">None</span>
+              {% endif %}
+            </td>
+            <td class="text-end">
+              {% if job.candidate_pending %}
+              <form method="post" action="{% url 'candidate_score_run' job.id %}" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-fill-app" {% if not scoring_configured %}disabled{% endif %}>
+                  Score {{ job.candidate_pending }}
+                </button>
+              </form>
+              {% endif %}
+              {% if job.candidate_scored %}
+              <a href="{% url 'candidate_score_progress' job.id %}" class="btn btn-sm btn-outline-app">View scores</a>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="text-muted">No vacancies with candidates yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

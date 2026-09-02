@@ -77,6 +77,34 @@
     </div>
 
     <div class="card app-card p-4 mb-3">
+      <h5 class="mb-3"><i class="bi bi-bullseye"></i> Match Score</h5>
+      {% if candidate.match_score is not None %}
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <span class="badge {{ candidate.match_score|score_badge_class }} fs-6">{{ candidate.match_score }}/100</span>
+          <span class="text-muted small">against {{ candidate.job.title|default:"the mapped vacancy" }}
+            &middot; scored {{ candidate.match_scored_at|date:"d M Y, H:i" }}</span>
+        </div>
+        {% with b=candidate.match_breakdown_parsed %}
+        <div class="small text-muted mb-2">
+          Skills {{ b.skills_score|default:"-" }}/30 &middot;
+          Experience {{ b.experience_score|default:"-" }}/30 &middot;
+          Education {{ b.education_score|default:"-" }}/30 &middot;
+          Overall Fit {{ b.fit_score|default:"-" }}/10
+        </div>
+        {% if b.matched_skills %}<p class="mb-1 small"><strong>Matched:</strong> {{ b.matched_skills|join:", " }}</p>{% endif %}
+        {% if b.missing_skills %}<p class="mb-1 small"><strong>Missing:</strong> {{ b.missing_skills|join:", " }}</p>{% endif %}
+        {% endwith %}
+        {% if candidate.match_rationale %}<p class="mb-0">{{ candidate.match_rationale }}</p>{% endif %}
+      {% elif candidate.match_state == 'ERROR' %}
+        <p class="text-danger mb-0">Scoring failed: {{ candidate.match_error }}</p>
+      {% elif candidate.job and candidate.job.title|lower != "general application" %}
+        <p class="text-muted mb-0">Not scored yet - use <a href="{% url 'candidate_score' %}">Score Candidates</a>.</p>
+      {% else %}
+        <p class="text-muted mb-0">Not mapped to a role, so this candidate can't be scored.</p>
+      {% endif %}
+    </div>
+
+    <div class="card app-card p-4 mb-3">
       <h5 class="mb-3"><i class="bi bi-stars"></i> AI CV Summary</h5>
       {% if candidate.cv_summary %}
         <p class="mb-0" style="white-space: pre-line;">{{ candidate.cv_summary }}</p>

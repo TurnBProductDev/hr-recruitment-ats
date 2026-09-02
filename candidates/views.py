@@ -1,6 +1,6 @@
 from django.conf import settings
 from django.contrib import messages
-from django.db.models import Count, Exists, Max, OuterRef, Q, Subquery
+from django.db.models import Count, Exists, F, Max, OuterRef, Q, Subquery
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -11,7 +11,7 @@ from django.views.generic import DetailView, ListView, UpdateView
 from interviews.models import Interview, InterviewReschedule
 from jobs.models import Job
 
-from . import bulk, cv_parser, services
+from . import bulk, cv_parser, match_scoring, scoring, services
 from .forms import (
     BulkUploadForm,
     CandidateApplicationForm,
@@ -497,8 +497,20 @@ class CandidateChangeJobView(GroupRequiredMixin, View):
         old = candidate.job.title if candidate.job else 'None'
         job_id = request.POST.get('job') or None
         candidate.job = get_object_or_404(Job, pk=job_id) if job_id else None
-        candidate.save(update_fields=['job', 'updated_at'])
         new = candidate.job.title if candidate.job else 'None'
+        update_fields = ['job', 'updated_at']
+        if old != new:
+            # A score reflects the JD it was matched against - moving vacancies
+            # makes it stale, so clear it rather than leave a misleading number.
+            candidate.match_score = None
+            candidate.match_breakdown = None
+            candidate.match_rationale = None
+            candidate.match_error = None
+            candidate.match_scored_at = None
+            candidate.match_state = Candidate.MatchState.PENDING
+            update_fields += ['match_score', 'match_breakdown', 'match_rationale',
+                              'match_error', 'match_scored_at', 'match_state']
+        candidate.save(update_fields=update_fields)
         if old != new:
             Note.objects.create(candidate=candidate, author=request.user,
                                 text=f'Vacancy changed: {old} -> {new}')
@@ -904,3 +916,72 @@ class BulkUploadRetryView(GroupRequiredMixin, View):
         else:
             messages.info(request, 'Nothing to retry in this batch.')
         return redirect('candidate_bulk_progress', pk=batch.pk)
+
+
+class ScoreCandidatesView(GroupRequiredMixin, View):
+    """Step 1: pick a role. Shows every vacancy (never "General Application" -
+    those candidates aren't mapped to a role to score against) with how many of
+    its candidates are still pending a score."""
+    template_name = 'candidates/score_candidates.html'
+    allowed_groups = (HR_ADMIN, RECRUITER)
+
+    def get(self, request):
+        jobs = (Job.objects.exclude(title__iexact=GENERAL_APPLICATION)
+                .annotate(
+                    candidate_total=Count('candidates'),
+                    candidate_pending=Count('candidates', filter=Q(
+                        candidates__match_state__in=scoring.PENDING_STATES)),
+                    candidate_scored=Count('candidates', filter=Q(
+                        candidates__match_state=Candidate.MatchState.DONE)),
+                )
+                .filter(candidate_total__gt=0)
+                .order_by('-created_on'))
+        return render(request, self.template_name, {
+            'jobs': jobs,
+            'scoring_configured': match_scoring.is_configured(),
+        })
+
+
+class ScoreCandidatesRunView(GroupRequiredMixin, View):
+    """Kick off (or resume) scoring every pending candidate on one vacancy."""
+    allowed_groups = (HR_ADMIN, RECRUITER)
+
+    def post(self, request, job_id):
+        job = get_object_or_404(Job, pk=job_id)
+        if job.title.strip().lower() == GENERAL_APPLICATION.lower():
+            messages.error(request, 'General Application candidates aren\'t mapped to a '
+                                    'role, so they can\'t be scored.')
+            return redirect('candidate_score')
+        if not match_scoring.is_configured():
+            messages.error(request, 'Scoring is not configured - set AZURE_OPENAI_ENDPOINT '
+                                    'and AZURE_OPENAI_KEY.')
+            return redirect('candidate_score')
+        scoring.start_job_scoring(job)
+        return redirect('candidate_score_progress', job_id=job.pk)
+
+
+class ScoreCandidatesProgressView(GroupRequiredMixin, View):
+    """Step 2: live progress while candidates are scored, then the results -
+    every candidate mapped to the role with their score."""
+    template_name = 'candidates/score_progress.html'
+    allowed_groups = (HR_ADMIN, RECRUITER)
+
+    def get(self, request, job_id):
+        job = get_object_or_404(Job, pk=job_id)
+        counts = scoring.summarise(job.pk)
+        candidates = (job.candidates.order_by(
+            F('match_score').desc(nulls_last=True), '-match_scored_at'))
+        return render(request, self.template_name, {
+            'job': job, 'counts': counts, 'candidates': candidates,
+            'back_url': reverse('candidate_score'),
+            'back_label': 'Back to Score Candidates',
+        })
+
+
+class ScoreCandidatesStatusView(GroupRequiredMixin, View):
+    """Poll target for the progress page: just the counts, so the page can
+    show a live bar and reload itself once the run is finished."""
+    allowed_groups = (HR_ADMIN, RECRUITER)
+
+    def get(self, request, job_id):
+        return JsonResponse(scoring.summarise(job_id))

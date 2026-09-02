@@ -171,6 +171,18 @@ CV_PARSER_UPLOAD_TO_SHAREPOINT = os.environ.get("CV_PARSER_UPLOAD_TO_SHAREPOINT"
 BULK_UPLOAD_MAX_FILES = int(os.environ.get("BULK_UPLOAD_MAX_FILES", "25"))
 BULK_UPLOAD_MAX_MB = int(os.environ.get("BULK_UPLOAD_MAX_MB", "10"))
 
+# --- Score Candidates -> Azure OpenAI (direct) ------------------------------
+# Unlike CV parsing, scoring needs no OCR/SharePoint step - the JD and the
+# candidate profile are already text in the database - so this calls the same
+# Azure OpenAI resource the Logic App uses directly over REST, no Logic App
+# round trip. Unset AZURE_OPENAI_ENDPOINT/KEY = the Score Candidates tab is
+# disabled with a message telling HR what to configure.
+AZURE_OPENAI_ENDPOINT = os.environ.get("AZURE_OPENAI_ENDPOINT", "")
+AZURE_OPENAI_KEY = os.environ.get("AZURE_OPENAI_KEY", "")
+AZURE_OPENAI_SCORING_DEPLOYMENT = os.environ.get("AZURE_OPENAI_SCORING_DEPLOYMENT", "cv-data-agent")
+AZURE_OPENAI_API_VERSION = os.environ.get("AZURE_OPENAI_API_VERSION", "2024-02-01")
+SCORE_CANDIDATES_TIMEOUT = int(os.environ.get("SCORE_CANDIDATES_TIMEOUT", "60"))
+
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'hr_dashboard'
 LOGOUT_REDIRECT_URL = 'vacancy_list'

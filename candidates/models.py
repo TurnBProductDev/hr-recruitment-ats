@@ -68,6 +68,12 @@ def candidate_resume_path(instance, filename):
 
 
 class Candidate(models.Model):
+    class MatchState(models.TextChoices):
+        PENDING = 'PENDING', 'Not scored'
+        SCORING = 'SCORING', 'Scoring'
+        DONE = 'DONE', 'Scored'
+        ERROR = 'ERROR', 'Failed'
+
     class Status(models.TextChoices):
         OPEN = 'OPEN', 'Open'
         SHORTLISTED = 'SHORTLISTED', 'Shortlisted'
@@ -126,6 +132,16 @@ class Candidate(models.Model):
     cv_summary = models.TextField('AI CV Summary', blank=True, null=True,
                                   help_text='Short AI-generated summary of the resume.')
 
+    # AI match score against the mapped vacancy's JD (0-100). Never computed for
+    # "General Application" - see candidates/match_scoring.py. match_breakdown
+    # holds the raw JSON (sub-scores + matched/missing skills) for the detail page.
+    match_score = models.PositiveSmallIntegerField(blank=True, null=True)
+    match_breakdown = models.TextField(blank=True, null=True)
+    match_rationale = models.TextField(blank=True, null=True)
+    match_state = models.CharField(max_length=10, choices=MatchState.choices, default=MatchState.PENDING)
+    match_error = models.TextField(blank=True, null=True)
+    match_scored_at = models.DateTimeField(blank=True, null=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -172,6 +188,15 @@ class Candidate(models.Model):
         """Most recent interview (uses the prefetch cache when available)."""
         ivs = list(self.interviews.all())
         return ivs[-1] if ivs else None
+
+    @property
+    def match_breakdown_parsed(self):
+        if not self.match_breakdown:
+            return {}
+        try:
+            return json.loads(self.match_breakdown)
+        except ValueError:
+            return {}
 
 
 # A hold taken at the Open stage is what this app has always called a

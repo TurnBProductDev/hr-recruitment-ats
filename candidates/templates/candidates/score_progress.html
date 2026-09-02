@@ -1,0 +1,94 @@
+{% extends "hr_base.html" %}
+{% block title %}Score Candidates - {{ job.title }}{% endblock %}
+{% block content %}
+<h3 class="mb-1">Score Candidates</h3>
+<p class="text-muted">Role: <strong>{{ job.title }}</strong> ({{ job.job_code }})</p>
+
+{% if counts.finished %}
+  <div class="alert {% if counts.error %}alert-warning{% else %}alert-success{% endif %}">
+    <strong>{{ counts.done }} candidate{{ counts.done|pluralize }} scored</strong>
+    {% if counts.error %} and <strong>{{ counts.error }} failed</strong> - click Score again on
+      the previous page to retry{% endif %}.
+  </div>
+{% else %}
+  <div class="card app-card p-3 mb-3">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <span>Scoring candidates against the job description… this takes a few seconds per candidate. You can leave this page open.</span>
+      <span class="text-muted small" id="score-count">{{ counts.processed }} of {{ counts.total }}</span>
+    </div>
+    <div class="progress" role="progressbar" aria-label="Scoring progress">
+      <div class="progress-bar progress-bar-striped progress-bar-animated" id="score-bar"
+           style="width: {% widthratio counts.processed counts.total 100 %}%"></div>
+    </div>
+  </div>
+{% endif %}
+
+<div class="card app-card p-3">
+  <table class="table table-hover align-middle w-100">
+    <thead>
+      <tr><th>Candidate</th><th>Status</th><th>Score</th><th>Matched Skills</th><th>Rationale</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for c in candidates %}
+      <tr>
+        <td>
+          <a href="{% url 'candidate_timeline' c.id %}">{{ c.full_name }}</a>
+          <div class="text-muted small">{{ c.candidate_code }}</div>
+        </td>
+        <td>
+          {% if c.match_state == 'DONE' %}<span class="badge bg-success">Scored</span>
+          {% elif c.match_state == 'ERROR' %}<span class="badge bg-danger">Failed</span>
+          {% elif c.match_state == 'SCORING' %}<span class="badge bg-info text-dark">Scoring…</span>
+          {% else %}<span class="badge bg-secondary">Waiting</span>{% endif %}
+        </td>
+        <td>
+          {% if c.match_score is not None %}
+            <strong>{{ c.match_score }}</strong><span class="text-muted">/100</span>
+          {% else %}—{% endif %}
+        </td>
+        <td class="small">
+          {{ c.match_breakdown_parsed.matched_skills|join:", "|default:"-" }}
+        </td>
+        <td class="small">
+          {% if c.match_error %}<span class="text-danger">{{ c.match_error }}</span>
+          {% else %}{{ c.match_rationale|default:"" }}{% endif %}
+        </td>
+        <td class="text-end">
+          <a href="{% url 'candidate_timeline' c.id %}" class="btn btn-sm btn-outline-app">View</a>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6" class="text-muted">No candidates mapped to this role.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="mt-3 d-flex gap-2">
+  <a href="{% url 'candidate_score' %}" class="btn btn-fill-app">Back to Score Candidates</a>
+  <a href="{% url 'candidate_repository' %}?job={{ job.id }}" class="btn btn-outline-app">View in Candidate Repository</a>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% if not counts.finished %}
+<script>
+// Poll the run until every candidate is scored, then reload once to show results.
+(function () {
+  var url = "{% url 'candidate_score_status' job.id %}";
+  var bar = document.getElementById('score-bar');
+  var label = document.getElementById('score-count');
+  var timer = setInterval(function () {
+    fetch(url, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (bar && d.total) { bar.style.width = Math.round(d.processed * 100 / d.total) + '%'; }
+        if (label) { label.textContent = d.processed + ' of ' + d.total; }
+        if (d.finished) { clearInterval(timer); window.location.reload(); }
+      })
+      .catch(function () { /* transient network blip - try again next tick */ });
+  }, 3000);
+})();
+</script>
+{% endif %}
+{% endblock %}
