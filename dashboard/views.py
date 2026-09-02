@@ -152,12 +152,13 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
             if 'pending2' in stage:
                 chips.append({'label': stage['pending2'][0], 'count': stage['pending2'][1], 'flow': stage['pending2'][2]})
             chips += [{'label': d[0], 'count': d[1], 'flow': d[2]} for d in stage['drops']]
-            pct = round(value / peak * 100)
-            # A stage with a handful of candidates against a peak of hundreds
-            # rounds to 0% and the bar reads as empty - give any nonzero stage
-            # a sliver so it's still visible.
-            if value > 0 and pct < 2:
-                pct = 2
+            # Keep a decimal instead of rounding to a whole percent, so two
+            # small-but-different stages (e.g. 10 vs 1) don't collapse onto
+            # the same rounded width. A nonzero stage still gets a minimum
+            # sliver so it stays visible even when it rounds under 1%.
+            pct = round(value / peak * 100, 1)
+            if value > 0 and pct < 1:
+                pct = 1
             stage.update(
                 value=value,
                 value_label=label,

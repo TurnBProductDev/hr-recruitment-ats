@@ -61,10 +61,10 @@
 .sm-row { display: flex; align-items: center; gap: 14px; padding: 13px 0; border-bottom: 1px solid #eef2f2; }
 .sm-row:last-child { border-bottom: none; }
 .sm-col-name { flex: 1; font-size: .85rem; font-weight: 500; color: #1f2a2a; }
-.sm-col-num { width: 82px; text-align: right; font-size: .87rem; font-weight: 600; color: #1f2a2a; }
-.sm-col-plain { width: 60px; text-align: right; font-size: .85rem; color: #1f2a2a; }
-.sm-col-short { width: 88px; text-align: right; font-size: .85rem; font-weight: 600; color: #0e6f6b; }
-.sm-col-hired { width: 56px; text-align: right; font-size: .85rem; color: #8a9a9a; }
+.sm-col-num { width: 82px; text-align: center; font-size: .8rem; font-weight: 600; color: #1f2a2a; }
+.sm-col-plain { width: 60px; text-align: center; font-size: .78rem; color: #1f2a2a; }
+.sm-col-short { width: 88px; text-align: center; font-size: .78rem; font-weight: 600; color: #0e6f6b; }
+.sm-col-hired { width: 56px; text-align: center; font-size: .78rem; color: #8a9a9a; }
 @media (max-width: 700px) {
   .sm-kpis { grid-template-columns: repeat(2, 1fr); }
 }
@@ -195,13 +195,13 @@
         </div>
         {% for stage in funnel %}
         <div class="fnl-stagewrap">
-          <button type="button" class="fnl-row2" aria-expanded="{% if forloop.first %}true{% else %}false{% endif %}">
+          <button type="button" class="fnl-row2" aria-expanded="false">
             <span class="lbl">{{ stage.name }}</span>
             <span class="track"><span class="fill" style="width:{{ stage.pct }}%;background:{{ stage.color }}"></span></span>
             <span class="val">{{ stage.value }}</span>
-            <span class="caret">{% if forloop.first %}&minus;{% else %}+{% endif %}</span>
+            <span class="caret">+</span>
           </button>
-          <div class="fnl-chips" {% if not forloop.first %}hidden{% endif %}>
+          <div class="fnl-chips" hidden>
             {% for chip in stage.chips %}
             <a class="fnl-chip" href="{% url 'candidate_repository' %}?flow={{ chip.flow }}{% if jobq %}&job={{ jobq }}{% endif %}">
               <div class="n">{{ chip.count }}</div><div class="t">{{ chip.label }}</div>
