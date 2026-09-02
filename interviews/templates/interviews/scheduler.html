@@ -1,58 +1,121 @@
 {% extends "hr_base.html" %}
 {% block title %}Interviews{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ===== Interviews (self-contained so it never depends on cached CSS) ===== */
+.iv-head { display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:16px; margin-bottom:18px; }
+.iv-title { font-size:1.5rem; font-weight:700; color:#1a2e35; margin:0; }
+.iv-subtitle { font-size:.8rem; color:#6b7a7a; margin-top:2px; }
+
+.iv-toolbar { display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap; padding:14px 18px; border-bottom:1px solid var(--border-color); }
+.iv-search-wrap { position:relative; flex:1 1 220px; max-width:280px; }
+.iv-search-wrap .bi-search { position:absolute; left:11px; top:50%; transform:translateY(-50%); color:#8a969b; font-size:.8rem; pointer-events:none; }
+.iv-search-wrap input { padding-left:30px; }
+.iv-export-slot { margin-left:auto; }
+.iv-export-slot .dt-buttons .btn { white-space:nowrap; }
+
+.kebab-btn { padding:0.25rem 0.55rem; line-height:1; }
+.iv-name a { font-weight:600; }
+.iv-meta { font-size:.72rem; color:#8a969b; }
+
+#interviewTable_wrapper { display:flex; flex-wrap:wrap; }
+#interviewTable_wrapper > table { width:100% !important; order:1; }
+#interviewTable_wrapper > .dataTables_processing { order:0; width:100%; }
+#interviewTable_wrapper > .dataTables_info { order:2; flex:1; padding:14px 18px 16px; font-size:.78rem; color:#8a969b; }
+#interviewTable_wrapper > .dataTables_paginate { order:3; padding:10px 18px 12px; }
+.dataTables_wrapper .pagination { justify-content:flex-end; margin-bottom:0; }
+.dataTables_wrapper .pagination .page-link { border-radius:6px; margin-left:4px; border-color:var(--border-color); color:var(--dark-green); font-size:.78rem; }
+.dataTables_wrapper .pagination .page-item.active .page-link { background:var(--primary-green); border-color:var(--primary-green); color:#fff; }
+.dataTables_wrapper .pagination .page-item.disabled .page-link { color:#c3cbcb; }
+
+@media (max-width: 900px) {
+  .iv-toolbar { align-items:stretch; }
+  .iv-export-slot { margin-left:0; }
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h3 class="mb-0">Interviews <span class="text-muted small">({{ interviews|length }} awaiting result)</span></h3>
+<div class="iv-head">
+  <div>
+    <h3 class="iv-title mb-0">Interviews</h3>
+    <div class="iv-subtitle">{{ interviews|length }} awaiting result</div>
+  </div>
 </div>
 
-<form method="get" class="row g-2 mb-3 align-items-end">
-  <div class="col-md-4">
-    <label class="form-label small text-muted mb-0">Search candidate</label>
-    <input type="text" name="q" value="{{ request.GET.q|default:'' }}" class="form-control" placeholder="Name">
+<form method="get">
+  <div class="app-card">
+    <div class="iv-toolbar">
+      <div class="iv-search-wrap">
+        <i class="bi bi-search"></i>
+        <input type="text" name="q" value="{{ request.GET.q|default:'' }}" class="form-control form-control-sm" placeholder="Candidate name">
+      </div>
+      <button type="submit" class="btn btn-sm btn-outline-app"><i class="bi bi-search"></i> Search</button>
+      <div class="iv-export-slot" id="exportSlot"></div>
+    </div>
+
+    <div class="table-responsive">
+      <table id="interviewTable" class="table table-hover align-middle w-100">
+        <thead>
+          <tr>
+            <th>Candidate</th><th>Round</th><th>Interview Date</th>
+            <th>Interviewer</th><th>Status</th><th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for iv in interviews %}
+          <tr>
+            <td class="iv-name">
+              <a href="{% url 'candidate_timeline' iv.candidate.pk %}">{{ iv.candidate.full_name }}</a>
+              <div class="iv-meta">{{ iv.candidate.job.title|default:"-" }}</div>
+            </td>
+            <td>{{ iv.get_round_type_display }}</td>
+            <td>{{ iv.scheduled_date|date:"d M Y H:i" }}</td>
+            <td>{% if iv.interviewer %}{{ iv.interviewer.get_full_name|default:iv.interviewer.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</td>
+            <td>
+              {% if iv.is_upcoming %}
+                <span class="badge-status badge-round1">Interview Upcoming</span>
+              {% else %}
+                <span class="badge-status badge-final_selection">Result Pending</span>
+              {% endif %}
+            </td>
+            <td class="text-nowrap text-end">
+              <a href="{% url 'interview_result' iv.pk %}" class="btn btn-sm btn-fill-app">Update Status</a>
+              <div class="dropdown d-inline-block">
+                <button class="btn btn-sm btn-outline-app kebab-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">&#8942;</button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                  <li><a class="dropdown-item" href="{% url 'interview_reschedule' iv.pk %}" title="Change the date, time or interviewer">Reschedule</a></li>
+                  <li>
+                    <form method="post" action="{% url 'interview_send_invite' iv.pk %}">
+                      {% csrf_token %}<button type="submit" class="dropdown-item">Send Invite</button>
+                    </form>
+                  </li>
+                </ul>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="6" class="text-muted text-center py-3">No scheduled interviews awaiting a result.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
-  <div class="col-md-2"><button type="submit" class="btn btn-primary-app btn-sm w-100">Filter</button></div>
 </form>
-
-<div class="card app-card p-3">
-  <div class="table-responsive">
-    <table class="table table-hover align-middle w-100">
-      <thead>
-        <tr>
-          <th>Candidate</th><th>Job</th><th>Round</th><th>Interview Date</th>
-          <th>Interviewer</th><th>Status</th><th>Update Status</th><th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for iv in interviews %}
-        <tr>
-          <td><a href="{% url 'candidate_timeline' iv.candidate.pk %}">{{ iv.candidate.full_name }}</a></td>
-          <td>{{ iv.candidate.job.title|default:"-" }}</td>
-          <td>{{ iv.get_round_type_display }}</td>
-          <td>{{ iv.scheduled_date|date:"d M Y H:i" }}</td>
-          <td>{% if iv.interviewer %}{{ iv.interviewer.get_full_name|default:iv.interviewer.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</td>
-          <td>
-            {% if iv.is_upcoming %}
-              <span class="badge-status badge-round1">Interview Upcoming</span>
-            {% else %}
-              <span class="badge-status badge-final_selection">Result Pending</span>
-            {% endif %}
-          </td>
-          <td class="text-nowrap">
-            <a href="{% url 'interview_result' iv.pk %}" class="btn btn-sm btn-fill-app">Update Status</a>
-          </td>
-          <td class="text-nowrap">
-            <a href="{% url 'interview_reschedule' iv.pk %}" class="btn btn-sm btn-outline-app" title="Change the date, time or interviewer"><i class="bi bi-calendar-event"></i> Reschedule</a>
-            <form method="post" action="{% url 'interview_send_invite' iv.pk %}" class="d-inline">
-              {% csrf_token %}<button class="btn btn-sm btn-outline-app" title="Send invite email"><i class="bi bi-envelope"></i></button>
-            </form>
-          </td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="8" class="text-muted text-center py-3">No scheduled interviews awaiting a result.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
 <p class="small text-muted mt-2"><strong>Pass</strong> advances the candidate one stage (Round 1 → Round 2 → Final Selection, where HR makes the hire decision); <strong>Fail</strong> moves them to Rejected. Schedule new interviews from a candidate's page — a candidate can only have one interview awaiting a result at a time, so mark this one's result before scheduling the next round.</p>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(function () {
+  var table = $('#interviewTable').DataTable({
+    order: [], dom: 'rtip', pageLength: 25,
+    language: { info: 'Showing _START_ to _END_ of _TOTAL_', infoEmpty: 'No interviews', zeroRecords: 'No scheduled interviews awaiting a result.' },
+    buttons: [{ extend: 'excelHtml5', text: '<i class="bi bi-file-earmark-excel"></i> Export to Excel',
+               className: 'btn btn-outline-app btn-sm' }]
+  });
+  table.buttons().container().appendTo('#exportSlot');
+});
+</script>
 {% endblock %}

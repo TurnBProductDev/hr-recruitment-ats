@@ -1,15 +1,55 @@
 {% extends "hr_base.html" %}
 {% block title %}Vacancy Management{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ===== Vacancy Management (self-contained so it never depends on cached CSS) ===== */
+.vac-head { display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:16px; margin-bottom:18px; }
+.vac-title { font-size:1.5rem; font-weight:700; color:#1a2e35; margin:0; }
+.vac-subtitle { font-size:.8rem; color:#6b7a7a; margin-top:2px; }
+.vac-head-actions { display:flex; gap:8px; flex-wrap:wrap; }
+
+.vac-toolbar { display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap; padding:14px 18px; border-bottom:1px solid var(--border-color); }
+.vac-search-wrap { position:relative; flex:1 1 220px; max-width:280px; }
+.vac-search-wrap .bi-search { position:absolute; left:11px; top:50%; transform:translateY(-50%); color:#8a969b; font-size:.8rem; pointer-events:none; }
+.vac-search-wrap input { padding-left:30px; }
+.vac-export-slot { margin-left:auto; }
+.vac-export-slot .dt-buttons .btn { white-space:nowrap; }
+
+.kebab-btn { padding:0.25rem 0.55rem; line-height:1; }
+.vac-name a { font-weight:600; }
+.vac-meta { font-size:.72rem; color:#8a969b; }
+
+#jobTable_wrapper { display:flex; flex-wrap:wrap; }
+#jobTable_wrapper > table { width:100% !important; order:1; }
+#jobTable_wrapper > .dataTables_processing { order:0; width:100%; }
+#jobTable_wrapper > .dataTables_info { order:2; flex:1; padding:14px 18px 16px; font-size:.78rem; color:#8a969b; }
+#jobTable_wrapper > .dataTables_paginate { order:3; padding:10px 18px 12px; }
+.dataTables_wrapper .pagination { justify-content:flex-end; margin-bottom:0; }
+.dataTables_wrapper .pagination .page-link { border-radius:6px; margin-left:4px; border-color:var(--border-color); color:var(--dark-green); font-size:.78rem; }
+.dataTables_wrapper .pagination .page-item.active .page-link { background:var(--primary-green); border-color:var(--primary-green); color:#fff; }
+.dataTables_wrapper .pagination .page-item.disabled .page-link { color:#c3cbcb; }
+
+@media (max-width: 900px) {
+  .vac-toolbar { align-items:stretch; }
+  .vac-export-slot { margin-left:0; }
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h3 class="mb-0">Vacancy Management</h3>
+<div class="vac-head">
   <div>
+    <h3 class="vac-title mb-0">Vacancy Management</h3>
+    <div class="vac-subtitle">{{ jobs|length }} vacanc{{ jobs|length|pluralize:"y,ies" }}</div>
+  </div>
+  <div class="vac-head-actions">
     {% if is_hr_admin %}
     <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#rejectClosedModal">
       <i class="bi bi-x-octagon"></i> Reject candidates of closed vacancies
     </button>
     {% endif %}
-    <a href="{% url 'job_add' %}" class="btn btn-fill-app btn-sm ms-1"><i class="bi bi-plus-lg"></i> Create Vacancy</a>
+    <a href="{% url 'job_add' %}" class="btn btn-fill-app btn-sm"><i class="bi bi-plus-lg"></i> Create Vacancy</a>
   </div>
 </div>
 
@@ -41,28 +81,35 @@
 </div>
 {% endif %}
 
-<div class="card app-card p-3">
+<div class="app-card">
+  <div class="vac-toolbar">
+    <div class="vac-search-wrap">
+      <i class="bi bi-search"></i>
+      <input type="text" id="vacSearch" class="form-control form-control-sm" placeholder="Title, code or location">
+    </div>
+    <div class="vac-export-slot" id="exportSlot"></div>
+  </div>
+
   <div class="table-responsive">
     <table id="jobTable" class="table table-hover align-middle w-100">
       <thead>
         <tr>
-          <th>Job Code</th>
-          <th>Title</th>
-          <th>Location</th>
+          <th>Vacancy</th>
           <th>Status</th>
           <th>Archived</th>
           <th>Applicants</th>
           <th>Opening Date</th>
           <th>Closing Date</th>
-          <th>Actions</th>
+          <th class="text-end">Actions</th>
         </tr>
       </thead>
       <tbody>
         {% for job in jobs %}
         <tr>
-          <td>{{ job.job_code }}</td>
-          <td>{{ job.title }}</td>
-          <td>{{ job.location|default:"-" }}</td>
+          <td class="vac-name">
+            <a href="{% url 'job_edit' job.pk %}">{{ job.title }}</a>
+            <div class="vac-meta">{{ job.job_code }} &middot; {{ job.location|default:"-" }}</div>
+          </td>
           <td>
             {% if job.status == 'OPEN' %}<span class="badge-status badge-shortlisted">Open</span>
             {% else %}<span class="badge-status badge-rejected">Closed</span>{% endif %}
@@ -71,23 +118,34 @@
           <td>{{ job.candidates.count }}</td>
           <td>{{ job.opening_date|date:"d M Y"|default:"-" }}</td>
           <td>{{ job.closing_date|date:"d M Y"|default:"-" }}</td>
-          <td class="text-nowrap">
+          <td class="text-nowrap text-end">
             <a href="{% url 'job_edit' job.pk %}" class="btn btn-sm btn-outline-app">Edit</a>
             {% if job.jd_file %}<a href="{{ job.jd_file.url }}" target="_blank" class="btn btn-sm btn-outline-app">JD</a>{% endif %}
-            {% if job.status == 'OPEN' %}
-            <form method="post" action="{% url 'job_close' job.pk %}" class="d-inline" onsubmit="return confirm('Close this vacancy?');">
-              {% csrf_token %}<button class="btn btn-sm btn-outline-danger">Close</button>
-            </form>
-            {% else %}
-            <form method="post" action="{% url 'job_reopen' job.pk %}" class="d-inline">
-              {% csrf_token %}<button class="btn btn-sm btn-outline-app">Reopen</button>
-            </form>
-            {% endif %}
-            {% if not job.is_archived %}
-            <form method="post" action="{% url 'job_archive' job.pk %}" class="d-inline" onsubmit="return confirm('Archive this vacancy?');">
-              {% csrf_token %}<button class="btn btn-sm btn-dark">Archive</button>
-            </form>
-            {% endif %}
+            <div class="dropdown d-inline-block">
+              <button class="btn btn-sm btn-outline-app kebab-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">&#8942;</button>
+              <ul class="dropdown-menu dropdown-menu-end">
+                {% if job.status == 'OPEN' %}
+                <li>
+                  <form method="post" action="{% url 'job_close' job.pk %}" onsubmit="return confirm('Close this vacancy?');">
+                    {% csrf_token %}<button type="submit" class="dropdown-item text-danger">Close</button>
+                  </form>
+                </li>
+                {% else %}
+                <li>
+                  <form method="post" action="{% url 'job_reopen' job.pk %}">
+                    {% csrf_token %}<button type="submit" class="dropdown-item">Reopen</button>
+                  </form>
+                </li>
+                {% endif %}
+                {% if not job.is_archived %}
+                <li>
+                  <form method="post" action="{% url 'job_archive' job.pk %}" onsubmit="return confirm('Archive this vacancy?');">
+                    {% csrf_token %}<button type="submit" class="dropdown-item">Archive</button>
+                  </form>
+                </li>
+                {% endif %}
+              </ul>
+            </div>
           </td>
         </tr>
         {% endfor %}
@@ -98,5 +156,22 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>$(function () { $('#jobTable').DataTable({ order: [] }); });</script>
+<script>
+$(function () {
+  var table = $('#jobTable').DataTable({
+    order: [], dom: 'rtip', pageLength: 25,
+    language: { info: 'Showing _START_ to _END_ of _TOTAL_', infoEmpty: 'No vacancies', zeroRecords: 'No vacancies match this search.' },
+    buttons: [{ extend: 'excelHtml5', text: '<i class="bi bi-file-earmark-excel"></i> Export to Excel',
+               className: 'btn btn-outline-app btn-sm' }]
+  });
+  table.buttons().container().appendTo('#exportSlot');
+
+  var searchTimer;
+  $('#vacSearch').on('input', function () {
+    var val = this.value;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(function () { table.search(val).draw(); }, 150);
+  });
+});
+</script>
 {% endblock %}

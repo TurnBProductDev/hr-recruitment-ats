@@ -1,136 +1,185 @@
 {% extends "hr_base.html" %}
 {% load candidates_extras %}
 {% block title %}General Applications{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ===== General Applications (self-contained so it never depends on cached CSS) ===== */
+.ga-head { display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:16px; margin-bottom:18px; }
+.ga-title { font-size:1.5rem; font-weight:700; color:#1a2e35; margin:0; }
+.ga-subtitle { font-size:.8rem; color:#6b7a7a; margin-top:2px; }
+.ga-subtitle em { font-style: normal; color: #4a5a60; }
+
+.ga-toolbar { display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap; padding:14px 18px; border-bottom:1px solid var(--border-color); }
+.ga-search-wrap { position:relative; flex:1 1 220px; max-width:280px; }
+.ga-search-wrap .bi-search { position:absolute; left:11px; top:50%; transform:translateY(-50%); color:#8a969b; font-size:.8rem; pointer-events:none; }
+.ga-search-wrap input { padding-left:30px; }
+.ga-toolbar .form-select, .ga-toolbar .form-control { font-size:.82rem; }
+.ga-export-slot { margin-left:auto; }
+.ga-export-slot .dt-buttons .btn { white-space:nowrap; }
+
+.ga-bulkbar { display:none; align-items:center; gap:14px; padding:10px 18px; background:#eef6f5; border-bottom:1px solid #dbe9e7; flex-wrap:wrap; }
+.ga-bulkbar.show { display:flex; }
+.ga-bulkbar .bulk-actions { display:flex; gap:8px; flex-wrap:wrap; margin-left:auto; }
+
+.kebab-btn { padding:0.25rem 0.55rem; line-height:1; }
+.ga-name a { font-weight:600; }
+.ga-meta { font-size:.72rem; color:#8a969b; }
+.ga-role-uncaptured { color:#8a969b; font-style:italic; }
+
+#generalTable_wrapper { display:flex; flex-wrap:wrap; }
+#generalTable_wrapper > table { width:100% !important; order:1; }
+#generalTable_wrapper > .dataTables_processing { order:0; width:100%; }
+#generalTable_wrapper > .dataTables_info { order:2; flex:1; padding:14px 18px 16px; font-size:.78rem; color:#8a969b; }
+#generalTable_wrapper > .dataTables_paginate { order:3; padding:10px 18px 12px; }
+.dataTables_wrapper .pagination { justify-content:flex-end; margin-bottom:0; }
+.dataTables_wrapper .pagination .page-link { border-radius:6px; margin-left:4px; border-color:var(--border-color); color:var(--dark-green); font-size:.78rem; }
+.dataTables_wrapper .pagination .page-item.active .page-link { background:var(--primary-green); border-color:var(--primary-green); color:#fff; }
+.dataTables_wrapper .pagination .page-item.disabled .page-link { color:#c3cbcb; }
+
+@media (max-width: 900px) {
+  .ga-toolbar { align-items:stretch; }
+  .ga-export-slot { margin-left:0; }
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="d-flex justify-content-between align-items-end mb-3">
-  <h3 class="mb-0">General Applications</h3>
-  <span class="text-muted small">
-    {{ total }} candidate{{ total|pluralize }} · <em>Applied Position</em> is what they asked for on
-    their CV or application email
-  </span>
+<div class="ga-head">
+  <div>
+    <h3 class="ga-title mb-0">General Applications</h3>
+    <div class="ga-subtitle">{{ total }} candidate{{ total|pluralize }} &middot; <em>Applied Position</em> is what they asked for on their CV or application email</div>
+  </div>
 </div>
 
-<form method="get">
-  <div class="row g-2 mb-3 align-items-end">
-    <div class="col-md-3">
-      <label class="form-label small text-muted mb-0">Search</label>
-      <input type="text" name="q" value="{{ q }}" class="form-control" placeholder="Name, email or position">
-    </div>
-    <div class="col-md-3">
-      <label class="form-label small text-muted mb-0">Applied Position</label>
-      {# Checkbox dropdown: same compact look as the other filters, but multi-select. #}
-      <div class="dropdown">
-        <button class="form-select text-start" type="button" id="roleFilter"
-                data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
-          <span id="roleFilterLabel">All positions</span>
-        </button>
-        <div class="dropdown-menu p-2" style="min-width: 280px; max-height: 260px; overflow-y: auto;">
-          {% for opt in role_options %}
-            <div class="form-check">
-              <input class="form-check-input role-option" type="checkbox" name="role"
-                     value="{{ opt.role_applied }}" id="role{{ forloop.counter }}"
-                     {% if opt.role_applied in selected_roles %}checked{% endif %}>
-              <label class="form-check-label" for="role{{ forloop.counter }}">
-                {{ opt.role_applied }} <span class="text-muted">({{ opt.n }})</span>
-              </label>
-            </div>
-          {% empty %}
-            <div class="text-muted small px-1">No positions captured yet.</div>
-          {% endfor %}
-          {% if no_role_count %}
-            <div class="form-check border-top mt-2 pt-2">
-              <input class="form-check-input role-option" type="checkbox" name="role"
-                     value="{{ no_role_value }}" id="roleNone"
-                     {% if no_role_value in selected_roles %}checked{% endif %}>
-              <label class="form-check-label" for="roleNone">
-                Not captured <span class="text-muted">({{ no_role_count }})</span>
-              </label>
-            </div>
-          {% endif %}
+<form method="get" id="gaFilterForm">
+  <div class="app-card">
+    <div class="ga-toolbar">
+      <div class="ga-search-wrap">
+        <i class="bi bi-search"></i>
+        <input type="text" name="q" value="{{ q }}" class="form-control form-control-sm" placeholder="Name, email or position">
+      </div>
+      <div>
+        <label class="form-label small text-muted mb-0 d-block">Applied Position</label>
+        {# Checkbox dropdown: same compact look as the other filters, but multi-select. #}
+        <div class="dropdown">
+          <button class="form-select form-select-sm text-start" type="button" id="roleFilter"
+                  data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" style="min-width:220px;">
+            <span id="roleFilterLabel">All positions</span>
+          </button>
+          <div class="dropdown-menu p-2" style="min-width: 280px; max-height: 260px; overflow-y: auto;">
+            {% for opt in role_options %}
+              <div class="form-check">
+                <input class="form-check-input role-option" type="checkbox" name="role"
+                       value="{{ opt.role_applied }}" id="role{{ forloop.counter }}"
+                       {% if opt.role_applied in selected_roles %}checked{% endif %}>
+                <label class="form-check-label" for="role{{ forloop.counter }}">
+                  {{ opt.role_applied }} <span class="text-muted">({{ opt.n }})</span>
+                </label>
+              </div>
+            {% empty %}
+              <div class="text-muted small px-1">No positions captured yet.</div>
+            {% endfor %}
+            {% if no_role_count %}
+              <div class="form-check border-top mt-2 pt-2">
+                <input class="form-check-input role-option" type="checkbox" name="role"
+                       value="{{ no_role_value }}" id="roleNone"
+                       {% if no_role_value in selected_roles %}checked{% endif %}>
+                <label class="form-check-label" for="roleNone">
+                  Not captured <span class="text-muted">({{ no_role_count }})</span>
+                </label>
+              </div>
+            {% endif %}
+          </div>
         </div>
       </div>
+      <button type="submit" class="btn btn-sm btn-outline-app"><i class="bi bi-search"></i> Search</button>
+      <a href="{% url 'candidate_general_applications' %}" class="btn btn-sm btn-outline-secondary">Clear</a>
+      <div class="ga-export-slot" id="exportSlot"></div>
     </div>
-    <div class="col-md-1">
-      <button type="submit" class="btn btn-primary-app w-100"><i class="bi bi-search"></i></button>
-    </div>
-    <div class="col-md-1">
-      <a href="{% url 'candidate_general_applications' %}" class="btn btn-outline-app w-100">Clear</a>
-    </div>
-  </div>
-</form>
 
-<div id="bulkBar" class="alert alert-secondary d-none d-flex justify-content-between align-items-center py-2">
-  <span><strong id="bulkCount">0</strong> candidate(s) selected</span>
-  <span>
-    <button type="button" class="btn btn-sm btn-outline-secondary" id="bulkClear">Clear selection</button>
-    <button type="button" class="btn btn-sm btn-outline-danger" id="bulkReject">Reject selected</button>
     {% if is_hr_admin %}
-      <button type="button" class="btn btn-sm btn-danger" id="bulkDelete">Delete selected</button>
+    <div id="bulkBar" class="ga-bulkbar">
+      <span><strong id="bulkCount">0</strong> selected</span>
+      <div class="bulk-actions">
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="bulkClear">Clear</button>
+        <button type="button" class="btn btn-sm btn-outline-danger bulk-act" id="bulkReject"
+                data-action="{% url 'candidate_bulk_reject' %}" data-title="Reject the selected candidates" data-require="1">Reject</button>
+        <button type="button" class="btn btn-sm btn-danger" id="bulkDelete">Delete</button>
+      </div>
+    </div>
+    <form method="post" action="{% url 'candidate_bulk_delete' %}" id="bulkDeleteForm" class="d-none">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+      <div id="bulkDeleteIds"></div>
+    </form>
     {% endif %}
-  </span>
-</div>
-<form method="post" id="bulkForm" class="d-none">
-  {% csrf_token %}
-  <input type="hidden" name="next" value="{{ request.get_full_path }}">
-  <input type="hidden" name="reason" id="bulkReason">
-  <input type="hidden" name="performed_by" value="{{ user.get_full_name|default:user.get_username }}">
-  <div id="bulkIds"></div>
-</form>
 
-<div class="card app-card p-3">
-  <div class="table-responsive">
-    <table id="generalTable" class="table table-hover align-middle w-100">
-      <thead>
-        <tr>
-          <th class="no-export" style="width:2rem">
-            <input type="checkbox" class="form-check-input" id="selectAll" title="Select all on this page">
-          </th>
-          <th>Code</th><th>Name</th><th>Applied Position</th><th>Source</th>
-          <th>Applied</th><th>Status</th><th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for c in candidates %}
-        <tr>
-          <td class="no-export">
-            <input type="checkbox" class="form-check-input row-select" value="{{ c.id }}"
-                   aria-label="Select {{ c.full_name }}">
-          </td>
-          <td class="text-muted">{{ c.candidate_code }}</td>
-          <td><a href="{% url 'candidate_timeline' c.id %}">{{ c.full_name }}</a>
-            <div class="small text-muted">{{ c.email }}</div></td>
-          <td>
-            {% if c.role_applied %}{{ c.role_applied }}
-            {% else %}<span class="text-muted">Not captured</span>{% endif %}
-          </td>
-          <td>{{ c.source|default:"-" }}</td>
-          <td>{{ c.created_at|date:"d M Y" }}</td>
-          <td><span class="{{ c.status|badge_class }}">{{ c.status_label }}</span></td>
-          <td class="text-nowrap">
-            {# Re-assigning the vacancy lives on the candidate's own page, which has the vacancy picker. #}
-            <a href="{% url 'candidate_timeline' c.id %}" class="btn btn-sm btn-outline-app">View</a>
-            {% if c.status != 'REJECTED' and c.status != 'BLACKLISTED' %}
-              <button type="button" class="btn btn-sm btn-outline-danger act"
-                      data-action="{% url 'candidate_reject' c.id %}"
-                      data-title="Reject {{ c.full_name }}" data-require="1"
-                      data-btn="btn-outline-danger" data-label="Reject">Reject</button>
-            {% endif %}
-            {% if is_hr_admin %}
-              <button type="button" class="btn btn-sm btn-outline-secondary act"
-                      data-action="{% url 'candidate_delete' c.id %}"
-                      data-title="Delete {{ c.full_name }}?" data-nofields="1"
-                      data-btn="btn-danger" data-label="Delete permanently"
-                      data-msg="This permanently deletes the candidate and all their interviews, notes and history. This cannot be undone.">Delete</button>
-            {% endif %}
-          </td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="8" class="text-muted">No candidates match this filter.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="table-responsive">
+      <table id="generalTable" class="table table-hover align-middle w-100">
+        <thead>
+          <tr>
+            {% if is_hr_admin %}<th class="no-export" style="width:2rem">
+              <input type="checkbox" class="form-check-input" id="selectAll" title="Select all on this page">
+            </th>{% endif %}
+            <th>Candidate</th><th>Applied Position</th><th>Source</th><th>Applied</th><th>Status</th><th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in candidates %}
+          <tr>
+            {% if is_hr_admin %}<td class="no-export">
+              <input type="checkbox" class="form-check-input row-select" value="{{ c.id }}"
+                     aria-label="Select {{ c.full_name }}">
+            </td>{% endif %}
+            <td class="ga-name">
+              <a href="{% url 'candidate_timeline' c.id %}">{{ c.full_name }}</a>
+              <div class="ga-meta">{{ c.email }} &middot; {{ c.candidate_code }}</div>
+            </td>
+            <td>
+              {% if c.role_applied %}{{ c.role_applied }}
+              {% else %}<span class="ga-role-uncaptured">Not captured</span>{% endif %}
+            </td>
+            <td>{{ c.source|default:"-" }}</td>
+            <td>
+              {{ c.created_at|date:"d M Y" }}
+              <div class="ga-meta">{{ c.created_at|timesince }} ago</div>
+            </td>
+            <td><span class="{{ c.status|badge_class }}">{{ c.status_label }}</span></td>
+            <td class="text-nowrap text-end">
+              {# Re-assigning the vacancy lives on the candidate's own page, which has the vacancy picker. #}
+              <a href="{% url 'candidate_timeline' c.id %}" class="btn btn-sm btn-outline-app">View</a>
+              {% if c.status != 'REJECTED' and c.status != 'BLACKLISTED' or is_hr_admin %}
+              <div class="dropdown d-inline-block">
+                <button class="btn btn-sm btn-outline-app kebab-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">&#8942;</button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                  {% if c.status != 'REJECTED' and c.status != 'BLACKLISTED' %}
+                  <li><button type="button" class="dropdown-item text-danger act"
+                              data-action="{% url 'candidate_reject' c.id %}"
+                              data-title="Reject {{ c.full_name }}" data-require="1"
+                              data-btn="btn-outline-danger" data-label="Reject">Reject</button></li>
+                  {% endif %}
+                  {% if is_hr_admin %}
+                    {% if c.status != 'REJECTED' and c.status != 'BLACKLISTED' %}<li><hr class="dropdown-divider"></li>{% endif %}
+                    <li><button type="button" class="dropdown-item text-danger act"
+                                data-action="{% url 'candidate_delete' c.id %}"
+                                data-title="Delete {{ c.full_name }}?" data-nofields="1"
+                                data-btn="btn-danger" data-label="Delete permanently"
+                                data-msg="This permanently deletes the candidate and all their interviews, notes and history. This cannot be undone.">Delete</button></li>
+                  {% endif %}
+                </ul>
+              </div>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="7" class="text-muted">No candidates match this filter.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
-</div>
+</form>
 
 {# Same single reusable confirm modal the Candidate Repository uses. #}
 <div class="modal fade" id="actionModal" tabindex="-1">
@@ -138,6 +187,7 @@
     <form method="post" id="actionForm">
       {% csrf_token %}
       <input type="hidden" name="next" value="{{ request.get_full_path }}">
+      <div id="actionBulkIds"></div>
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title" id="actionModalTitle">Confirm action</h5>
@@ -170,15 +220,19 @@
 {% block extra_js %}
 <script>
 $(function () {
-  $('#generalTable').DataTable({
-    order: [], dom: 'Bfrtip', pageLength: 25,
+  var table = $('#generalTable').DataTable({
+    order: [], dom: 'rtip', pageLength: 25,
     columnDefs: [{ targets: 'no-export', orderable: false, searchable: false }],
-    buttons: [{ extend: 'excelHtml5', exportOptions: { columns: ':not(.no-export)' } }]
+    language: { info: 'Showing _START_ to _END_ of _TOTAL_', infoEmpty: 'No candidates', zeroRecords: 'No candidates match this filter.' },
+    buttons: [{ extend: 'excelHtml5', text: '<i class="bi bi-file-earmark-excel"></i> Export to Excel',
+               className: 'btn btn-outline-app btn-sm', exportOptions: { columns: ':not(.no-export)' } }]
   });
+  table.buttons().container().appendTo('#exportSlot');
 
   // --- Per-row actions: same confirm modal as the Candidate Repository -------
   $('#actionModal').on('show.bs.modal', function (event) {
     var b = event.relatedTarget;
+    if (!b.classList.contains('bulk-act')) { $('#actionBulkIds').empty(); }
     $('#actionForm').attr('action', b.getAttribute('data-action'));
     $('#actionModalTitle').text(b.getAttribute('data-title') || 'Confirm action');
     $('#actionModalMsg').text(b.getAttribute('data-msg') || '');
@@ -193,22 +247,15 @@ $(function () {
     bootstrap.Modal.getOrCreateInstance(document.getElementById('actionModal')).show(this);
   });
 
-  // --- Multi-select reject / delete ----------------------------------------
+  {% if is_hr_admin %}
+  // --- Multi-select bulk bar -------------------------------------------------
   function selectedIds() {
     return $('#generalTable').find('.row-select:checked').map(function () { return this.value; }).get();
   }
   function refreshBulkBar() {
     var n = selectedIds().length;
     $('#bulkCount').text(n);
-    $('#bulkBar').toggleClass('d-none', n === 0);
-  }
-  function submitBulk(action, ids, reason) {
-    var holder = $('#bulkIds').empty();
-    ids.forEach(function (id) {
-      $('<input>').attr({ type: 'hidden', name: 'ids', value: id }).appendTo(holder);
-    });
-    $('#bulkReason').val(reason || '');
-    $('#bulkForm').attr('action', action).trigger('submit');
+    $('#bulkBar').toggleClass('show', n > 0);
   }
   $('#generalTable').on('change', '.row-select', refreshBulkBar);
   $('#selectAll').on('change', function () {
@@ -220,21 +267,29 @@ $(function () {
     $('#generalTable').find('.row-select, #selectAll').prop('checked', false);
     refreshBulkBar();
   });
-  $('#bulkReject').on('click', function () {
-    var ids = selectedIds();
-    if (!ids.length) { return; }
-    var reason = window.prompt('Reason for rejecting ' + ids.length + ' candidate(s):', '');
-    if (reason === null) { return; }        // cancelled
-    if (!$.trim(reason)) { window.alert('A reason is required.'); return; }
-    submitBulk("{% url 'candidate_bulk_reject' %}", ids, reason);
-  });
   $('#bulkDelete').on('click', function () {
     var ids = selectedIds();
     if (!ids.length) { return; }
     if (!window.confirm('Permanently delete ' + ids.length + ' candidate(s) and all their ' +
                         'interviews, notes and history? This cannot be undone.')) { return; }
-    submitBulk("{% url 'candidate_bulk_delete' %}", ids, '');
+    var holder = $('#bulkDeleteIds').empty();
+    ids.forEach(function (id) {
+      $('<input>').attr({ type: 'hidden', name: 'ids', value: id }).appendTo(holder);
+    });
+    $('#bulkDeleteForm').trigger('submit');
   });
+  $('.bulk-act').on('click', function () {
+    var ids = selectedIds();
+    if (!ids.length) { return; }
+    var holder = $('#actionBulkIds').empty();
+    ids.forEach(function (id) {
+      $('<input>').attr({ type: 'hidden', name: 'ids', value: id }).appendTo(holder);
+    });
+    var btn = this;
+    btn.setAttribute('data-msg', ids.length + ' candidate(s) selected.');
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('actionModal')).show(btn);
+  });
+  {% endif %}
 
   // Summarise the ticked positions on the closed dropdown, like a select would.
   function refreshRoleLabel() {
