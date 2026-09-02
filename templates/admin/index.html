@@ -1,0 +1,345 @@
+{% extends "admin/base_site.html" %}
+{% load i18n log admin_extras %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  #content { padding: 0; max-width: none; }
+  #content-title, #content-subtitle { display: none; }
+  .ats-dash { display: flex; align-items: flex-start; min-height: calc(100vh - 60px); }
+
+  .ats-dash-sidebar {
+    width: 208px;
+    flex: none;
+    padding: 24px 16px;
+    background: #fff;
+    border-right: 1px solid #e6eaea;
+    min-height: calc(100vh - 60px);
+  }
+  .ats-dash-sidebar h3 {
+    font: 600 10px/1 'Poppins', sans-serif;
+    letter-spacing: .09em;
+    color: #9aa8ad;
+    padding: 0 10px 10px;
+    margin: 0;
+    text-transform: uppercase;
+  }
+  .ats-manage-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 10px;
+    border-radius: 6px;
+    font: 500 13px/1 'Poppins', sans-serif;
+    color: #3d4f57;
+    text-decoration: none;
+  }
+  .ats-manage-item:hover { background: #f4f8f8; color: #0e6f6b; }
+  .ats-manage-item .ats-count { font: 400 11.5px/1 'Poppins', sans-serif; color: #a8b4b8; }
+  .ats-sidebar-divider { height: 1px; background: #eef1f1; margin: 14px 10px; }
+  .ats-settings-link {
+    display: block;
+    padding: 9px 10px;
+    font: 500 13px/1 'Poppins', sans-serif;
+    color: #3d4f57;
+    text-decoration: none;
+  }
+  .ats-settings-link:hover { color: #0e6f6b; }
+  .ats-settings-link button {
+    background: none; border: none; padding: 0; margin: 0;
+    font: 500 13px/1 'Poppins', sans-serif; color: #3d4f57; cursor: pointer;
+  }
+  .ats-settings-link button:hover { color: #0e6f6b; }
+
+  .ats-dash-main { flex: 1; min-width: 0; padding: 24px 28px 28px; }
+  .ats-dash-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .ats-dash-head h1 {
+    font: 700 24px/1.2 'Poppins', sans-serif;
+    color: #1a2e35;
+    margin: 0;
+  }
+  .ats-dash-head p {
+    font: 400 12.5px/1.7 'Poppins', sans-serif;
+    color: #5a6b73;
+    margin: 4px 0 0;
+  }
+  .ats-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 280px;
+    padding: 9px 12px;
+    background: #fff;
+    border: 1px solid #dfe5e6;
+    border-radius: 6px;
+  }
+  .ats-search svg { flex: none; color: #8a969b; }
+  .ats-search input {
+    border: none;
+    outline: none;
+    flex: 1;
+    font: 400 12.5px/1 'Poppins', sans-serif;
+    color: #1a2e35;
+  }
+  .ats-search input::placeholder { color: #98a4a9; }
+
+  .ats-dash-grid {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 18px;
+    margin-top: 20px;
+    align-items: start;
+  }
+  .ats-groups { display: flex; flex-direction: column; gap: 16px; }
+  .ats-group {
+    background: #fff;
+    border: 1px solid #e6eaea;
+    border-radius: 8px;
+    padding: 18px 20px 20px;
+  }
+  .ats-group-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .ats-group-head span.ats-group-name {
+    font: 600 11px/1 'Poppins', sans-serif;
+    letter-spacing: .08em;
+    color: #0e6f6b;
+    text-transform: uppercase;
+  }
+  .ats-group-head span.ats-group-meta {
+    font: 400 11px/1 'Poppins', sans-serif;
+    color: #a8b4b8;
+  }
+  .ats-group-models {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+  }
+  .ats-model-card {
+    border: 1px solid #eef1f1;
+    border-radius: 7px;
+    padding: 13px 14px;
+  }
+  .ats-model-card-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .ats-model-card-top a {
+    font: 600 13.5px/1.3 'Poppins', sans-serif;
+    color: #1a2e35;
+    text-decoration: none;
+  }
+  .ats-model-card-top a:hover { color: #0e6f6b; }
+  .ats-model-card-top span.ats-count { font: 400 11.5px/1 'Poppins', sans-serif; color: #8a969b; white-space: nowrap; }
+  .ats-model-actions { display: flex; gap: 7px; margin-top: 12px; }
+  .ats-model-actions a {
+    flex: 1;
+    padding: 6px 0;
+    border-radius: 5px;
+    text-align: center;
+    text-decoration: none;
+    font: 600 11.5px/1 'Poppins', sans-serif;
+  }
+  .ats-model-actions a.ats-add { background: #0e6f6b; color: #fff; }
+  .ats-model-actions a.ats-add:hover { background: #0a5854; }
+  .ats-model-actions a.ats-manage { border: 1px solid #dfe5e6; color: #2f4858; font-weight: 500; }
+  .ats-model-actions a.ats-manage:hover { border-color: #0e6f6b; color: #0e6f6b; }
+
+  .ats-activity {
+    background: #fff;
+    border: 1px solid #e6eaea;
+    border-radius: 8px;
+    padding: 18px 20px 14px;
+  }
+  .ats-activity-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .ats-activity-head span.ats-activity-title { font: 600 14px/1 'Poppins', sans-serif; color: #1a2e35; }
+  .ats-activity-head span.ats-activity-sub { font: 400 11px/1 'Poppins', sans-serif; color: #a8b4b8; }
+  .ats-activity-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 11px;
+    padding: 11px 0;
+    border-bottom: 1px solid #f3f6f6;
+  }
+  .ats-activity-item:last-child { border-bottom: none; }
+  .ats-activity-icon {
+    width: 22px; height: 22px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font: 700 11px/1 'Poppins', sans-serif;
+    flex: none;
+  }
+  .ats-activity-icon.add { background: #e4eeed; color: #0e6f6b; }
+  .ats-activity-icon.change { background: #eef1f1; color: #5a6b73; }
+  .ats-activity-icon.delete { background: #fbeaea; color: #a13a3a; }
+  .ats-activity-body { flex: 1; min-width: 0; }
+  .ats-activity-body .ats-activity-name {
+    font: 500 13px/1.4 'Poppins', sans-serif;
+    color: #1a2e35;
+    text-decoration: none;
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ats-activity-body .ats-activity-detail { font: 400 11px/1.5 'Poppins', sans-serif; color: #8a969b; }
+  .ats-activity-when { font: 400 11px/1.5 'Poppins', sans-serif; color: #a8b4b8; white-space: nowrap; }
+  .ats-activity-empty { font: 400 12.5px/1.6 'Poppins', sans-serif; color: #8a969b; padding: 8px 0; }
+
+  @media (max-width: 900px) {
+    .ats-dash-grid { grid-template-columns: 1fr; }
+    .ats-dash { flex-direction: column; }
+    .ats-dash-sidebar { width: 100%; border-right: none; border-bottom: 1px solid #e6eaea; min-height: 0; }
+  }
+</style>
+{% endblock %}
+
+{% block breadcrumbs %}{% endblock %}
+{% block nav-breadcrumbs %}{% endblock %}
+{% block nav-sidebar %}{% endblock %}
+
+{% block content_title %}{% endblock %}
+{% block content_subtitle %}{% endblock %}
+
+{% block content %}
+<div class="ats-dash">
+  <div class="ats-dash-sidebar">
+    <h3>{% translate 'Manage' %}</h3>
+    {% for app in app_list %}
+      {% for model in app.models %}
+        {% if model.admin_url %}
+          <a class="ats-manage-item" href="{{ model.admin_url }}" data-search="{{ model.name|lower }}">
+            <span>{{ model.name }}</span>
+            <span class="ats-count">{{ model|model_count }}</span>
+          </a>
+        {% else %}
+          <span class="ats-manage-item" data-search="{{ model.name|lower }}"><span>{{ model.name }}</span></span>
+        {% endif %}
+      {% endfor %}
+    {% endfor %}
+    <div class="ats-sidebar-divider"></div>
+    <h3>{% translate 'Settings' %}</h3>
+    {% if user.has_usable_password %}
+      <a class="ats-settings-link" href="{% url 'admin:password_change' %}">{% translate 'Change password' %}</a>
+    {% endif %}
+    <form method="post" action="{% url 'admin:logout' %}">
+      {% csrf_token %}
+      <button type="submit" class="ats-settings-link">{% translate 'Log out' %}</button>
+    </form>
+  </div>
+
+  <div class="ats-dash-main">
+    <div class="ats-dash-head">
+      <div>
+        <h1>{% translate 'Site administration' %}</h1>
+        <p>{{ app_list|total_models }} {% translate 'models across' %} {{ app_list|length }} {% translate 'areas' %}</p>
+      </div>
+      <div class="ats-search">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input type="text" id="ats-model-search" placeholder="{% translate 'Search models' %}" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="ats-dash-grid">
+      <div class="ats-groups" id="ats-groups">
+        {% if app_list %}
+          {% for app in app_list %}
+            <div class="ats-group" data-app>
+              <div class="ats-group-head">
+                <span class="ats-group-name">{{ app.name }}</span>
+                <span class="ats-group-meta">{{ app.models|length }} {% if app.models|length == 1 %}{% translate 'model' %}{% else %}{% translate 'models' %}{% endif %}</span>
+              </div>
+              <div class="ats-group-models">
+                {% for model in app.models %}
+                  <div class="ats-model-card" data-search="{{ model.name|lower }}">
+                    <div class="ats-model-card-top">
+                      {% if model.admin_url %}
+                        <a href="{{ model.admin_url }}">{{ model.name }}</a>
+                      {% else %}
+                        <span>{{ model.name }}</span>
+                      {% endif %}
+                      <span class="ats-count">{{ model|model_count }}</span>
+                    </div>
+                    <div class="ats-model-actions">
+                      {% if model.add_url %}<a class="ats-add" href="{{ model.add_url }}">{% translate 'Add' %}</a>{% endif %}
+                      {% if model.admin_url %}<a class="ats-manage" href="{{ model.admin_url }}">{% if model.view_only %}{% translate 'View' %}{% else %}{% translate 'Manage' %}{% endif %}</a>{% endif %}
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+            </div>
+          {% endfor %}
+        {% else %}
+          <p>{% translate "You don't have permission to view or edit anything." %}</p>
+        {% endif %}
+      </div>
+
+      <div class="ats-activity">
+        <div class="ats-activity-head">
+          <span class="ats-activity-title">{% translate 'Recent activity' %}</span>
+          <span class="ats-activity-sub">{% translate 'Yours' %}</span>
+        </div>
+        {% get_admin_log 10 as admin_log for_user user %}
+        {% if not admin_log %}
+          <p class="ats-activity-empty">{% translate 'None available' %}</p>
+        {% else %}
+          {% for entry in admin_log %}
+            <div class="ats-activity-item">
+              <span class="ats-activity-icon {% if entry.is_addition %}add{% elif entry.is_deletion %}delete{% else %}change{% endif %}">{% if entry.is_addition %}+{% elif entry.is_deletion %}&times;{% else %}&#9998;{% endif %}</span>
+              <div class="ats-activity-body">
+                {% if entry.is_deletion or not entry.get_admin_url %}
+                  <span class="ats-activity-name">{{ entry.object_repr }}</span>
+                {% else %}
+                  <a class="ats-activity-name" href="{{ entry.get_admin_url }}">{{ entry.object_repr }}</a>
+                {% endif %}
+                <span class="ats-activity-detail">{% if entry.content_type %}{{ entry.content_type.name|capfirst }}{% else %}{% translate 'Unknown content' %}{% endif %}</span>
+              </div>
+              <span class="ats-activity-when">{{ entry.action_time|timesince }} {% translate 'ago' %}</span>
+            </div>
+          {% endfor %}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var input = document.getElementById('ats-model-search');
+  if (!input) return;
+  input.addEventListener('input', function() {
+    var q = input.value.trim().toLowerCase();
+    document.querySelectorAll('.ats-manage-item').forEach(function(el) {
+      el.hidden = q && el.dataset.search.indexOf(q) === -1;
+    });
+    document.querySelectorAll('#ats-groups [data-app]').forEach(function(group) {
+      var anyVisible = false;
+      group.querySelectorAll('.ats-model-card').forEach(function(card) {
+        var match = !q || card.dataset.search.indexOf(q) !== -1;
+        card.hidden = !match;
+        if (match) anyVisible = true;
+      });
+      group.hidden = !anyVisible;
+    });
+  });
+})();
+</script>
+{% endblock %}
