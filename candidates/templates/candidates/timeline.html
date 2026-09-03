@@ -94,6 +94,42 @@
 .activity-title { font-size:.8rem; font-weight:600; color:#1a2e35; }
 .activity-meta { font-size:.72rem; color:#8a969b; margin-top:2px; }
 .activity-note { font-size:.8rem; color:#4a5a60; margin-top:6px; background:#f6f8f8; border-radius:6px; padding:9px 12px; }
+
+html { scroll-behavior: smooth; }
+
+/* Top-level block headers (Candidate Details / AI-Scan / Hiring / History) -
+   each gets its own icon + colour so the 4 blocks are easy to tell apart at
+   a glance while scrolling, distinct from the smaller .section-eyebrow used
+   for the cards *within* each block. */
+.block-header { display:flex; align-items:center; gap:10px; padding-bottom:12px; margin-bottom:18px; border-bottom:2px solid; scroll-margin-top:70px; }
+.block-header-icon { width:30px; height:30px; border-radius:8px; display:inline-flex; align-items:center; justify-content:center; font-size:.92rem; flex-shrink:0; }
+.block-header-title { font-size:1rem; font-weight:700; }
+
+.block-header-details { border-color: var(--primary-green); }
+.block-header-details .block-header-icon { background:#dff2f1; color: var(--primary-green); }
+.block-header-details .block-header-title { color: var(--dark-green); }
+
+.block-header-ai { border-color:#6f42c1; }
+.block-header-ai .block-header-icon { background:#ede4f8; color:#6f42c1; }
+.block-header-ai .block-header-title { color:#4d2d99; }
+
+.block-header-hiring { border-color:#e0c97e; }
+.block-header-hiring .block-header-icon { background:#fbf1c9; color:#7a5c00; }
+.block-header-hiring .block-header-title { color:#7a5c00; }
+
+.block-header-history { border-color:#8ea3ac; }
+.block-header-history .block-header-icon { background:#e9eef0; color:#455a64; }
+.block-header-history .block-header-title { color:#37474f; }
+
+/* Sticky quick-nav: jump between blocks on this long page, current block
+   highlighted in its own colour as it scrolls into view. */
+.quick-nav { position:sticky; top:0; z-index:15; display:flex; gap:8px; padding:10px 0; margin-bottom:20px; background:var(--light-bg); }
+.quick-nav-link { display:inline-flex; align-items:center; gap:7px; padding:7px 14px; border-radius:20px; border:1.5px solid var(--border-color); background:#fff; font-size:.8rem; font-weight:600; color:#5a6b73; text-decoration:none; transition:border-color .12s ease, color .12s ease; }
+.quick-nav-link:hover { color:#1a2e35; }
+.quick-nav-link.active[data-block="details"] { border-color: var(--primary-green); color: var(--dark-green); background:#dff2f1; }
+.quick-nav-link.active[data-block="ai"] { border-color:#6f42c1; color:#4d2d99; background:#ede4f8; }
+.quick-nav-link.active[data-block="hiring"] { border-color:#e0c97e; color:#7a5c00; background:#fbf1c9; }
+.quick-nav-link.active[data-block="history"] { border-color:#8ea3ac; color:#37474f; background:#e9eef0; }
 </style>
 {% endblock %}
 
@@ -123,10 +159,20 @@
   </div>
 </div>
 
+<nav class="quick-nav">
+  <a href="#block-details" class="quick-nav-link" data-block="details"><i class="bi bi-person-vcard"></i> Candidate Details</a>
+  <a href="#block-ai" class="quick-nav-link" data-block="ai"><i class="bi bi-stars"></i> AI-Scan</a>
+  <a href="#block-hiring" class="quick-nav-link" data-block="hiring"><i class="bi bi-signpost-split"></i> Hiring</a>
+  <a href="#block-history" class="quick-nav-link" data-block="history"><i class="bi bi-clock-history"></i> History</a>
+</nav>
+
 <div class="profile-sections">
 
-  <div>
-    <div class="section-eyebrow">Candidate Details</div>
+  <div id="block-details">
+    <div class="block-header block-header-details">
+      <span class="block-header-icon"><i class="bi bi-person-vcard"></i></span>
+      <span class="block-header-title">Candidate Details</span>
+    </div>
     <div class="row g-3">
       <div class="col-lg-7">
         <div class="card app-card p-4 mb-3">
@@ -246,8 +292,11 @@
     </div>
   </div>
 
-  <div>
-    <div class="section-eyebrow">AI-Scan</div>
+  <div id="block-ai">
+    <div class="block-header block-header-ai">
+      <span class="block-header-icon"><i class="bi bi-stars"></i></span>
+      <span class="block-header-title">AI-Scan</span>
+    </div>
     <div class="row g-3">
       <div class="col-lg-6">
         <div class="card app-card p-4 h-100">
@@ -341,8 +390,11 @@
     </div>
   </div>
 
-  <div>
-    <div class="section-eyebrow">Hiring</div>
+  <div id="block-hiring">
+    <div class="block-header block-header-hiring">
+      <span class="block-header-icon"><i class="bi bi-signpost-split"></i></span>
+      <span class="block-header-title">Hiring</span>
+    </div>
 
     {% for stage in hiring_stages %}
     <div class="card app-card p-4 mb-3 stage-card {% if stage.is_locked %}stage-locked{% elif stage.is_done %}stage-done{% else %}stage-active{% endif %}">
@@ -465,8 +517,11 @@
     </div>
   </div>
 
-  <div>
-    <div class="section-eyebrow">History</div>
+  <div id="block-history">
+    <div class="block-header block-header-history">
+      <span class="block-header-icon"><i class="bi bi-clock-history"></i></span>
+      <span class="block-header-title">History</span>
+    </div>
 
     <div class="card app-card p-4 mb-3">
       <div class="d-flex align-items-baseline justify-content-between mb-3">
@@ -666,6 +721,32 @@ pollCandidateAction("{% url 'candidate_regenerate_summary_status' candidate.pk %
         });
     }
   });
+})();
+
+// Quick-nav: smooth-scroll to a block on click, and highlight whichever
+// block is currently in view as the page scrolls (IntersectionObserver
+// picks the block whose header has scrolled highest past the sticky nav).
+(function () {
+  var links = document.querySelectorAll('.quick-nav-link');
+  if (!links.length) return;
+  var blocks = Array.prototype.map.call(links, function (link) {
+    return document.getElementById(link.getAttribute('href').slice(1));
+  });
+
+  function setActive(id) {
+    links.forEach(function (link) {
+      link.classList.toggle('active', link.getAttribute('href') === '#' + id);
+    });
+  }
+
+  if ('IntersectionObserver' in window) {
+    var observer = new IntersectionObserver(function (entries) {
+      var visible = entries.filter(function (e) { return e.isIntersecting; });
+      if (visible.length) { setActive(visible[0].target.id); }
+    }, { rootMargin: '-72px 0px -70% 0px', threshold: 0 });
+    blocks.forEach(function (block) { if (block) { observer.observe(block); } });
+  }
+  setActive('block-details');
 })();
 </script>
 {% endblock %}
