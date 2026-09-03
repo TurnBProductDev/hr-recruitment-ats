@@ -19,6 +19,12 @@ class BootstrapFormMixin:
 
 
 class InterviewForm(BootstrapFormMixin, forms.ModelForm):
+    # Not a model field - just where the invite email goes. Kept separate
+    # from Candidate.email so editing it here (e.g. a typo, or a personal
+    # address the candidate asked to use instead) never overwrites the
+    # candidate's stored contact email.
+    candidate_email = forms.EmailField(label='Candidate Email', required=False)
+
     class Meta:
         model = Interview
         fields = ['round_type', 'interviewer', 'scheduled_date', 'mode', 'meeting_link']
@@ -30,6 +36,8 @@ class InterviewForm(BootstrapFormMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         # On a reschedule the candidate comes from the interview being edited.
         self.candidate = candidate or (self.instance.candidate if self.instance.candidate_id else None)
+        if self.candidate and not self.is_bound:
+            self.fields['candidate_email'].initial = self.candidate.email
         # Only people in the Interviewer group are assignable, ordered by name.
         User = get_user_model()
         self.fields['interviewer'].queryset = (

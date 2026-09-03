@@ -1,0 +1,32 @@
+<div class="alert alert-success py-2 small mb-3">
+  <i class="bi bi-check-circle"></i>
+  Interview {% if interview.status == 'RESCHEDULED' %}rescheduled{% else %}scheduled{% endif %}
+  for {{ interview.scheduled_date|date:"d M Y, H:i" }}.
+</div>
+<p class="small text-muted mb-2">Review the invite below, edit if needed, then send.</p>
+<form method="post" action="{% url 'interview_send_invite' interview.pk %}" data-step="send-invite">
+  {% csrf_token %}
+  <div class="mb-2">
+    <label class="form-label small mb-1">To</label>
+    <input type="email" name="to_email" class="form-control form-control-sm" value="{{ draft.to_email }}" readonly>
+  </div>
+  <div class="mb-2">
+    <label class="form-label small mb-1">CC <span class="text-muted">(fixed - not editable)</span></label>
+    <input type="text" class="form-control form-control-sm" value="{{ draft.cc_list|join:", "|default:"None" }}" readonly>
+  </div>
+  <div class="mb-2">
+    <label class="form-label small mb-1">Subject</label>
+    <input type="text" name="subject" class="form-control form-control-sm" value="{{ draft.subject }}">
+  </div>
+  <div class="mb-3">
+    <label class="form-label small mb-1">Message</label>
+    <textarea name="body" class="form-control" rows="12">{{ draft.body }}</textarea>
+  </div>
+  <div id="inviteSendError" class="alert alert-danger py-2 small mb-3" hidden></div>
+  <div class="d-flex justify-content-end gap-2">
+    <button type="button" class="btn btn-outline-app" data-bs-dismiss="modal">Skip - Don't Send Email</button>
+    <button type="submit" class="btn btn-fill-app" {% if not draft.to_email %}disabled title="No candidate email to send to"{% endif %}>
+      <i class="bi bi-send"></i> Send Invite
+    </button>
+  </div>
+</form>

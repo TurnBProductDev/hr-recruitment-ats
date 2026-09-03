@@ -189,8 +189,23 @@ LOGOUT_REDIRECT_URL = 'vacancy_list'
 
 # Console backend by default so "Send Invite" / notifications work without
 # any setup in dev. Point EMAIL_BACKEND at django.core.mail.backends.smtp
-# and set EMAIL_HOST/PORT/HOST_USER/HOST_PASSWORD for real delivery.
+# and set EMAIL_HOST/PORT/HOST_USER/HOST_PASSWORD for real delivery (e.g. the
+# careers@turnb.com mailbox's SMTP AUTH credentials).
 EMAIL_BACKEND = os.environ.get(
     "EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend"
 )
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "hr@example.com")
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "True") == "True"
+EMAIL_USE_SSL = os.environ.get("EMAIL_USE_SSL", "False") == "True"
+
+# --- Interview invite emails --------------------------------------------
+# From/CC on the interview invite sent from a candidate's profile page.
+# Unset EMAIL_HOST (i.e. still on the console backend) = invites print to the
+# console/log instead of actually sending, same as every other unconfigured
+# integration in this app.
+INTERVIEW_INVITE_FROM_EMAIL = os.environ.get("INTERVIEW_INVITE_FROM_EMAIL", "careers@turnb.com")
+INTERVIEW_INVITE_CC_EMAIL = os.environ.get("INTERVIEW_INVITE_CC_EMAIL", "Amrita.Sunilkumar@turnb.com")

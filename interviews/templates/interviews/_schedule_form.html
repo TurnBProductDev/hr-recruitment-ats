@@ -1,0 +1,39 @@
+<form method="post" action="{{ request.path }}" data-step="schedule">
+  {% csrf_token %}
+  {% for e in form.non_field_errors %}<div class="alert alert-danger py-2 small">{{ e }}</div>{% endfor %}
+  <div class="row g-3">
+    <div class="col-md-6">
+      <label class="form-label">Round Type</label>
+      {{ form.round_type }}
+      {% for e in form.round_type.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Interviewer</label>
+      {{ form.interviewer }}
+      {% for e in form.interviewer.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Date &amp; Time</label>
+      {{ form.scheduled_date }}
+      {% for e in form.scheduled_date.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Mode</label>
+      {{ form.mode }}
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Candidate Email</label>
+      {{ form.candidate_email }}
+      <div class="form-text">Where the interview invite will be sent - edit if needed.</div>
+      {% for e in form.candidate_email.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Meeting Link <span class="text-muted small">(optional)</span></label>
+      {{ form.meeting_link }}
+    </div>
+  </div>
+  <div class="mt-4 d-flex justify-content-end gap-2">
+    <button type="button" class="btn btn-outline-app" data-bs-dismiss="modal">Cancel</button>
+    <button type="submit" class="btn btn-fill-app">Save &amp; Continue</button>
+  </div>
+</form>
