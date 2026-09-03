@@ -190,8 +190,10 @@
         <div class="card app-card p-4 h-100">
           <h5 class="mb-3"><i class="bi bi-stars"></i> AI CV Summary</h5>
           {% if candidate.cv_summary %}
-            {# Markdown source, kept inert - marked.js + DOMPurify below render it into headings/table/bullets.
-               Pre-markdown-prompt summaries are auto-split into sentence bullets by cv_summary_markdown. #}
+            {% comment %}
+              Markdown source, kept inert - marked.js + DOMPurify below render it into headings/table/bullets.
+              Pre-markdown-prompt summaries are auto-split into sentence bullets by cv_summary_markdown.
+            {% endcomment %}
             <div id="cv-summary-raw" hidden>{{ candidate.cv_summary_markdown }}</div>
             <div id="cv-summary-md" class="cv-summary-md">
               <p class="mb-0" style="white-space: pre-line;">{{ candidate.cv_summary }}</p>
@@ -259,6 +261,11 @@
           {% else %}
           <p class="text-muted mb-0">No status recorded yet.</p>
           {% endif %}
+        </div>
+
+        <div class="card app-card p-4 mb-3">
+          <h5 class="mb-3">Final Status</h5>
+          <span class="badge-status" style="background:{{ final_status.color }}; color:#fff; font-size:.82rem; padding:.4em .85em;">{{ final_status.label }}</span>
         </div>
 
         <div class="card app-card p-4 mb-3">
@@ -346,11 +353,6 @@
           {% else %}
           <a href="{% url 'interview_schedule' candidate.pk %}" class="btn btn-sm btn-outline-app mt-2">Schedule Interview</a>
           {% endif %}
-        </div>
-
-        <div class="card app-card p-4">
-          <h5 class="mb-3">Final Status</h5>
-          <span class="badge-status" style="background:{{ final_status.color }}; color:#fff; font-size:.82rem; padding:.4em .85em;">{{ final_status.label }}</span>
         </div>
       </div>
     </div>
