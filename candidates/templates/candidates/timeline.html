@@ -264,11 +264,6 @@
         </div>
 
         <div class="card app-card p-4 mb-3">
-          <h5 class="mb-3">Final Status</h5>
-          <span class="badge-status" style="background:{{ final_status.color }}; color:#fff; font-size:.82rem; padding:.4em .85em;">{{ final_status.label }}</span>
-        </div>
-
-        <div class="card app-card p-4 mb-3">
           <h5 class="mb-3">Next Stage &mdash; Update Status</h5>
           <form method="post" action="{% url 'candidate_set_status' candidate.pk %}" class="js-autosave">
             {% csrf_token %}
@@ -293,7 +288,7 @@
           </form>
         </div>
 
-        <div class="card app-card p-4">
+        <div class="card app-card p-4 mb-3">
           <h5 class="mb-3">Communication Log</h5>
           <form method="post" action="{% url 'candidate_add_log' candidate.pk %}" class="mb-3 js-autosave">
             {% csrf_token %}
@@ -311,6 +306,11 @@
               <div class="small text-muted">{{ l.logged_by|default:"Unknown" }} &middot; {{ l.logged_at|date:"d M Y H:i" }}</div>
             </div>
           {% empty %}<p class="text-muted mb-0">No communication logged yet.</p>{% endfor %}
+        </div>
+
+        <div class="card app-card p-4">
+          <h5 class="mb-3">Final Status</h5>
+          <span class="badge-status" style="background:{{ final_status.color }}; color:#fff; font-size:.82rem; padding:.4em .85em;">{{ final_status.label }}</span>
         </div>
       </div>
 
