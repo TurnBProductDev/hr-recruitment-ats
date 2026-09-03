@@ -190,8 +190,9 @@
         <div class="card app-card p-4 h-100">
           <h5 class="mb-3"><i class="bi bi-stars"></i> AI CV Summary</h5>
           {% if candidate.cv_summary %}
-            {# Raw Markdown source, kept inert - marked.js + DOMPurify below render it into headings/table/bullets. #}
-            <div id="cv-summary-raw" hidden>{{ candidate.cv_summary }}</div>
+            {# Markdown source, kept inert - marked.js + DOMPurify below render it into headings/table/bullets.
+               Pre-markdown-prompt summaries are auto-split into sentence bullets by cv_summary_markdown. #}
+            <div id="cv-summary-raw" hidden>{{ candidate.cv_summary_markdown }}</div>
             <div id="cv-summary-md" class="cv-summary-md">
               <p class="mb-0" style="white-space: pre-line;">{{ candidate.cv_summary }}</p>
             </div>

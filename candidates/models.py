@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import uuid
 
 from django.conf import settings
@@ -197,6 +198,22 @@ class Candidate(models.Model):
             return json.loads(self.match_breakdown)
         except ValueError:
             return {}
+
+    @property
+    def cv_summary_markdown(self):
+        """cv_summary as Markdown for the profile page's client-side renderer.
+        Summaries from before the CV-summary prompt switched to Markdown are
+        one plain paragraph - split those into sentence bullets here so they
+        read as a scannable list instead of a wall of text. Summaries that
+        already carry real Markdown (headings/tables/bullets) pass through
+        untouched."""
+        text = (self.cv_summary or '').strip()
+        if not text or re.search(r'(^|\n)\s*(#{1,6}\s|[-*]\s|\|)', text):
+            return text
+        sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+(?=[A-Z])', text) if s.strip()]
+        if len(sentences) < 2:
+            return text
+        return '\n'.join(f'- {s}' for s in sentences)
 
 
 # A hold taken at the Open stage is what this app has always called a
