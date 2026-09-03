@@ -28,6 +28,9 @@
 .match-score-mid { color: #8a6a12; }
 .match-score-low { color: #dc3545; }
 .match-subscore-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px 24px; padding:12px 0; margin:12px 0; border-top:1px solid var(--border-color); border-bottom:1px solid var(--border-color); font-size:.85rem; }
+
+/* Candidate Details / AI-Scan / Hiring: top-level page sections */
+.profile-sections { display:flex; flex-direction:column; gap:32px; }
 </style>
 {% endblock %}
 
@@ -57,269 +60,301 @@
   </div>
 </div>
 
-<div class="row g-3">
-  <div class="col-lg-7">
-    <div class="card app-card p-4 mb-3">
-      <div class="section-eyebrow">Contact</div>
-      <div class="field-grid">
-        <div><div class="field-label">Email</div><div class="field-value">{{ candidate.email }}</div></div>
-        <div><div class="field-label">Phone</div><div class="field-value">{{ candidate.phone|default:"-" }}</div></div>
-        <div><div class="field-label">DOB</div><div class="field-value {% if not candidate.dob %}text-muted{% endif %}">{{ candidate.dob|default:"-" }}</div></div>
-        <div><div class="field-label">Location</div><div class="field-value {% if not candidate.current_location %}text-muted{% endif %}">{{ candidate.current_location|default:"-" }}</div></div>
-        <div><div class="field-label">LinkedIn</div><div class="field-value {% if not candidate.linkedin %}text-muted{% endif %}">{% if candidate.linkedin %}<a href="{{ candidate.linkedin }}" target="_blank">{{ candidate.linkedin }}</a>{% else %}-{% endif %}</div></div>
-        <div><div class="field-label">Portfolio</div><div class="field-value {% if not candidate.portfolio_url %}text-muted{% endif %}">{% if candidate.portfolio_url %}<a href="{{ candidate.portfolio_url }}" target="_blank">{{ candidate.portfolio_url }}</a>{% else %}-{% endif %}</div></div>
-      </div>
-    </div>
+<div class="profile-sections">
 
-    <div class="card app-card p-4 mb-3">
-      <div class="section-eyebrow">Background</div>
-      <div class="field-grid">
-        <div class="field-full"><div class="field-label">Qualification</div><div class="field-value {% if not candidate.qualification %}text-muted{% endif %}">{{ candidate.qualification|default:"-" }}</div></div>
-        <div><div class="field-label">Notice Period</div><div class="field-value {% if not candidate.notice_period %}text-muted{% endif %}">{{ candidate.notice_period|default:"-" }}</div></div>
-        <div><div class="field-label">Current / Expected Salary</div><div class="field-value">{{ candidate.current_salary|default:"-" }} / {{ candidate.expected_salary|default:"-" }}</div></div>
-        {% if candidate.resume_url %}
-        <div class="field-full"><div class="field-label">Resume (CV)</div><div class="field-value"><a href="{{ candidate.resume_url }}" target="_blank"><i class="bi bi-file-earmark-person"></i> Open CV</a></div></div>
-        {% elif candidate.resume_blob_url %}
-        <div class="field-full"><div class="field-label">Resume</div><div class="field-value"><a href="{{ candidate.resume_blob_url.url }}" target="_blank">Download / Preview</a></div></div>
-        {% endif %}
-      </div>
-    </div>
-
-    <div class="card app-card p-4 mb-3">
-      <div class="section-eyebrow">Application</div>
-      <div class="d-flex flex-column gap-3">
-        <div>
-          <div class="field-label">Applied Position</div>
-          <div class="field-value">
-            {% if candidate.role_applied %}{{ candidate.role_applied }}
-            {% else %}<span class="text-muted">Not captured</span>{% endif %}
+  <div>
+    <div class="section-eyebrow">Candidate Details</div>
+    <div class="row g-3">
+      <div class="col-lg-7">
+        <div class="card app-card p-4 mb-3">
+          <div class="section-eyebrow">Contact</div>
+          <div class="field-grid">
+            <div><div class="field-label">Email</div><div class="field-value">{{ candidate.email }}</div></div>
+            <div><div class="field-label">Phone</div><div class="field-value">{{ candidate.phone|default:"-" }}</div></div>
+            <div><div class="field-label">DOB</div><div class="field-value {% if not candidate.dob %}text-muted{% endif %}">{{ candidate.dob|default:"-" }}</div></div>
+            <div><div class="field-label">Location</div><div class="field-value {% if not candidate.current_location %}text-muted{% endif %}">{{ candidate.current_location|default:"-" }}</div></div>
+            <div><div class="field-label">LinkedIn</div><div class="field-value {% if not candidate.linkedin %}text-muted{% endif %}">{% if candidate.linkedin %}<a href="{{ candidate.linkedin }}" target="_blank">{{ candidate.linkedin }}</a>{% else %}-{% endif %}</div></div>
+            <div><div class="field-label">Portfolio</div><div class="field-value {% if not candidate.portfolio_url %}text-muted{% endif %}">{% if candidate.portfolio_url %}<a href="{{ candidate.portfolio_url }}" target="_blank">{{ candidate.portfolio_url }}</a>{% else %}-{% endif %}</div></div>
           </div>
-          <div class="form-text mb-0">What the applicant asked for, as captured from their CV / email.</div>
         </div>
-        <div>
-          <div class="field-label mb-1">Mapped Vacancy</div>
-          <form method="post" action="{% url 'candidate_change_job' candidate.pk %}" class="d-flex gap-2 align-items-center">
-            {% csrf_token %}
-            <select name="job" class="form-select form-select-sm flex-grow-1">
-              <option value="">— Unassigned —</option>
-              {% for j in all_jobs %}
-              <option value="{{ j.id }}" {% if candidate.job_id == j.id %}selected{% endif %}>{{ j.title }}</option>
-              {% endfor %}
-            </select>
-            <button type="submit" class="btn btn-sm btn-outline-app">Map</button>
-          </form>
+
+        <div class="card app-card p-4 mb-3">
+          <div class="section-eyebrow">Background</div>
+          <div class="field-grid">
+            <div class="field-full"><div class="field-label">Qualification</div><div class="field-value {% if not candidate.qualification %}text-muted{% endif %}">{{ candidate.qualification|default:"-" }}</div></div>
+            <div><div class="field-label">Notice Period</div><div class="field-value {% if not candidate.notice_period %}text-muted{% endif %}">{{ candidate.notice_period|default:"-" }}</div></div>
+            <div><div class="field-label">Current / Expected Salary</div><div class="field-value">{{ candidate.current_salary|default:"-" }} / {{ candidate.expected_salary|default:"-" }}</div></div>
+          </div>
         </div>
-        <div>
-          <div class="field-label mb-1">Source</div>
-          <form method="post" action="{% url 'candidate_change_source' candidate.pk %}" class="d-flex gap-2 align-items-center">
-            {% csrf_token %}
-            <input type="text" name="source" value="{{ candidate.source|default:'' }}" class="form-control form-control-sm flex-grow-1" placeholder="e.g. Careers">
-            <button type="submit" class="btn btn-sm btn-outline-app">Save</button>
-          </form>
+
+        <div class="card app-card p-4">
+          <div class="section-eyebrow">Application</div>
+          <div class="d-flex flex-column gap-3">
+            <div>
+              <div class="field-label">Applied Position</div>
+              <div class="field-value">
+                {% if candidate.role_applied %}{{ candidate.role_applied }}
+                {% else %}<span class="text-muted">Not captured</span>{% endif %}
+              </div>
+              <div class="form-text mb-0">What the applicant asked for, as captured from their CV / email.</div>
+            </div>
+            <div>
+              <div class="field-label mb-1">Mapped Vacancy</div>
+              <form method="post" action="{% url 'candidate_change_job' candidate.pk %}" class="d-flex gap-2 align-items-center">
+                {% csrf_token %}
+                <select name="job" class="form-select form-select-sm flex-grow-1">
+                  <option value="">— Unassigned —</option>
+                  {% for j in all_jobs %}
+                  <option value="{{ j.id }}" {% if candidate.job_id == j.id %}selected{% endif %}>{{ j.title }}</option>
+                  {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-sm btn-outline-app">Map</button>
+              </form>
+            </div>
+            <div>
+              <div class="field-label mb-1">Source</div>
+              <form method="post" action="{% url 'candidate_change_source' candidate.pk %}" class="d-flex gap-2 align-items-center">
+                {% csrf_token %}
+                <input type="text" name="source" value="{{ candidate.source|default:'' }}" class="form-control form-control-sm flex-grow-1" placeholder="e.g. Careers">
+                <button type="submit" class="btn btn-sm btn-outline-app">Save</button>
+              </form>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div class="card app-card p-4 mb-3">
-      <h5 class="mb-3"><i class="bi bi-bullseye"></i> Match Score</h5>
-      {% if candidate.match_score is not None %}
-        {% with b=candidate.match_breakdown_parsed %}
-        <div class="d-flex align-items-baseline gap-2">
-          <span class="match-score-num match-score-{{ candidate.match_score|score_tier }}">{{ candidate.match_score }}</span>
-          <span class="text-muted">/ 100</span>
-        </div>
-        <div class="small text-muted mt-1">{{ candidate.job.title|default:"the mapped vacancy" }} &middot; {{ candidate.match_scored_at|date:"d M Y" }}</div>
-
-        <div class="match-subscore-grid">
-          <div class="d-flex justify-content-between"><span class="text-muted">Skills</span><span class="fw-semibold font-monospace">{{ b.skills_score|default:"-" }}/30</span></div>
-          <div class="d-flex justify-content-between"><span class="text-muted">Experience</span><span class="fw-semibold font-monospace">{{ b.experience_score|default:"-" }}/30</span></div>
-          <div class="d-flex justify-content-between"><span class="text-muted">Education</span><span class="fw-semibold font-monospace">{{ b.education_score|default:"-" }}/30</span></div>
-          <div class="d-flex justify-content-between"><span class="text-muted">Overall Fit</span><span class="fw-semibold font-monospace">{{ b.fit_score|default:"-" }}/10</span></div>
+      <div class="col-lg-5">
+        <div class="card app-card p-4 mb-3">
+          <h5 class="mb-3">Education</h5>
+          {% for e in candidate.education.all %}
+            <div class="mb-2 pb-2 {% if not forloop.last %}border-bottom{% endif %}">
+              <strong>{{ e.qualification }}</strong> {% if e.specialization %}({{ e.specialization }}){% endif %}<br>
+              <span class="text-muted small">{{ e.institution|default:"-" }} &middot; {{ e.year_completed|default:"-" }} &middot; {{ e.percentage|default:"-" }}%</span>
+            </div>
+          {% empty %}<p class="text-muted mb-0">No education records.</p>{% endfor %}
         </div>
 
-        {% if b.matched_skills %}
-        <div class="mb-1">
-          <div class="small fw-semibold" style="color: var(--dark-green);">Matched</div>
-          <div class="small">{{ b.matched_skills|join:", " }}</div>
+        <div class="card app-card p-4 mb-3">
+          <h5 class="mb-3">Experience</h5>
+          {% for e in candidate.experience_set.all %}
+            <div class="mb-2 pb-2 {% if not forloop.last %}border-bottom{% endif %}">
+              <strong>{{ e.designation|default:"-" }}</strong> @ {{ e.company_name }}<br>
+              <span class="text-muted small">{{ e.start_date|default:"-" }} &rarr; {{ e.end_date|default:"Present" }} &middot; {{ e.skills|default:"" }}</span>
+            </div>
+          {% empty %}<p class="text-muted mb-0">No experience records.</p>{% endfor %}
         </div>
-        {% endif %}
-        {% if b.missing_skills %}
-        <div class="small"><span class="fw-semibold text-danger">Missing</span> {{ b.missing_skills|join:", " }}</div>
-        {% endif %}
-        {% endwith %}
-        {% if candidate.match_rationale %}<p class="small text-muted fst-italic mt-3 mb-0">{{ candidate.match_rationale }}</p>{% endif %}
-      {% elif candidate.match_state == 'ERROR' %}
-        <p class="text-danger mb-0">Scoring failed: {{ candidate.match_error }}</p>
-      {% elif candidate.job and candidate.job.title|lower != "general application" %}
-        <p class="text-muted mb-0">Not scored yet - use <a href="{% url 'candidate_score' %}">Score Candidates</a>.</p>
-      {% else %}
-        <p class="text-muted mb-0">Not mapped to a role, so this candidate can't be scored.</p>
-      {% endif %}
-    </div>
 
-    <div class="card app-card p-4 mb-3">
-      <h5 class="mb-3"><i class="bi bi-stars"></i> AI CV Summary</h5>
-      {% if candidate.cv_summary %}
-        {# Raw Markdown source, kept inert - marked.js + DOMPurify below render it into headings/table/bullets. #}
-        <div id="cv-summary-raw" hidden>{{ candidate.cv_summary }}</div>
-        <div id="cv-summary-md" class="cv-summary-md">
-          <p class="mb-0" style="white-space: pre-line;">{{ candidate.cv_summary }}</p>
+        <div class="card app-card p-4 mb-3">
+          <h5 class="mb-3">Attachments</h5>
+          {% if candidate.resume_url %}
+          <div class="mb-{% if attachments %}3{% else %}0{% endif %}">
+            <div class="field-label">Resume (CV)</div>
+            <div class="field-value"><a href="{{ candidate.resume_url }}" target="_blank"><i class="bi bi-file-earmark-person"></i> Open CV</a></div>
+          </div>
+          {% elif candidate.resume_blob_url %}
+          <div class="mb-{% if attachments %}3{% else %}0{% endif %}">
+            <div class="field-label">Resume</div>
+            <div class="field-value"><a href="{{ candidate.resume_blob_url.url }}" target="_blank">Download / Preview</a></div>
+          </div>
+          {% endif %}
+          {% for a in attachments %}
+            <div><a href="{{ a.file.url }}" target="_blank">{{ a.label|default:a.file.name }}</a> <span class="text-muted small">{{ a.uploaded_at|date:"d M Y" }}</span></div>
+          {% endfor %}
+          {% if not candidate.resume_url and not candidate.resume_blob_url and not attachments %}
+            <p class="text-muted mb-0">No attachments.</p>
+          {% endif %}
         </div>
-      {% else %}
-        <p class="text-muted mb-0">No AI summary yet — this is generated from the CV during careers intake.</p>
-      {% endif %}
-    </div>
 
-    <div class="card app-card p-4 mb-3">
-      <h5 class="mb-3">Education</h5>
-      {% for e in candidate.education.all %}
-        <div class="mb-2 pb-2 {% if not forloop.last %}border-bottom{% endif %}">
-          <strong>{{ e.qualification }}</strong> {% if e.specialization %}({{ e.specialization }}){% endif %}<br>
-          <span class="text-muted small">{{ e.institution|default:"-" }} &middot; {{ e.year_completed|default:"-" }} &middot; {{ e.percentage|default:"-" }}%</span>
+        <div class="card app-card p-4">
+          <h5 class="mb-3">Notes</h5>
+          <form method="post" action="{% url 'candidate_add_note' candidate.pk %}" class="mb-3 js-autosave">
+            {% csrf_token %}
+            {{ note_form.text }}
+            <div class="text-end mt-2"><button type="submit" class="btn btn-sm btn-fill-app js-savebtn">Save Note</button></div>
+          </form>
+          {% for n in notes %}
+            <div class="mb-2 pb-2 border-bottom">
+              <div>{{ n.text }}</div>
+              <div class="small text-muted">{{ n.author|default:"Unknown" }} &middot; {{ n.created_at|date:"d M Y H:i" }}</div>
+            </div>
+          {% empty %}<p class="text-muted mb-0">No notes yet.</p>{% endfor %}
         </div>
-      {% empty %}<p class="text-muted mb-0">No education records.</p>{% endfor %}
-    </div>
-
-    <div class="card app-card p-4 mb-3">
-      <h5 class="mb-3">Experience</h5>
-      {% for e in candidate.experience_set.all %}
-        <div class="mb-2 pb-2 {% if not forloop.last %}border-bottom{% endif %}">
-          <strong>{{ e.designation|default:"-" }}</strong> @ {{ e.company_name }}<br>
-          <span class="text-muted small">{{ e.start_date|default:"-" }} &rarr; {{ e.end_date|default:"Present" }} &middot; {{ e.skills|default:"" }}</span>
-        </div>
-      {% empty %}<p class="text-muted mb-0">No experience records.</p>{% endfor %}
-    </div>
-
-    <div class="card app-card p-4 mb-3">
-      <h5 class="mb-3">Interviews</h5>
-      {% for i in interviews %}
-        <div class="mb-2 pb-2 {% if not forloop.last %}border-bottom{% endif %}">
-          <strong>{{ i.get_round_type_display }}</strong> &middot; {{ i.scheduled_date|date:"d M Y H:i" }} &middot; {{ i.get_mode_display }}<br>
-          <span class="text-muted small">Interviewer: {{ i.interviewer|default:"Unassigned" }} &middot; Status: {{ i.get_status_display }} &middot; Result: {{ i.get_result_display }}</span>
-          {% if i.feedback %}<div class="small mt-1">{{ i.feedback }}</div>{% endif %}
-        </div>
-      {% empty %}<p class="text-muted mb-0">No interviews scheduled.</p>{% endfor %}
-      {% if open_interview %}
-      {# An interview is awaiting a result, so it can be moved but not doubled up on. #}
-      <a href="{% url 'interview_reschedule' open_interview.pk %}" class="btn btn-sm btn-outline-app mt-2"
-         title="Change the date, time or interviewer"><i class="bi bi-calendar-event"></i> Reschedule</a>
-      {% else %}
-      <a href="{% url 'interview_schedule' candidate.pk %}" class="btn btn-sm btn-outline-app mt-2">Schedule Interview</a>
-      {% endif %}
-    </div>
-
-    <div class="card app-card p-4 mb-3">
-      <h5 class="mb-3">Offers</h5>
-      {% for o in offers %}
-        <div class="mb-2 pb-2 {% if not forloop.last %}border-bottom{% endif %}">
-          <span class="{{ o.status|lower|badge_class }}">{{ o.get_status_display }}</span>
-          {% if o.offer_letter %}<a href="{{ o.offer_letter.url }}" target="_blank" class="ms-2">Offer Letter</a>{% endif %}
-          <span class="text-muted small ms-2">{{ o.created_at|date:"d M Y" }}</span>
-        </div>
-      {% empty %}<p class="text-muted mb-0">No offers yet.</p>{% endfor %}
-    </div>
-
-    <div class="card app-card p-4">
-      <h5 class="mb-3">Attachments</h5>
-      {% for a in attachments %}
-        <div><a href="{{ a.file.url }}" target="_blank">{{ a.label|default:a.file.name }}</a> <span class="text-muted small">{{ a.uploaded_at|date:"d M Y" }}</span></div>
-      {% empty %}<p class="text-muted mb-0">No attachments.</p>{% endfor %}
+      </div>
     </div>
   </div>
 
-  <div class="col-lg-5">
-    <div class="card app-card p-4 mb-3">
-      <h5 class="mb-3">Stage Dates (SLA)</h5>
-      <ul class="list-unstyled mb-0">
-        <li><strong>Applied:</strong> {{ candidate.created_at|date:"d M Y" }}</li>
-        {% for status, date in stage_dates.items %}
-        <li><strong>{{ status|title }}:</strong> {{ date|date:"d M Y" }}</li>
-        {% endfor %}
-      </ul>
-      <p class="small text-muted mt-2 mb-0">Days in pipeline: {{ candidate.created_at|timesince }}</p>
-    </div>
-
-    <div class="card app-card p-4 mb-3">
-      <h5 class="mb-3">Activity History</h5>
-      {% for e in activity %}
-      <div class="timeline-item">
-        <div class="fw-semibold"><i class="bi bi-{{ e.icon }} me-1"></i>{{ e.title }}</div>
-        <div class="small text-muted">{{ e.when|date:"d M Y" }} &middot; {{ e.who|default:"System" }}</div>
-        {% if e.detail %}<div class="small mt-1">{{ e.detail }}</div>{% endif %}
-      </div>
-      {% empty %}<p class="text-muted mb-0">No activity yet.</p>{% endfor %}
-    </div>
-
-    <div class="card app-card p-4 mb-3">
-      <h5 class="mb-3">Notes</h5>
-      <form method="post" action="{% url 'candidate_add_note' candidate.pk %}" class="mb-3 js-autosave">
-        {% csrf_token %}
-        {{ note_form.text }}
-        <div class="text-end mt-2"><button type="submit" class="btn btn-sm btn-fill-app js-savebtn">Save Note</button></div>
-      </form>
-      {% for n in notes %}
-        <div class="mb-2 pb-2 border-bottom">
-          <div>{{ n.text }}</div>
-          <div class="small text-muted">{{ n.author|default:"Unknown" }} &middot; {{ n.created_at|date:"d M Y H:i" }}</div>
-        </div>
-      {% empty %}<p class="text-muted mb-0">No notes yet.</p>{% endfor %}
-    </div>
-
-    <div class="card app-card p-4 mb-3">
-      <h5 class="mb-3">Communication Log</h5>
-      <form method="post" action="{% url 'candidate_add_log' candidate.pk %}" class="mb-3 js-autosave">
-        {% csrf_token %}
-        <div class="row g-2">
-          <div class="col-6">{{ comm_form.channel }}</div>
-          <div class="col-6">{{ comm_form.outcome }}</div>
-          <div class="col-12 mt-2">{{ comm_form.message }}</div>
-        </div>
-        <div class="text-end mt-2"><button type="submit" class="btn btn-sm btn-fill-app js-savebtn">Save Log</button></div>
-      </form>
-      {% for l in communication_logs %}
-        <div class="mb-2 pb-2 border-bottom">
-          <strong>{{ l.get_channel_display }}</strong>{% if l.outcome %} &middot; {{ l.get_outcome_display }}{% endif %}
-          {% if l.message %}<div class="small">{{ l.message }}</div>{% endif %}
-          <div class="small text-muted">{{ l.logged_by|default:"Unknown" }} &middot; {{ l.logged_at|date:"d M Y H:i" }}</div>
-        </div>
-      {% empty %}<p class="text-muted mb-0">No communication logged yet.</p>{% endfor %}
-    </div>
-
-    <div class="card app-card p-4">
-      <h5 class="mb-3">Update Status</h5>
-      {% if last_status %}
-      <div class="mb-3 pb-2 border-bottom">
-        <strong>{{ last_status_label }}</strong>
-        {% if last_status.remarks %}<div class="small">{{ last_status.remarks }}</div>{% endif %}
-        <div class="small text-muted">
-          {{ last_status.performed_by|default:last_status.changed_by|default:"Unknown" }}
-          &middot; {{ last_status.changed_at|date:"d M Y H:i" }}
+  <div>
+    <div class="section-eyebrow">AI-Scan</div>
+    <div class="row g-3">
+      <div class="col-lg-6">
+        <div class="card app-card p-4 h-100">
+          <h5 class="mb-3"><i class="bi bi-stars"></i> AI CV Summary</h5>
+          {% if candidate.cv_summary %}
+            {# Raw Markdown source, kept inert - marked.js + DOMPurify below render it into headings/table/bullets. #}
+            <div id="cv-summary-raw" hidden>{{ candidate.cv_summary }}</div>
+            <div id="cv-summary-md" class="cv-summary-md">
+              <p class="mb-0" style="white-space: pre-line;">{{ candidate.cv_summary }}</p>
+            </div>
+          {% else %}
+            <p class="text-muted mb-0">No AI summary yet — this is generated from the CV during careers intake.</p>
+          {% endif %}
         </div>
       </div>
-      {% endif %}
-      <form method="post" action="{% url 'candidate_set_status' candidate.pk %}" class="js-autosave">
-        {% csrf_token %}
-        <div class="row g-2">
-          <div class="col-12">
-            <select name="status" class="form-select form-select-sm" required>
-              <option value="">Select action…</option>
-              {% for value, label in status_actions %}
-              <option value="{{ value }}">Move to {{ label }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="col-12">
-            <input type="text" name="performed_by" class="form-control form-control-sm"
-                   value="{{ user.get_full_name|default:user.get_username }}" placeholder="Done by">
-          </div>
-          <div class="col-12">
-            <textarea name="reason" class="form-control form-control-sm" rows="2" placeholder="Remarks / reason (optional)"></textarea>
-          </div>
+
+      <div class="col-lg-6">
+        <div class="card app-card p-4 h-100">
+          <h5 class="mb-3"><i class="bi bi-bullseye"></i> Match Score</h5>
+          {% if candidate.match_score is not None %}
+            {% with b=candidate.match_breakdown_parsed %}
+            <div class="d-flex align-items-baseline gap-2">
+              <span class="match-score-num match-score-{{ candidate.match_score|score_tier }}">{{ candidate.match_score }}</span>
+              <span class="text-muted">/ 100</span>
+            </div>
+            <div class="small text-muted mt-1">{{ candidate.job.title|default:"the mapped vacancy" }} &middot; {{ candidate.match_scored_at|date:"d M Y" }}</div>
+
+            <div class="match-subscore-grid">
+              <div class="d-flex justify-content-between"><span class="text-muted">Skills</span><span class="fw-semibold font-monospace">{{ b.skills_score|default:"-" }}/30</span></div>
+              <div class="d-flex justify-content-between"><span class="text-muted">Experience</span><span class="fw-semibold font-monospace">{{ b.experience_score|default:"-" }}/30</span></div>
+              <div class="d-flex justify-content-between"><span class="text-muted">Education</span><span class="fw-semibold font-monospace">{{ b.education_score|default:"-" }}/30</span></div>
+              <div class="d-flex justify-content-between"><span class="text-muted">Overall Fit</span><span class="fw-semibold font-monospace">{{ b.fit_score|default:"-" }}/10</span></div>
+            </div>
+
+            {% if b.matched_skills %}
+            <div class="mb-1">
+              <div class="small fw-semibold" style="color: var(--dark-green);">Matched</div>
+              <div class="small">{{ b.matched_skills|join:", " }}</div>
+            </div>
+            {% endif %}
+            {% if b.missing_skills %}
+            <div class="small"><span class="fw-semibold text-danger">Missing</span> {{ b.missing_skills|join:", " }}</div>
+            {% endif %}
+            {% endwith %}
+            {% if candidate.match_rationale %}<p class="small text-muted fst-italic mt-3 mb-0">{{ candidate.match_rationale }}</p>{% endif %}
+          {% elif candidate.match_state == 'ERROR' %}
+            <p class="text-danger mb-0">Scoring failed: {{ candidate.match_error }}</p>
+          {% elif candidate.job and candidate.job.title|lower != "general application" %}
+            <p class="text-muted mb-0">Not scored yet - use <a href="{% url 'candidate_score' %}">Score Candidates</a>.</p>
+          {% else %}
+            <p class="text-muted mb-0">Not mapped to a role, so this candidate can't be scored.</p>
+          {% endif %}
         </div>
-        <div class="text-end mt-2"><button type="submit" class="btn btn-sm btn-fill-app js-savebtn">Save Action</button></div>
-      </form>
+      </div>
     </div>
   </div>
+
+  <div>
+    <div class="section-eyebrow">Hiring</div>
+    <div class="row g-3">
+      <div class="col-lg-6">
+        <div class="card app-card p-4 mb-3">
+          <h5 class="mb-3">Current Stage</h5>
+          {% if last_status %}
+          <strong>{{ last_status_label }}</strong>
+          {% if last_status.remarks %}<div class="small">{{ last_status.remarks }}</div>{% endif %}
+          <div class="small text-muted">
+            {{ last_status.performed_by|default:last_status.changed_by|default:"Unknown" }}
+            &middot; {{ last_status.changed_at|date:"d M Y H:i" }}
+          </div>
+          {% else %}
+          <p class="text-muted mb-0">No status recorded yet.</p>
+          {% endif %}
+        </div>
+
+        <div class="card app-card p-4 mb-3">
+          <h5 class="mb-3">Next Stage &mdash; Update Status</h5>
+          <form method="post" action="{% url 'candidate_set_status' candidate.pk %}" class="js-autosave">
+            {% csrf_token %}
+            <div class="row g-2">
+              <div class="col-12">
+                <select name="status" class="form-select form-select-sm" required>
+                  <option value="">Select action…</option>
+                  {% for value, label in status_actions %}
+                  <option value="{{ value }}">{{ label }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-12">
+                <input type="text" name="performed_by" class="form-control form-control-sm"
+                       value="{{ user.get_full_name|default:user.get_username }}" placeholder="Done by">
+              </div>
+              <div class="col-12">
+                <textarea name="reason" class="form-control form-control-sm" rows="2" placeholder="Remarks / reason (optional)"></textarea>
+              </div>
+            </div>
+            <div class="text-end mt-2"><button type="submit" class="btn btn-sm btn-fill-app js-savebtn">Save Action</button></div>
+          </form>
+        </div>
+
+        <div class="card app-card p-4">
+          <h5 class="mb-3">Communication Log</h5>
+          <form method="post" action="{% url 'candidate_add_log' candidate.pk %}" class="mb-3 js-autosave">
+            {% csrf_token %}
+            <div class="row g-2">
+              <div class="col-6">{{ comm_form.channel }}</div>
+              <div class="col-6">{{ comm_form.outcome }}</div>
+              <div class="col-12 mt-2">{{ comm_form.message }}</div>
+            </div>
+            <div class="text-end mt-2"><button type="submit" class="btn btn-sm btn-fill-app js-savebtn">Save Log</button></div>
+          </form>
+          {% for l in communication_logs %}
+            <div class="mb-2 pb-2 border-bottom">
+              <strong>{{ l.get_channel_display }}</strong>{% if l.outcome %} &middot; {{ l.get_outcome_display }}{% endif %}
+              {% if l.message %}<div class="small">{{ l.message }}</div>{% endif %}
+              <div class="small text-muted">{{ l.logged_by|default:"Unknown" }} &middot; {{ l.logged_at|date:"d M Y H:i" }}</div>
+            </div>
+          {% empty %}<p class="text-muted mb-0">No communication logged yet.</p>{% endfor %}
+        </div>
+      </div>
+
+      <div class="col-lg-6">
+        <div class="card app-card p-4 mb-3">
+          <h5 class="mb-3">Stage Dates (SLA)</h5>
+          <ul class="list-unstyled mb-0">
+            <li><strong>Applied:</strong> {{ candidate.created_at|date:"d M Y" }}</li>
+            {% for status, date in stage_dates.items %}
+            <li><strong>{{ status|title }}:</strong> {{ date|date:"d M Y" }}</li>
+            {% endfor %}
+          </ul>
+          <p class="small text-muted mt-2 mb-0">Days in pipeline: {{ candidate.created_at|timesince }}</p>
+        </div>
+
+        <div class="card app-card p-4 mb-3">
+          <h5 class="mb-3">Activity History</h5>
+          {% for e in activity %}
+          <div class="timeline-item">
+            <div class="fw-semibold"><i class="bi bi-{{ e.icon }} me-1"></i>{{ e.title }}</div>
+            <div class="small text-muted">{{ e.when|date:"d M Y" }} &middot; {{ e.who|default:"System" }}</div>
+            {% if e.detail %}<div class="small mt-1">{{ e.detail }}</div>{% endif %}
+          </div>
+          {% empty %}<p class="text-muted mb-0">No activity yet.</p>{% endfor %}
+        </div>
+
+        <div class="card app-card p-4 mb-3">
+          <h5 class="mb-3">Interviews</h5>
+          {% for i in interviews %}
+            <div class="mb-2 pb-2 {% if not forloop.last %}border-bottom{% endif %}">
+              <strong>{{ i.get_round_type_display }}</strong> &middot; {{ i.scheduled_date|date:"d M Y H:i" }} &middot; {{ i.get_mode_display }}<br>
+              <span class="text-muted small">Interviewer: {{ i.interviewer|default:"Unassigned" }} &middot; Status: {{ i.get_status_display }} &middot; Result: {{ i.get_result_display }}</span>
+              {% if i.feedback %}<div class="small mt-1">{{ i.feedback }}</div>{% endif %}
+            </div>
+          {% empty %}<p class="text-muted mb-0">No interviews scheduled.</p>{% endfor %}
+          {% if open_interview %}
+          {# An interview is awaiting a result, so it can be moved but not doubled up on. #}
+          <a href="{% url 'interview_reschedule' open_interview.pk %}" class="btn btn-sm btn-outline-app mt-2"
+             title="Change the date, time or interviewer"><i class="bi bi-calendar-event"></i> Reschedule</a>
+          {% else %}
+          <a href="{% url 'interview_schedule' candidate.pk %}" class="btn btn-sm btn-outline-app mt-2">Schedule Interview</a>
+          {% endif %}
+        </div>
+
+        <div class="card app-card p-4">
+          <h5 class="mb-3">Final Status</h5>
+          <span class="badge-status" style="background:{{ final_status.color }}; color:#fff; font-size:.82rem; padding:.4em .85em;">{{ final_status.label }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </div>
 {% endblock %}
 

@@ -41,6 +41,27 @@ def _performed_by(request):
 
 STATUS = Candidate.Status
 
+# The single "next" stage offered on the candidate profile page - mirrors
+# HOLD_RESUME_ACTIONS in models.py (which stage a hold at X resumes into), so
+# keep both in sync if the pipeline stages ever change.
+NEXT_STATUS = {
+    STATUS.OPEN: STATUS.SHORTLISTED,
+    STATUS.SHORTLISTED: STATUS.ROUND1,
+    STATUS.ROUND1: STATUS.INTERVIEW,
+    STATUS.INTERVIEW: STATUS.FINAL_SELECTION,
+    STATUS.FINAL_SELECTION: STATUS.HIRED,
+}
+
+# Coarse status shown on the profile page's Final Status card - mirrors the
+# OPEN/SHORTLISTED/REJECTED/HIRED groups dashboard/views.py buckets the
+# funnel into, just relabelled for a single candidate's view.
+FINAL_STATUS_BUCKETS = (
+    ('Hired', (STATUS.HIRED,), '#0e6f6b'),
+    ('Rejected', (STATUS.REJECTED, STATUS.BLACKLISTED), '#dc3545'),
+    ('Under Process', (STATUS.SHORTLISTED, STATUS.ROUND1, STATUS.INTERVIEW, STATUS.FINAL_SELECTION), '#17a2b8'),
+    ('Unattended', (STATUS.OPEN, STATUS.SCREENING_HOLD), '#8a9a9a'),
+)
+
 REPOSITORY_TABS = [
     ('open', 'Open Applications', STATUS.OPEN),
     ('shortlisted', 'Shortlisted', STATUS.SHORTLISTED),
@@ -462,8 +483,26 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
         ctx['all_jobs'] = Job.objects.all().order_by('title')
         # same email seen on another record => reapply
         ctx['reapply'] = Candidate.objects.filter(email=candidate.email).exclude(pk=candidate.pk).exists()
-        # actions the user can move this candidate to (all statuses except the current one)
-        ctx['status_actions'] = [(v, l) for v, l in Candidate.Status.choices if v != candidate.status]
+        # Next-stage + escape hatches only, not the full status list: the next
+        # stage in the pipeline (resuming a Hold from wherever it was taken),
+        # plus Reject and Hold, which are valid from any stage.
+        if candidate.status == STATUS.SCREENING_HOLD:
+            lookup_status = candidate.hold_from_status or STATUS.OPEN
+        else:
+            lookup_status = candidate.status
+        next_status = NEXT_STATUS.get(lookup_status)
+        status_actions = []
+        if next_status:
+            status_actions.append((next_status, f'Move to {labels[next_status]}'))
+        for extra in (STATUS.REJECTED, STATUS.SCREENING_HOLD):
+            if extra != candidate.status:
+                status_actions.append((extra, labels[extra]))
+        ctx['status_actions'] = status_actions
+
+        ctx['final_status'] = next(
+            {'label': label, 'color': color}
+            for label, statuses, color in FINAL_STATUS_BUCKETS if candidate.status in statuses
+        )
         return ctx
 
 
