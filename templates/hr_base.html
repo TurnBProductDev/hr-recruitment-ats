@@ -54,16 +54,21 @@
       <div class="app-nav-links">
         <a class="app-nav-link {% if request.resolver_match.url_name == 'hr_dashboard' %}active{% endif %}" href="{% url 'hr_dashboard' %}">Home</a>
         <div class="dropdown app-nav-drop">
-          <a href="#" class="app-nav-link dropdown-toggle {% if '/hr/candidates/' in request.path and '/bulk-upload/' not in request.path %}active{% endif %}" data-bs-toggle="dropdown" aria-expanded="false">Candidates</a>
+          <a href="#" class="app-nav-link dropdown-toggle {% if '/hr/candidates/' in request.path and '/bulk-upload/' not in request.path and '/candidates/score/' not in request.path %}active{% endif %}" data-bs-toggle="dropdown" aria-expanded="false">Candidates</a>
           <ul class="dropdown-menu">
             <li><a class="dropdown-item" href="{% url 'candidate_repository' %}">Repository</a></li>
             <li><a class="dropdown-item" href="{% url 'candidate_general_applications' %}">General Applications</a></li>
-            <li><a class="dropdown-item" href="{% url 'candidate_score' %}">Score Candidates</a></li>
           </ul>
         </div>
         <a class="app-nav-link {% if '/hr/jobs/' in request.path %}active{% endif %}" href="{% url 'job_manage_list' %}">Vacancies</a>
         <a class="app-nav-link {% if '/hr/interviews/' in request.path %}active{% endif %}" href="{% url 'interview_scheduler' %}">Interviews</a>
-        <a class="app-nav-link {% if '/bulk-upload/' in request.path %}active{% endif %}" href="{% url 'candidate_bulk_upload' %}">Bulk Upload</a>
+        <div class="dropdown app-nav-drop">
+          <a href="#" class="app-nav-link dropdown-toggle {% if '/bulk-upload/' in request.path or '/candidates/score/' in request.path %}active{% endif %}" data-bs-toggle="dropdown" aria-expanded="false">Actions</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="{% url 'candidate_score' %}">Score Candidates</a></li>
+            <li><a class="dropdown-item" href="{% url 'candidate_bulk_upload' %}">Bulk Upload</a></li>
+          </ul>
+        </div>
         <a class="app-nav-link {% if '/hr/reports/' in request.path %}active{% endif %}" href="{% url 'hr_reports' %}">Reports</a>
       </div>
     </div>

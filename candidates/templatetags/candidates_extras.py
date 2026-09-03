@@ -23,3 +23,16 @@ def score_badge_class(score):
     if score >= 40:
         return 'bg-warning text-dark'
     return 'bg-danger'
+
+
+@register.filter
+def score_tier(score):
+    """Same strong/borderline/weak cutoffs as score_badge_class, named for the
+    score-meter bar's colour classes (.score-fill-high/-mid/-low)."""
+    if score is None:
+        return ''
+    if score >= 70:
+        return 'high'
+    if score >= 40:
+        return 'mid'
+    return 'low'

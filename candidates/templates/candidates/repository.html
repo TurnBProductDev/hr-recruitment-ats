@@ -51,6 +51,15 @@
 }
 .repo-called-icon { color:#8a969b; margin-left:4px; }
 
+.score-meter { min-width:84px; }
+.score-meter-num { font-size:.82rem; margin-bottom:3px; white-space:nowrap; }
+.score-meter-num strong { font-size:.95rem; }
+.score-meter-track { height:5px; border-radius:3px; background:#eef1f1; overflow:hidden; }
+.score-meter-fill { height:100%; border-radius:3px; }
+.score-fill-high { background:var(--primary-green); }
+.score-fill-mid { background:#8a6a12; }
+.score-fill-low { background:#dc3545; }
+
 #candidateTable_wrapper { display:flex; flex-wrap:wrap; }
 #candidateTable_wrapper > table { width:100% !important; order:1; }
 #candidateTable_wrapper > .dataTables_processing { order:0; width:100%; }
@@ -238,7 +247,11 @@
             <td>{{ c.job.title|default:"-" }}</td>
             <td>
               {% if c.match_score is not None %}
-                <span class="badge {{ c.match_score|score_badge_class }}">{{ c.match_score }}/100</span>
+                <div class="score-meter">
+                  <div class="score-meter-num"><strong>{{ c.match_score }}</strong><span class="text-muted">/100</span></div>
+                  <div class="score-meter-track"><div class="score-meter-fill score-fill-{{ c.match_score|score_tier }}"
+                       style="width:{{ c.match_score }}%"></div></div>
+                </div>
               {% else %}<span class="text-muted small">-</span>{% endif %}
             </td>
             <td>{{ c.total_experience_years|default:"-" }}</td>
