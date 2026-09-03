@@ -635,9 +635,9 @@ class HoldNamingTests(TestCase):
         response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
         self.assertContains(response, 'Status: Interview Hold → Final Selection')
 
-    def test_the_action_is_offered_as_move_to_hold(self):
+    def test_the_action_is_offered_as_hold(self):
         response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
-        self.assertContains(response, 'Move to Hold')
+        self.assertContains(response, 'stage-tone-hold')
         self.assertNotContains(response, 'Move to Screening Hold')
 
     def test_the_repository_tab_is_called_hold(self):

@@ -41,26 +41,115 @@ def _performed_by(request):
 
 STATUS = Candidate.Status
 
-# The single "next" stage offered on the candidate profile page - mirrors
-# HOLD_RESUME_ACTIONS in models.py (which stage a hold at X resumes into), so
-# keep both in sync if the pipeline stages ever change.
-NEXT_STATUS = {
-    STATUS.OPEN: STATUS.SHORTLISTED,
-    STATUS.SHORTLISTED: STATUS.ROUND1,
-    STATUS.ROUND1: STATUS.INTERVIEW,
-    STATUS.INTERVIEW: STATUS.FINAL_SELECTION,
-    STATUS.FINAL_SELECTION: STATUS.HIRED,
-}
+# The Hiring block's 5 progressive stage cards on the candidate profile page.
+# Each stage lists the decisions available while a candidate sits there - the
+# url names are the existing per-stage CandidateStatusActionView endpoints
+# (candidates/urls.py), reused as-is rather than adding a new action view.
+STAGE_ORDER = [STATUS.OPEN, STATUS.SHORTLISTED, STATUS.ROUND1, STATUS.INTERVIEW, STATUS.FINAL_SELECTION]
+TERMINAL_STATUSES = (STATUS.HIRED, STATUS.REJECTED, STATUS.BLACKLISTED)
 
-# Coarse status shown on the profile page's Final Status card - mirrors the
-# OPEN/SHORTLISTED/REJECTED/HIRED groups dashboard/views.py buckets the
-# funnel into, just relabelled for a single candidate's view.
-FINAL_STATUS_BUCKETS = (
-    ('Hired', (STATUS.HIRED,), '#0e6f6b'),
-    ('Rejected', (STATUS.REJECTED, STATUS.BLACKLISTED), '#dc3545'),
-    ('Under Process', (STATUS.SHORTLISTED, STATUS.ROUND1, STATUS.INTERVIEW, STATUS.FINAL_SELECTION), '#17a2b8'),
-    ('Unattended', (STATUS.OPEN, STATUS.SCREENING_HOLD), '#8a9a9a'),
-)
+HIRING_STAGES = [
+    {'key': 'open', 'status': STATUS.OPEN, 'label': 'Open (Resume Received)',
+     'comm_channel': None, 'interview': False, 'actions': [
+         {'url': 'candidate_shortlist', 'target': STATUS.SHORTLISTED, 'label': 'Shortlist', 'tone': 'advance'},
+         {'url': 'candidate_screening_hold', 'target': STATUS.SCREENING_HOLD, 'label': 'Hold', 'tone': 'hold'},
+         {'url': 'candidate_reject', 'target': STATUS.REJECTED, 'label': 'Reject', 'tone': 'reject'},
+         {'url': 'candidate_blacklist', 'target': STATUS.BLACKLISTED, 'label': 'Blacklist', 'tone': 'blacklist', 'require_reason': True},
+     ]},
+    {'key': 'shortlisted', 'status': STATUS.SHORTLISTED, 'label': 'Shortlisted',
+     'comm_channel': CommunicationLog.Channel.PHONE, 'interview': False, 'actions': [
+         {'url': 'candidate_round1', 'target': STATUS.ROUND1, 'label': 'Move to Round 1', 'tone': 'advance'},
+         {'url': 'candidate_screening_hold', 'target': STATUS.SCREENING_HOLD, 'label': 'Hold', 'tone': 'hold'},
+         {'url': 'candidate_reject', 'target': STATUS.REJECTED, 'label': 'Reject', 'tone': 'reject'},
+         {'url': 'candidate_blacklist', 'target': STATUS.BLACKLISTED, 'label': 'Blacklist', 'tone': 'blacklist', 'require_reason': True},
+     ]},
+    {'key': 'round1', 'status': STATUS.ROUND1, 'label': 'Round 1',
+     'comm_channel': CommunicationLog.Channel.INTERVIEW, 'interview': True, 'actions': [
+         {'url': 'candidate_interview_stage', 'target': STATUS.INTERVIEW, 'label': 'Move to Round 2', 'tone': 'advance'},
+         {'url': 'candidate_screening_hold', 'target': STATUS.SCREENING_HOLD, 'label': 'Hold', 'tone': 'hold'},
+         {'url': 'candidate_reject', 'target': STATUS.REJECTED, 'label': 'Reject', 'tone': 'reject'},
+     ]},
+    {'key': 'round2', 'status': STATUS.INTERVIEW, 'label': 'Round 2',
+     'comm_channel': CommunicationLog.Channel.INTERVIEW, 'interview': True, 'actions': [
+         {'url': 'candidate_final_selection', 'target': STATUS.FINAL_SELECTION, 'label': 'Move to Final Selection', 'tone': 'advance'},
+         {'url': 'candidate_screening_hold', 'target': STATUS.SCREENING_HOLD, 'label': 'Hold', 'tone': 'hold'},
+         {'url': 'candidate_reject', 'target': STATUS.REJECTED, 'label': 'Reject', 'tone': 'reject'},
+     ]},
+    {'key': 'final', 'status': STATUS.FINAL_SELECTION, 'label': 'Final Decision',
+     'comm_channel': None, 'interview': False, 'actions': [
+         {'url': 'candidate_hire', 'target': STATUS.HIRED, 'label': 'Hire', 'tone': 'advance'},
+         {'url': 'candidate_screening_hold', 'target': STATUS.SCREENING_HOLD, 'label': 'Hold', 'tone': 'hold'},
+         {'url': 'candidate_reject', 'target': STATUS.REJECTED, 'label': 'Reject', 'tone': 'reject'},
+     ]},
+]
+
+
+def _build_hiring_stages(candidate, history):
+    """Render data for the Hiring block's 5 stage cards: which stage is
+    active, which are done (with their decision reconstructed from history),
+    and which are still locked ahead. `history` must already be a list/qs
+    fully evaluated (it's walked more than once)."""
+    labels = dict(Candidate.Status.choices)
+    history = sorted(history, key=lambda h: (h.changed_at, h.id))
+
+    if candidate.status == STATUS.SCREENING_HOLD:
+        lookup_status = candidate.hold_from_status or STATUS.OPEN
+    else:
+        lookup_status = candidate.status
+    try:
+        active_index = STAGE_ORDER.index(lookup_status)
+    except ValueError:
+        active_index = None  # terminal: Hired / Rejected / Blacklisted
+
+    def entered_row(stage_status):
+        return next((h for h in history if h.new_status == stage_status), None)
+
+    reached = [i for i, s in enumerate(HIRING_STAGES) if entered_row(s['status']) is not None]
+    max_reached = max(reached) if reached else -1
+
+    def decision_after(stage_status, since_row):
+        """The history row that moved the candidate off `stage_status` for
+        good: the next real stage or any terminal status, whichever comes
+        first after they entered it. A Hold taken at this stage is skipped
+        over (its own row lands here as SCREENING_HOLD, not a target) so the
+        eventual resume-and-advance/reject row is what's reported."""
+        idx = STAGE_ORDER.index(stage_status)
+        targets = set(TERMINAL_STATUSES)
+        if idx + 1 < len(STAGE_ORDER):
+            targets.add(STAGE_ORDER[idx + 1])
+        since = since_row.changed_at if since_row else None
+        for h in history:
+            if since is not None and h.changed_at <= since:
+                continue
+            if h.new_status in targets:
+                return h
+        return None
+
+    stages = []
+    for i, stage in enumerate(HIRING_STAGES):
+        entry = dict(stage)
+        if active_index is not None:
+            is_done, is_active = i < active_index, i == active_index
+        else:
+            # No current stage (terminal candidate) - everything up to the
+            # furthest stage ever reached is "done"; anything past where they
+            # exited was never reached at all, so it stays locked.
+            is_done, is_active = i <= max_reached, False
+        entry.update(is_done=is_done, is_active=is_active,
+                     is_locked=not is_done and not is_active, decision=None)
+        entered = entered_row(stage['status'])
+        entry['entered'] = entered
+        if is_done:
+            row = decision_after(stage['status'], entered)
+            if row:
+                action = next((a for a in stage['actions'] if a['target'] == row.new_status), None)
+                entry['decision'] = {
+                    'label': action['label'] if action else labels.get(row.new_status, row.new_status),
+                    'tone': action['tone'] if action else 'advance',
+                    'remarks': row.remarks, 'who': row.performed_by or row.changed_by, 'when': row.changed_at,
+                }
+        stages.append(entry)
+    return stages, active_index
 
 REPOSITORY_TABS = [
     ('open', 'Open Applications', STATUS.OPEN),
@@ -412,7 +501,6 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
         # further interview may be scheduled (see interviews.forms.InterviewForm).
         ctx['open_interview'] = Interview.open_for(candidate).first()
         ctx['note_form'] = CandidateNoteForm()
-        ctx['comm_form'] = CommunicationLogForm()
 
         stage_dates = {}
         for h in ctx['history'].order_by('changed_at'):
@@ -483,26 +571,26 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
         ctx['all_jobs'] = Job.objects.all().order_by('title')
         # same email seen on another record => reapply
         ctx['reapply'] = Candidate.objects.filter(email=candidate.email).exclude(pk=candidate.pk).exists()
-        # Next-stage + escape hatches only, not the full status list: the next
-        # stage in the pipeline (resuming a Hold from wherever it was taken),
-        # plus Reject and Hold, which are valid from any stage.
-        if candidate.status == STATUS.SCREENING_HOLD:
-            lookup_status = candidate.hold_from_status or STATUS.OPEN
-        else:
-            lookup_status = candidate.status
-        next_status = NEXT_STATUS.get(lookup_status)
-        status_actions = []
-        if next_status:
-            status_actions.append((next_status, f'Move to {labels[next_status]}'))
-        for extra in (STATUS.REJECTED, STATUS.SCREENING_HOLD):
-            if extra != candidate.status:
-                status_actions.append((extra, labels[extra]))
-        ctx['status_actions'] = status_actions
 
-        ctx['final_status'] = next(
-            {'label': label, 'color': color}
-            for label, statuses, color in FINAL_STATUS_BUCKETS if candidate.status in statuses
-        )
+        ctx['is_on_hold'] = candidate.status == STATUS.SCREENING_HOLD
+        hiring_stages, active_stage_index = _build_hiring_stages(candidate, ctx['history'])
+        ctx['hiring_stages'] = hiring_stages
+        ctx['active_stage_index'] = active_stage_index
+
+        comm_logs_by_channel = {}
+        for log in ctx['communication_logs']:
+            comm_logs_by_channel.setdefault(log.channel, []).append(log)
+        ctx['comm_logs_by_channel'] = comm_logs_by_channel
+
+        if active_stage_index is None:
+            outcome_label = {STATUS.HIRED: 'Hired', STATUS.REJECTED: 'Rejected',
+                             STATUS.BLACKLISTED: 'Blacklisted'}.get(candidate.status, candidate.status_label)
+            outcome_color = {STATUS.HIRED: '#0e6f6b', STATUS.REJECTED: '#dc3545',
+                             STATUS.BLACKLISTED: '#212529'}.get(candidate.status, '#6c757d')
+            ctx['final_status'] = {'label': outcome_label, 'color': outcome_color}
+        else:
+            ctx['final_status'] = {'label': f'In Progress · {HIRING_STAGES[active_stage_index]["label"]}',
+                                   'color': '#17a2b8'}
         return ctx
 
 

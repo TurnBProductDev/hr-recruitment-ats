@@ -35,6 +35,35 @@
 
 /* Candidate Details / AI-Scan / Hiring: top-level page sections */
 .profile-sections { display:flex; flex-direction:column; gap:32px; }
+
+/* Hiring: progressive 5-stage wizard - locked (future/skipped) stages sit
+   dimmed with a lock icon, done stages collapse to a decision summary, and
+   the one active stage carries its full action row. */
+.stage-locked { opacity:.4; }
+.stage-active { border-color: var(--primary-green); }
+
+.stage-decision-badge { font-size:.72rem; font-weight:600; padding:.3em .75em; border-radius:12px; color:#fff; white-space:nowrap; }
+.stage-decision-badge.stage-tone-advance { background: var(--primary-green); }
+.stage-decision-badge.stage-tone-hold { background:#e0c97e; color:#5f4700; }
+.stage-decision-badge.stage-tone-reject { background:#dc3545; }
+.stage-decision-badge.stage-tone-blacklist { background:#212529; }
+
+.hold-banner { display:inline-flex; align-items:center; gap:4px; font-size:.72rem; font-weight:700; color:#7a5c00; background:#fbf1c9; border:1px solid #ecd9a0; border-radius:12px; padding:.3em .75em; }
+
+.stage-subsection { margin-top:14px; padding-top:14px; border-top:1px solid var(--border-color); }
+.stage-subsection-title { font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#8b9998; margin-bottom:8px; }
+
+.stage-action-row { display:flex; flex-wrap:wrap; gap:8px; }
+.stage-action-btn { border:1.5px solid; border-radius:10px; padding:.5rem 1.1rem; font-size:.82rem; font-weight:600; background:#fff; }
+.stage-action-btn.stage-tone-advance { border-color: var(--primary-green); color: var(--primary-green); }
+.stage-action-btn.stage-tone-advance:hover { background: var(--primary-green); color:#fff; }
+.stage-action-btn.stage-tone-hold { border-color:#e0c97e; color:#7a5c00; background:#fbf1c9; }
+.stage-action-btn.stage-tone-hold:hover { background:#f4e5a0; }
+.stage-action-btn.stage-tone-reject { border-color:#dc3545; color:#dc3545; }
+.stage-action-btn.stage-tone-reject:hover { background:#dc3545; color:#fff; }
+.stage-action-btn.stage-tone-blacklist { border-color:#212529; color:#212529; }
+.stage-action-btn.stage-tone-blacklist:hover { background:#212529; color:#fff; }
+.stage-action-btn:disabled { opacity:.5; cursor:not-allowed; }
 </style>
 {% endblock %}
 
@@ -284,74 +313,125 @@
 
   <div>
     <div class="section-eyebrow">Hiring</div>
-    <div class="row g-3">
-      <div class="col-lg-6">
-        <div class="card app-card p-4 mb-3">
-          <div class="section-eyebrow">Current Stage</div>
-          {% if last_status %}
-          <strong>{{ last_status_label }}</strong>
-          {% if last_status.remarks %}<div class="small">{{ last_status.remarks }}</div>{% endif %}
-          <div class="small text-muted">
-            {{ last_status.performed_by|default:last_status.changed_by|default:"Unknown" }}
-            &middot; {{ last_status.changed_at|date:"d M Y H:i" }}
-          </div>
-          {% else %}
-          <p class="text-muted mb-0">No status recorded yet.</p>
-          {% endif %}
+
+    {% for stage in hiring_stages %}
+    <div class="card app-card p-4 mb-3 stage-card {% if stage.is_locked %}stage-locked{% elif stage.is_done %}stage-done{% else %}stage-active{% endif %}">
+
+      {% if stage.is_locked %}
+        <div class="d-flex align-items-center gap-2">
+          <i class="bi bi-lock-fill text-muted"></i>
+          <span class="section-eyebrow mb-0">{{ stage.label }}</span>
         </div>
 
-        <div class="card app-card p-4 mb-3">
-          <div class="section-eyebrow">Next Stage &mdash; Update Status</div>
-          <form method="post" action="{% url 'candidate_set_status' candidate.pk %}" class="js-autosave">
+      {% elif stage.is_done %}
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+          <div class="section-eyebrow mb-0"><i class="bi bi-check-circle-fill"></i> {{ stage.label }}</div>
+          {% if stage.decision %}<span class="stage-decision-badge stage-tone-{{ stage.decision.tone }}">{{ stage.decision.label }}</span>{% endif %}
+        </div>
+        {% if stage.decision %}
+        <div class="small text-muted mt-2">{{ stage.decision.who|default:"Unknown" }} &middot; {{ stage.decision.when|date:"d M Y H:i" }}</div>
+        {% if stage.decision.remarks %}<div class="small mt-1">{{ stage.decision.remarks }}</div>{% endif %}
+        {% endif %}
+
+      {% else %}
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-1">
+          <div class="section-eyebrow mb-0"><i class="bi bi-arrow-right-circle-fill"></i> {{ stage.label }}</div>
+          {% if is_on_hold %}<span class="hold-banner"><i class="bi bi-pause-circle-fill"></i> On Hold</span>{% endif %}
+        </div>
+        {% if stage.entered %}
+        <div class="small text-muted mb-2">
+          Entered {{ stage.entered.changed_at|date:"d M Y H:i" }}
+          {% if is_on_hold and last_status.remarks %}&middot; {{ last_status.remarks }}{% endif %}
+        </div>
+        {% endif %}
+
+        {% if stage.comm_channel %}
+        <div class="stage-subsection">
+          <div class="stage-subsection-title">{% if stage.comm_channel == 'PHONE' %}Phone{% else %}Interview{% endif %} Communication Log</div>
+          <form method="post" action="{% url 'candidate_add_log' candidate.pk %}" class="mb-2 js-autosave">
             {% csrf_token %}
+            <input type="hidden" name="channel" value="{{ stage.comm_channel }}">
             <div class="row g-2">
               <div class="col-12">
-                <select name="status" class="form-select form-select-sm" required>
-                  <option value="">Select action…</option>
-                  {% for value, label in status_actions %}
-                  <option value="{{ value }}">{{ label }}</option>
-                  {% endfor %}
+                <select name="outcome" class="form-select form-select-sm">
+                  <option value="">— Outcome —</option>
+                  {% if stage.comm_channel == 'PHONE' %}
+                  <option value="UNABLE">Unable to connect</option>
+                  <option value="CALLBACK">Call back</option>
+                  <option value="ATTENDED">Attended</option>
+                  {% else %}
+                  <option value="ATTENDED">Attended</option>
+                  <option value="NOT_TURNED_UP">Not turned up</option>
+                  {% endif %}
                 </select>
               </div>
-              <div class="col-12">
-                <input type="text" name="performed_by" class="form-control form-control-sm"
-                       value="{{ user.get_full_name|default:user.get_username }}" placeholder="Done by">
-              </div>
-              <div class="col-12">
-                <textarea name="reason" class="form-control form-control-sm" rows="2" placeholder="Remarks / reason (optional)"></textarea>
-              </div>
+              <div class="col-12"><textarea name="message" class="form-control form-control-sm" rows="2" placeholder="Remarks…"></textarea></div>
             </div>
-            <div class="text-end mt-2"><button type="submit" class="btn btn-sm btn-fill-app js-savebtn">Save Action</button></div>
+            <div class="text-end mt-2"><button type="submit" class="btn btn-sm btn-outline-app js-savebtn">Add Log</button></div>
           </form>
+          {% with logs=comm_logs_by_channel|dict_get:stage.comm_channel %}
+          {% for l in logs %}
+          <div class="small mb-1 pb-1 {% if not forloop.last %}border-bottom{% endif %}">
+            {% if l.outcome %}<strong>{{ l.get_outcome_display }}</strong>{% endif %}
+            {% if l.message %} &middot; {{ l.message }}{% endif %}
+            <div class="text-muted">{{ l.logged_by|default:"Unknown" }} &middot; {{ l.logged_at|date:"d M Y H:i" }}</div>
+          </div>
+          {% endfor %}
+          {% endwith %}
         </div>
+        {% endif %}
 
-        <div class="card app-card p-4 mb-3">
-          <div class="section-eyebrow">Communication Log</div>
-          <form method="post" action="{% url 'candidate_add_log' candidate.pk %}" class="mb-3 js-autosave">
+        {% if stage.interview %}
+        <div class="stage-subsection">
+          <div class="stage-subsection-title">Interview</div>
+          {% if open_interview %}
+          <button type="button" class="btn btn-sm btn-outline-app" title="Change the date, time or interviewer"
+                  data-bs-toggle="modal" data-bs-target="#interviewModal"
+                  data-load-url="{% url 'interview_reschedule' open_interview.pk %}" data-modal-title="Reschedule Interview">
+            <i class="bi bi-calendar-event"></i> Reschedule Interview
+          </button>
+          {% else %}
+          <button type="button" class="btn btn-sm btn-outline-app"
+                  data-bs-toggle="modal" data-bs-target="#interviewModal"
+                  data-load-url="{% url 'interview_schedule' candidate.pk %}" data-modal-title="Schedule Interview">
+            <i class="bi bi-calendar-event"></i> Schedule Interview
+          </button>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        <div class="stage-subsection">
+          <div class="stage-subsection-title">Update Status</div>
+          <form method="post" class="js-stage-form">
             {% csrf_token %}
-            <div class="row g-2">
-              <div class="col-6">{{ comm_form.channel }}</div>
-              <div class="col-6">{{ comm_form.outcome }}</div>
-              <div class="col-12 mt-2">{{ comm_form.message }}</div>
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <input type="hidden" name="performed_by" value="{{ user.get_full_name|default:user.get_username }}">
+            <textarea name="reason" class="form-control form-control-sm mb-2 js-stage-reason" rows="2" placeholder="Remarks / reason…"></textarea>
+            <div class="stage-action-row">
+              {% for action in stage.actions %}
+              <button type="submit" formaction="{% url action.url candidate.pk %}"
+                      class="stage-action-btn stage-tone-{{ action.tone }}"
+                      {% if action.require_reason %}data-require-reason="1" disabled{% endif %}>
+                {{ action.label }}
+              </button>
+              {% endfor %}
             </div>
-            <div class="text-end mt-2"><button type="submit" class="btn btn-sm btn-fill-app js-savebtn">Save Log</button></div>
           </form>
-          {% for l in communication_logs %}
-            <div class="mb-2 pb-2 border-bottom">
-              <strong>{{ l.get_channel_display }}</strong>{% if l.outcome %} &middot; {{ l.get_outcome_display }}{% endif %}
-              {% if l.message %}<div class="small">{{ l.message }}</div>{% endif %}
-              <div class="small text-muted">{{ l.logged_by|default:"Unknown" }} &middot; {{ l.logged_at|date:"d M Y H:i" }}</div>
-            </div>
-          {% empty %}<p class="text-muted mb-0">No communication logged yet.</p>{% endfor %}
         </div>
+      {% endif %}
+    </div>
+    {% endfor %}
 
-        <div class="card app-card p-4">
-          <div class="section-eyebrow">Final Status</div>
-          <span class="badge-status" style="background:{{ final_status.color }}; color:#fff; font-size:.82rem; padding:.4em .85em;">{{ final_status.label }}</span>
-        </div>
-      </div>
+    <div class="card app-card p-4">
+      <div class="section-eyebrow">Final Status</div>
+      <span class="badge-status" style="background:{{ final_status.color }}; color:#fff; font-size:.82rem; padding:.4em .85em;">{{ final_status.label }}</span>
+    </div>
+  </div>
 
-      <div class="col-lg-6">
+  <div>
+    <div class="section-eyebrow">History</div>
+    <div class="row g-3">
+      <div class="col-lg-5">
         <div class="card app-card p-4 mb-3">
           <div class="section-eyebrow">Stage Dates (SLA)</div>
           <ul class="list-unstyled mb-0">
@@ -363,18 +443,7 @@
           <p class="small text-muted mt-2 mb-0">Days in pipeline: {{ candidate.created_at|timesince }}</p>
         </div>
 
-        <div class="card app-card p-4 mb-3">
-          <div class="section-eyebrow">Activity History</div>
-          {% for e in activity %}
-          <div class="timeline-item">
-            <div class="fw-semibold"><i class="bi bi-{{ e.icon }} me-1"></i>{{ e.title }}</div>
-            <div class="small text-muted">{{ e.when|date:"d M Y" }} &middot; {{ e.who|default:"System" }}</div>
-            {% if e.detail %}<div class="small mt-1">{{ e.detail }}</div>{% endif %}
-          </div>
-          {% empty %}<p class="text-muted mb-0">No activity yet.</p>{% endfor %}
-        </div>
-
-        <div class="card app-card p-4 mb-3">
+        <div class="card app-card p-4">
           <div class="section-eyebrow">Interviews</div>
           {% for i in interviews %}
             <div class="mb-2 pb-2 {% if not forloop.last %}border-bottom{% endif %}">
@@ -384,17 +453,50 @@
             </div>
           {% empty %}<p class="text-muted mb-0">No interviews scheduled.</p>{% endfor %}
           {% if open_interview %}
-          {# An interview is awaiting a result, so it can be moved but not doubled up on. #}
-          <a href="{% url 'interview_reschedule' open_interview.pk %}" class="btn btn-sm btn-outline-app mt-2"
-             title="Change the date, time or interviewer"><i class="bi bi-calendar-event"></i> Reschedule</a>
+          <button type="button" class="btn btn-sm btn-outline-app mt-2" title="Change the date, time or interviewer"
+                  data-bs-toggle="modal" data-bs-target="#interviewModal"
+                  data-load-url="{% url 'interview_reschedule' open_interview.pk %}" data-modal-title="Reschedule Interview">
+            <i class="bi bi-calendar-event"></i> Reschedule
+          </button>
           {% else %}
-          <a href="{% url 'interview_schedule' candidate.pk %}" class="btn btn-sm btn-outline-app mt-2">Schedule Interview</a>
+          <button type="button" class="btn btn-sm btn-outline-app mt-2"
+                  data-bs-toggle="modal" data-bs-target="#interviewModal"
+                  data-load-url="{% url 'interview_schedule' candidate.pk %}" data-modal-title="Schedule Interview">
+            Schedule Interview
+          </button>
           {% endif %}
+        </div>
+      </div>
+
+      <div class="col-lg-7">
+        <div class="card app-card p-4">
+          <div class="section-eyebrow">Activity History</div>
+          {% for e in activity %}
+          <div class="timeline-item">
+            <div class="fw-semibold"><i class="bi bi-{{ e.icon }} me-1"></i>{{ e.title }}</div>
+            <div class="small text-muted">{{ e.when|date:"d M Y" }} &middot; {{ e.who|default:"System" }}</div>
+            {% if e.detail %}<div class="small mt-1">{{ e.detail }}</div>{% endif %}
+          </div>
+          {% empty %}<p class="text-muted mb-0">No activity yet.</p>{% endfor %}
         </div>
       </div>
     </div>
   </div>
 
+</div>
+
+<div class="modal fade" id="interviewModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="interviewModalTitle">Schedule Interview</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="interviewModalBody">
+        <div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm"></span> Loading…</div>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}
 
@@ -424,30 +526,19 @@ document.querySelectorAll('.js-autosave').forEach(function (form) {
   form.addEventListener('change', show);
 });
 
-// Communication Log: show only the outcomes that make sense for the chosen channel.
-// Phone -> Unable to connect / Call back / Attended;  Interview -> Attended / Not turned up.
-(function () {
-  var channel = document.getElementById('id_channel');
-  var outcome = document.getElementById('id_outcome');
-  if (!channel || !outcome) return;
-  var MAP = {
-    'PHONE':     [['UNABLE', 'Unable to connect'], ['CALLBACK', 'Call back'], ['ATTENDED', 'Attended']],
-    'INTERVIEW': [['ATTENDED', 'Attended'], ['NOT_TURNED_UP', 'Not turned up']]
+// Hiring stage cards: Blacklist requires a reason (matches the app-wide rule
+// enforced server-side by CandidateStatusActionView(require_reason=True)) -
+// keep its button disabled until the shared remarks box has real content.
+document.querySelectorAll('.js-stage-form').forEach(function (form) {
+  var reason = form.querySelector('.js-stage-reason');
+  var gated = form.querySelectorAll('[data-require-reason]');
+  if (!reason || !gated.length) return;
+  var sync = function () {
+    var filled = reason.value.trim().length > 0;
+    gated.forEach(function (btn) { btn.disabled = !filled; });
   };
-  function rebuild() {
-    var prev = outcome.value;
-    outcome.innerHTML = '<option value="">— Outcome —</option>';
-    (MAP[channel.value] || []).forEach(function (o) {
-      var el = document.createElement('option');
-      el.value = o[0];
-      el.textContent = o[1];
-      if (o[0] === prev) el.selected = true;
-      outcome.appendChild(el);
-    });
-  }
-  channel.addEventListener('change', rebuild);
-  rebuild();
-})();
+  reason.addEventListener('input', sync);
+});
 
 // Re-score / Regenerate AI CV Summary run in the background (they call an
 // external AI service and can take a while) - poll until each one finishes,
@@ -469,5 +560,77 @@ pollCandidateAction("{% url 'candidate_rescore_status' candidate.pk %}");
 {% if candidate.cv_summary_state == 'RUNNING' %}
 pollCandidateAction("{% url 'candidate_regenerate_summary_status' candidate.pk %}");
 {% endif %}
+
+// Schedule/Reschedule Interview popup: step 1 (interviewer/date/round/
+// candidate email) saves the interview and swaps in step 2 (an editable
+// invite email draft) without leaving the page. Reloads on close so the
+// updated Activity History/Interviews card show up either way once a save
+// actually happened.
+(function () {
+  var modalEl = document.getElementById('interviewModal');
+  if (!modalEl) return;
+  var modal = new bootstrap.Modal(modalEl);
+  var body = document.getElementById('interviewModalBody');
+  var title = document.getElementById('interviewModalTitle');
+  var didSave = false;
+
+  modalEl.addEventListener('show.bs.modal', function (event) {
+    didSave = false;
+    var btn = event.relatedTarget;
+    title.textContent = (btn && btn.dataset.modalTitle) || 'Schedule Interview';
+    body.innerHTML = '<div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm"></span> Loading…</div>';
+    fetch(btn.dataset.loadUrl, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+      .then(function (r) { return r.text(); })
+      .then(function (html) { body.innerHTML = html; })
+      .catch(function () { body.innerHTML = '<div class="alert alert-danger">Could not load the form. Please try again.</div>'; });
+  });
+
+  modalEl.addEventListener('hidden.bs.modal', function () {
+    if (didSave) { window.location.reload(); }
+  });
+
+  // Delegated: handles whichever form is currently in the modal body - the
+  // schedule/reschedule form (step 1) or the invite draft form (step 2).
+  body.addEventListener('submit', function (event) {
+    var form = event.target;
+    if (!(form instanceof HTMLFormElement)) return;
+    event.preventDefault();
+    var submitBtn = form.querySelector('button[type="submit"]');
+    if (submitBtn) { submitBtn.disabled = true; }
+
+    if (form.dataset.step === 'send-invite') {
+      fetch(form.action, {
+        method: 'POST', headers: {'X-Requested-With': 'XMLHttpRequest'}, body: new FormData(form),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.ok) { modal.hide(); }
+          else {
+            if (submitBtn) { submitBtn.disabled = false; }
+            var box = form.querySelector('#inviteSendError');
+            if (box) { box.hidden = false; box.textContent = data.error || 'Could not send the invite.'; }
+          }
+        })
+        .catch(function () {
+          if (submitBtn) { submitBtn.disabled = false; }
+          var box = form.querySelector('#inviteSendError');
+          if (box) { box.hidden = false; box.textContent = 'Network error - please try again.'; }
+        });
+    } else {
+      fetch(form.action, {
+        method: 'POST', headers: {'X-Requested-With': 'XMLHttpRequest'}, body: new FormData(form),
+      })
+        .then(function (r) { return r.text().then(function (html) { return {html: html, ok: r.ok}; }); })
+        .then(function (result) {
+          body.innerHTML = result.html;
+          if (result.ok) { didSave = true; title.textContent = 'Review Invite Email'; }
+          else if (submitBtn) { submitBtn.disabled = false; }
+        })
+        .catch(function () {
+          if (submitBtn) { submitBtn.disabled = false; }
+        });
+    }
+  });
+})();
 </script>
 {% endblock %}
