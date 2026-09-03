@@ -5,7 +5,10 @@
 <style>
 /* ===== Recruitment funnel (self-contained so it never depends on cached CSS) ===== */
 
-/* ---- Accordion funnel: one bar per stage, click to expand its breakdown ---- */
+/* ---- Funnel: each stage's bar has the breakdown baked in as shaded
+   segments (hover for the value + label); a +/- per row swaps that for the
+   plain green bar + a row of clickable chips below, for anyone who'd rather
+   read the breakdown as a list. ---- */
 .fnl-panel { background: #fff; border: 1px solid #e2ebeb; border-radius: 12px; padding: 22px 24px 18px; }
 .fnl-panel-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 8px; }
 .fnl-panel-head h5 { margin: 0 0 2px; }
@@ -15,18 +18,38 @@
 .fnl-stagewrap { border-bottom: 1px solid #eef2f2; }
 .fnl-stagewrap:last-of-type { border-bottom: none; }
 
-.fnl-row2 {
-  display: flex; align-items: center; gap: 16px; width: 100%; padding: 13px 2px;
-  background: none; border: 0; text-align: left; cursor: pointer;
+.fnl-row3 { display: flex; align-items: center; gap: 16px; width: 100%; padding: 13px 2px; }
+.fnl-row3 .lbl { flex: 0 0 132px; font-size: .72rem; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: #4a5a60; }
+.fnl-row3 .track { position: relative; flex: 1 1 auto; min-width: 0; height: 30px; background: #f0f3f3; border-radius: 5px; display: flex; overflow: visible; }
+.fnl-row3 .val { flex: 0 0 56px; text-align: right; font-weight: 700; font-size: 1.15rem; color: #1f2a2a; }
+
+.fnl-toggle, .fnl-toggle-spacer { flex: 0 0 22px; width: 22px; height: 22px; }
+.fnl-toggle {
+  border-radius: 999px; border: 1px solid #d8e0df; background: #fff; padding: 0;
+  display: flex; align-items: center; justify-content: center; font-size: .85rem; color: #566664; cursor: pointer;
 }
-.fnl-row2:hover { background: #f8fafa; }
-.fnl-row2-static { cursor: default; }
-.fnl-row2-static:hover { background: none; }
-.fnl-row2 .lbl { flex: 0 0 132px; font-size: .72rem; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: #4a5a60; }
-.fnl-row2 .track { flex: 1 1 auto; min-width: 0; height: 28px; background: #f0f3f3; border-radius: 4px; overflow: hidden; }
-.fnl-row2 .fill { display: block; height: 100%; }
-.fnl-row2 .val { flex: 0 0 56px; text-align: right; font-weight: 700; font-size: 1.15rem; color: #1f2a2a; }
-.fnl-row2 .caret { flex: 0 0 18px; text-align: right; font-size: .9rem; color: #9aabab; }
+.fnl-toggle:hover { border-color: #b9c8c8; color: #1f2a2a; }
+
+.seg {
+  position: relative; display: flex; align-items: center; justify-content: center; height: 100%;
+  min-width: 3px; text-decoration: none; border-right: 1px solid rgba(255,255,255,.6);
+}
+.seg:first-child { border-top-left-radius: 5px; border-bottom-left-radius: 5px; }
+.seg:last-child { border-right: none; border-top-right-radius: 5px; border-bottom-right-radius: 5px; }
+.seg:hover { filter: brightness(.95); }
+.fnl-stagewrap.chips-mode .seg:not(.seg-green) { display: none; }
+.fnl-stagewrap.chips-mode .seg-green { border-right: none; border-top-right-radius: 5px; border-bottom-right-radius: 5px; }
+
+.seg-inline { font-size: .66rem; font-weight: 600; white-space: nowrap; pointer-events: none; }
+.seg-tip {
+  position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+  background: #1f2a2a; color: #fff; padding: 7px 12px; border-radius: 7px; white-space: nowrap; z-index: 20;
+  box-shadow: 0 10px 22px rgba(16,32,30,.28); text-align: center; visibility: hidden; opacity: 0;
+  transition: opacity .1s ease; pointer-events: none;
+}
+.seg:hover .seg-tip { visibility: visible; opacity: 1; }
+.seg-tip b { display: block; font-size: .92rem; line-height: 1.1; font-weight: 700; }
+.seg-tip i { display: block; font-style: normal; font-size: .58rem; letter-spacing: .05em; text-transform: uppercase; opacity: .72; margin-top: 2px; }
 
 .fnl-stats { display: flex; gap: 22px; }
 .fnl-stat { text-align: right; }
@@ -46,28 +69,27 @@
 @media (max-width: 700px) {
   .fnl-panel-head { flex-direction: column; gap: 10px; }
   .fnl-stats { align-self: flex-start; }
-  .fnl-row2 .lbl { flex-basis: 90px; }
+  .fnl-row3 .lbl { flex-basis: 90px; }
   .fnl-chips { padding-left: 106px; }
 }
 
 /* ---- Summary tab: plain stat cards + tables ---- */
-.sm-kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 22px; }
-.sm-kpi { background: #fff; border: 1px solid #e2ebeb; border-radius: 12px; padding: 16px 20px; }
+.sm-kpis { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 22px; }
+.sm-kpi { flex: 1 1 150px; min-width: 150px; background: #fff; border: 1px solid #e2ebeb; border-top: 3px solid var(--kpi-accent, #e2ebeb); border-radius: 12px; padding: 16px 20px; }
 .sm-kpi .lbl { font-size: .72rem; text-transform: uppercase; letter-spacing: .5px; color: #6b7a7a; font-weight: 600; }
 .sm-kpi .val { font-size: 1.9rem; font-weight: 700; color: #1f2a2a; margin-top: 4px; }
 .sm-kpi .sub { font-size: .72rem; color: #8a9a9a; margin-top: 4px; }
+.sm-kpi-bar { height: 4px; border-radius: 999px; background: #edf1f0; overflow: hidden; margin-top: 10px; }
+.sm-kpi-bar-fill { height: 100%; border-radius: 999px; }
 
 .sm-thead { display: flex; align-items: center; gap: 14px; padding: 10px 0 8px; border-bottom: 1px solid #e2ebeb; font-size: .68rem; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: #6b7a7a; }
 .sm-row { display: flex; align-items: center; gap: 14px; padding: 13px 0; border-bottom: 1px solid #eef2f2; }
 .sm-row:last-child { border-bottom: none; }
 .sm-col-name { flex: 1; font-size: .85rem; font-weight: 500; color: #1f2a2a; }
 .sm-col-num { width: 82px; text-align: center; font-size: .8rem; font-weight: 600; color: #1f2a2a; }
-.sm-col-plain { width: 60px; text-align: center; font-size: .78rem; color: #1f2a2a; }
+.sm-col-plain { width: 70px; text-align: center; font-size: .78rem; color: #1f2a2a; }
 .sm-col-short { width: 88px; text-align: center; font-size: .78rem; font-weight: 600; color: #0e6f6b; }
 .sm-col-hired { width: 56px; text-align: center; font-size: .78rem; color: #8a9a9a; }
-@media (max-width: 700px) {
-  .sm-kpis { grid-template-columns: repeat(2, 1fr); }
-}
 </style>
 {% endblock %}
 
@@ -113,11 +135,36 @@
   <div class="tab-pane fade {% if view != 'overview' %}show active{% endif %}" id="summaryPane">
     {% with s=summary %}
     <div class="sm-kpis">
-      <div class="sm-kpi"><div class="lbl">Total Applicants</div><div class="val">{{ s.total }}</div></div>
-      <div class="sm-kpi"><div class="lbl">Open</div><div class="val">{{ s.open }}</div></div>
-      <div class="sm-kpi"><div class="lbl">Shortlisted</div><div class="val">{{ s.shortlisted }}</div></div>
-      <div class="sm-kpi"><div class="lbl">Rejected</div><div class="val">{{ s.rejected }}</div></div>
-      <div class="sm-kpi"><div class="lbl">Hired</div><div class="val">{{ s.hired }}</div><div class="sub">of {{ funnel_top.requirement }} openings</div></div>
+      <div class="sm-kpi" style="--kpi-accent:#1f2a2a">
+        <div class="lbl">Open Positions</div>
+        <div class="val">{{ open_positions }}</div>
+        <div class="sub">vacancies</div>
+      </div>
+      <div class="sm-kpi" style="--kpi-accent:#c9d3d1">
+        <div class="lbl">Total Applicants</div>
+        <div class="val">{{ s.total }}</div>
+      </div>
+      <div class="sm-kpi" style="--kpi-accent:#c9d3d1">
+        <div class="lbl">Unattended</div>
+        <div class="val" style="color:#6b7a7a">{{ s.open }}</div>
+        <div class="sm-kpi-bar"><div class="sm-kpi-bar-fill" style="width:{% if s.total %}{% widthratio s.open s.total 100 %}{% else %}0{% endif %}%;background:#8a9a9a"></div></div>
+      </div>
+      <div class="sm-kpi" style="--kpi-accent:#0e6f6b">
+        <div class="lbl">Shortlisted</div>
+        <div class="val" style="color:#0e6f6b">{{ s.shortlisted }}</div>
+        <div class="sm-kpi-bar"><div class="sm-kpi-bar-fill" style="width:{% if s.total %}{% widthratio s.shortlisted s.total 100 %}{% else %}0{% endif %}%;background:#0e6f6b"></div></div>
+      </div>
+      <div class="sm-kpi" style="--kpi-accent:#dc3545">
+        <div class="lbl">Rejected</div>
+        <div class="val" style="color:#b02a37">{{ s.rejected }}</div>
+        <div class="sm-kpi-bar"><div class="sm-kpi-bar-fill" style="width:{% if s.total %}{% widthratio s.rejected s.total 100 %}{% else %}0{% endif %}%;background:#dc3545"></div></div>
+      </div>
+      <div class="sm-kpi" style="--kpi-accent:#0e6f6b">
+        <div class="lbl">Hired</div>
+        <div class="val" style="color:#0e6f6b">{{ s.hired }}</div>
+        <div class="sub">of {{ funnel_top.requirement }} openings</div>
+        <div class="sm-kpi-bar"><div class="sm-kpi-bar-fill" style="width:{% if s.total %}{% widthratio s.hired s.total 100 %}{% else %}0{% endif %}%;background:#0e6f6b"></div></div>
+      </div>
     </div>
     {% endwith %}
 
@@ -128,7 +175,7 @@
           <div class="sm-thead">
             <span class="sm-col-name">Role</span>
             <span class="sm-col-num">Applicants</span>
-            <span class="sm-col-plain">Open</span>
+            <span class="sm-col-plain">Unattended</span>
             <span class="sm-col-short">Shortlisted</span>
             <span class="sm-col-plain">Rejected</span>
             <span class="sm-col-hired">Hired</span>
@@ -151,7 +198,7 @@
           <div class="sm-thead">
             <span class="sm-col-name">Source</span>
             <span class="sm-col-num">Applicants</span>
-            <span class="sm-col-plain">Open</span>
+            <span class="sm-col-plain">Unattended</span>
             <span class="sm-col-short">Shortlisted</span>
             <span class="sm-col-plain">Rejected</span>
             <span class="sm-col-hired">Hired</span>
@@ -178,29 +225,42 @@
       <div class="fnl-panel-head">
         <div>
           <h5>Hiring funnel</h5>
-          <span class="fnl-hint">Click a stage for its breakdown</span>
+          <span class="fnl-hint">Hover a stage's bar for its breakdown, or use +/- to list it below instead</span>
         </div>
         <div class="fnl-stats">
           <div class="fnl-stat"><div class="n">{{ funnel_top.requirement }}</div><div class="t">Openings</div></div>
         </div>
       </div>
-      <div id="funnelAccordion">
+      <div id="funnelBars">
         <div class="fnl-stagewrap">
-          <div class="fnl-row2 fnl-row2-static">
+          <div class="fnl-row3">
             <span class="lbl">Total Candidates</span>
-            <span class="track"><span class="fill" style="width:100%;background:{{ funnel_total_color }}"></span></span>
+            <span class="track">
+              <span class="seg seg-green" style="width:100%;background:{{ funnel_total_color }}">
+                <span class="seg-inline" style="color:#fff">{{ funnel_top.total }}</span>
+              </span>
+            </span>
             <span class="val">{{ funnel_top.total }}</span>
-            <span class="caret"></span>
+            <span class="fnl-toggle-spacer"></span>
           </div>
         </div>
         {% for stage in funnel %}
         <div class="fnl-stagewrap">
-          <button type="button" class="fnl-row2" aria-expanded="false">
+          <div class="fnl-row3">
             <span class="lbl">{{ stage.name }}</span>
-            <span class="track"><span class="fill" style="width:{{ stage.pct }}%;background:{{ stage.color }}"></span></span>
+            <span class="track">
+              {% for seg in stage.segments %}
+              <a class="seg{% if seg.is_green %} seg-green{% endif %}"
+                 href="{% url 'candidate_repository' %}?flow={{ seg.flow }}{% if jobq %}&job={{ jobq }}{% endif %}"
+                 style="width:{{ seg.pct }}%;background:{{ seg.bg }}">
+                {% if seg.show_inline %}<span class="seg-inline" style="color:{{ seg.text_color }}">{{ seg.value }}</span>{% endif %}
+                <span class="seg-tip"><b>{{ seg.value }}</b><i>{{ seg.label }}</i></span>
+              </a>
+              {% endfor %}
+            </span>
             <span class="val">{{ stage.value }}</span>
-            <span class="caret">+</span>
-          </button>
+            <button type="button" class="fnl-toggle" aria-expanded="false" aria-label="List this stage's breakdown below instead">+</button>
+          </div>
           <div class="fnl-chips" hidden>
             {% for chip in stage.chips %}
             <a class="fnl-chip" href="{% url 'candidate_repository' %}?flow={{ chip.flow }}{% if jobq %}&job={{ jobq }}{% endif %}">
@@ -254,19 +314,20 @@ document.querySelectorAll('#dashTabs button[data-bs-toggle="tab"]').forEach(func
   });
 });
 
-// Funnel accordion: clicking a stage row toggles its own breakdown chips,
-// independently of every other stage - any number can be open at once.
-document.querySelectorAll('#funnelAccordion .fnl-stagewrap').forEach(function (wrap) {
-  var row = wrap.querySelector('.fnl-row2');
+// Funnel bars: the breakdown is baked into each stage's bar as shaded
+// segments by default. The +/- swaps that one row to a plain green bar with
+// its breakdown listed as chips below instead - independently per stage.
+document.querySelectorAll('#funnelBars .fnl-stagewrap').forEach(function (wrap) {
+  var btn = wrap.querySelector('.fnl-toggle');
   var chips = wrap.querySelector('.fnl-chips');
-  var caret = wrap.querySelector('.caret');
-  // The static "Total Candidates" row has no breakdown to expand.
-  if (!chips) { return; }
-  row.addEventListener('click', function () {
-    var willOpen = chips.hidden;
-    chips.hidden = !willOpen;
-    caret.textContent = willOpen ? '−' : '+';
-    row.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+  // The static "Total Candidates" row has no toggle/breakdown.
+  if (!btn || !chips) { return; }
+  btn.addEventListener('click', function () {
+    var toChips = !wrap.classList.contains('chips-mode');
+    wrap.classList.toggle('chips-mode', toChips);
+    chips.hidden = !toChips;
+    btn.textContent = toChips ? '−' : '+';
+    btn.setAttribute('aria-expanded', toChips ? 'true' : 'false');
   });
 });
 </script>

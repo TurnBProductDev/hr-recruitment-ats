@@ -13,6 +13,21 @@
 .cv-summary-md ul { padding-left:1.2rem; margin-bottom:10px; }
 .cv-summary-md p { margin-bottom:8px; }
 .cv-summary-md p:last-child { margin-bottom:0; }
+
+/* Contact / Background / Application: labelled two-column grid */
+.section-eyebrow { font-size:.72rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--primary-green); margin-bottom:14px; }
+.field-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px 28px; }
+.field-full { grid-column:1 / -1; }
+.field-label { font-size:.72rem; color:#8b9998; margin-bottom:3px; }
+.field-value { font-size:.88rem; color:#2b3238; }
+.field-value.text-muted { color:#b7c0be !important; }
+
+/* Match Score: big numeral + subscore grid, coloured by score_tier (matches the Repository score meter) */
+.match-score-num { font-size:2.1rem; font-weight:700; line-height:1; }
+.match-score-high { color: var(--primary-green); }
+.match-score-mid { color: #8a6a12; }
+.match-score-low { color: #dc3545; }
+.match-subscore-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px 24px; padding:12px 0; margin:12px 0; border-top:1px solid var(--border-color); border-bottom:1px solid var(--border-color); font-size:.85rem; }
 </style>
 {% endblock %}
 
@@ -45,24 +60,47 @@
 <div class="row g-3">
   <div class="col-lg-7">
     <div class="card app-card p-4 mb-3">
-      <h5 class="mb-3">Personal Details</h5>
-      <dl class="row mb-0">
-        <dt class="col-sm-4">Email</dt><dd class="col-sm-8">{{ candidate.email }}</dd>
-        <dt class="col-sm-4">Phone</dt><dd class="col-sm-8">{{ candidate.phone|default:"-" }}</dd>
-        <dt class="col-sm-4">DOB</dt><dd class="col-sm-8">{{ candidate.dob|default:"-" }}</dd>
-        <dt class="col-sm-4">Location</dt><dd class="col-sm-8">{{ candidate.current_location|default:"-" }}</dd>
-        <dt class="col-sm-4">Qualification</dt><dd class="col-sm-8">{{ candidate.qualification|default:"-" }}</dd>
-        <dt class="col-sm-4">Applied Position</dt>
-        <dd class="col-sm-8">
-          {% if candidate.role_applied %}{{ candidate.role_applied }}
-          {% else %}<span class="text-muted">Not captured</span>{% endif %}
+      <div class="section-eyebrow">Contact</div>
+      <div class="field-grid">
+        <div><div class="field-label">Email</div><div class="field-value">{{ candidate.email }}</div></div>
+        <div><div class="field-label">Phone</div><div class="field-value">{{ candidate.phone|default:"-" }}</div></div>
+        <div><div class="field-label">DOB</div><div class="field-value {% if not candidate.dob %}text-muted{% endif %}">{{ candidate.dob|default:"-" }}</div></div>
+        <div><div class="field-label">Location</div><div class="field-value {% if not candidate.current_location %}text-muted{% endif %}">{{ candidate.current_location|default:"-" }}</div></div>
+        <div><div class="field-label">LinkedIn</div><div class="field-value {% if not candidate.linkedin %}text-muted{% endif %}">{% if candidate.linkedin %}<a href="{{ candidate.linkedin }}" target="_blank">{{ candidate.linkedin }}</a>{% else %}-{% endif %}</div></div>
+        <div><div class="field-label">Portfolio</div><div class="field-value {% if not candidate.portfolio_url %}text-muted{% endif %}">{% if candidate.portfolio_url %}<a href="{{ candidate.portfolio_url }}" target="_blank">{{ candidate.portfolio_url }}</a>{% else %}-{% endif %}</div></div>
+      </div>
+    </div>
+
+    <div class="card app-card p-4 mb-3">
+      <div class="section-eyebrow">Background</div>
+      <div class="field-grid">
+        <div class="field-full"><div class="field-label">Qualification</div><div class="field-value {% if not candidate.qualification %}text-muted{% endif %}">{{ candidate.qualification|default:"-" }}</div></div>
+        <div><div class="field-label">Notice Period</div><div class="field-value {% if not candidate.notice_period %}text-muted{% endif %}">{{ candidate.notice_period|default:"-" }}</div></div>
+        <div><div class="field-label">Current / Expected Salary</div><div class="field-value">{{ candidate.current_salary|default:"-" }} / {{ candidate.expected_salary|default:"-" }}</div></div>
+        {% if candidate.resume_url %}
+        <div class="field-full"><div class="field-label">Resume (CV)</div><div class="field-value"><a href="{{ candidate.resume_url }}" target="_blank"><i class="bi bi-file-earmark-person"></i> Open CV</a></div></div>
+        {% elif candidate.resume_blob_url %}
+        <div class="field-full"><div class="field-label">Resume</div><div class="field-value"><a href="{{ candidate.resume_blob_url.url }}" target="_blank">Download / Preview</a></div></div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card app-card p-4 mb-3">
+      <div class="section-eyebrow">Application</div>
+      <div class="d-flex flex-column gap-3">
+        <div>
+          <div class="field-label">Applied Position</div>
+          <div class="field-value">
+            {% if candidate.role_applied %}{{ candidate.role_applied }}
+            {% else %}<span class="text-muted">Not captured</span>{% endif %}
+          </div>
           <div class="form-text mb-0">What the applicant asked for, as captured from their CV / email.</div>
-        </dd>
-        <dt class="col-sm-4">Mapped Vacancy</dt>
-        <dd class="col-sm-8">
+        </div>
+        <div>
+          <div class="field-label mb-1">Mapped Vacancy</div>
           <form method="post" action="{% url 'candidate_change_job' candidate.pk %}" class="d-flex gap-2 align-items-center">
             {% csrf_token %}
-            <select name="job" class="form-select form-select-sm" style="max-width: 260px;">
+            <select name="job" class="form-select form-select-sm flex-grow-1">
               <option value="">— Unassigned —</option>
               {% for j in all_jobs %}
               <option value="{{ j.id }}" {% if candidate.job_id == j.id %}selected{% endif %}>{{ j.title }}</option>
@@ -70,46 +108,46 @@
             </select>
             <button type="submit" class="btn btn-sm btn-outline-app">Map</button>
           </form>
-        </dd>
-        <dt class="col-sm-4">Source</dt>
-        <dd class="col-sm-8">
+        </div>
+        <div>
+          <div class="field-label mb-1">Source</div>
           <form method="post" action="{% url 'candidate_change_source' candidate.pk %}" class="d-flex gap-2 align-items-center">
             {% csrf_token %}
-            <input type="text" name="source" value="{{ candidate.source|default:'' }}" class="form-control form-control-sm" style="max-width: 220px;" placeholder="e.g. Careers">
+            <input type="text" name="source" value="{{ candidate.source|default:'' }}" class="form-control form-control-sm flex-grow-1" placeholder="e.g. Careers">
             <button type="submit" class="btn btn-sm btn-outline-app">Save</button>
           </form>
-        </dd>
-        <dt class="col-sm-4">LinkedIn</dt><dd class="col-sm-8">{% if candidate.linkedin %}<a href="{{ candidate.linkedin }}" target="_blank">{{ candidate.linkedin }}</a>{% else %}-{% endif %}</dd>
-        <dt class="col-sm-4">Portfolio</dt><dd class="col-sm-8">{% if candidate.portfolio_url %}<a href="{{ candidate.portfolio_url }}" target="_blank">{{ candidate.portfolio_url }}</a>{% else %}-{% endif %}</dd>
-        <dt class="col-sm-4">Notice Period</dt><dd class="col-sm-8">{{ candidate.notice_period|default:"-" }}</dd>
-        <dt class="col-sm-4">Current / Expected Salary</dt><dd class="col-sm-8">{{ candidate.current_salary|default:"-" }} / {{ candidate.expected_salary|default:"-" }}</dd>
-        {% if candidate.resume_url %}
-        <dt class="col-sm-4">Resume (CV)</dt><dd class="col-sm-8"><a href="{{ candidate.resume_url }}" target="_blank"><i class="bi bi-file-earmark-person"></i> Open CV</a></dd>
-        {% elif candidate.resume_blob_url %}
-        <dt class="col-sm-4">Resume</dt><dd class="col-sm-8"><a href="{{ candidate.resume_blob_url.url }}" target="_blank">Download / Preview</a></dd>
-        {% endif %}
-      </dl>
+        </div>
+      </div>
     </div>
 
     <div class="card app-card p-4 mb-3">
       <h5 class="mb-3"><i class="bi bi-bullseye"></i> Match Score</h5>
       {% if candidate.match_score is not None %}
-        <div class="d-flex align-items-center gap-2 mb-2">
-          <span class="badge {{ candidate.match_score|score_badge_class }} fs-6">{{ candidate.match_score }}/100</span>
-          <span class="text-muted small">against {{ candidate.job.title|default:"the mapped vacancy" }}
-            &middot; scored {{ candidate.match_scored_at|date:"d M Y, H:i" }}</span>
-        </div>
         {% with b=candidate.match_breakdown_parsed %}
-        <div class="small text-muted mb-2">
-          Skills {{ b.skills_score|default:"-" }}/30 &middot;
-          Experience {{ b.experience_score|default:"-" }}/30 &middot;
-          Education {{ b.education_score|default:"-" }}/30 &middot;
-          Overall Fit {{ b.fit_score|default:"-" }}/10
+        <div class="d-flex align-items-baseline gap-2">
+          <span class="match-score-num match-score-{{ candidate.match_score|score_tier }}">{{ candidate.match_score }}</span>
+          <span class="text-muted">/ 100</span>
         </div>
-        {% if b.matched_skills %}<p class="mb-1 small"><strong>Matched:</strong> {{ b.matched_skills|join:", " }}</p>{% endif %}
-        {% if b.missing_skills %}<p class="mb-1 small"><strong>Missing:</strong> {{ b.missing_skills|join:", " }}</p>{% endif %}
+        <div class="small text-muted mt-1">{{ candidate.job.title|default:"the mapped vacancy" }} &middot; {{ candidate.match_scored_at|date:"d M Y" }}</div>
+
+        <div class="match-subscore-grid">
+          <div class="d-flex justify-content-between"><span class="text-muted">Skills</span><span class="fw-semibold font-monospace">{{ b.skills_score|default:"-" }}/30</span></div>
+          <div class="d-flex justify-content-between"><span class="text-muted">Experience</span><span class="fw-semibold font-monospace">{{ b.experience_score|default:"-" }}/30</span></div>
+          <div class="d-flex justify-content-between"><span class="text-muted">Education</span><span class="fw-semibold font-monospace">{{ b.education_score|default:"-" }}/30</span></div>
+          <div class="d-flex justify-content-between"><span class="text-muted">Overall Fit</span><span class="fw-semibold font-monospace">{{ b.fit_score|default:"-" }}/10</span></div>
+        </div>
+
+        {% if b.matched_skills %}
+        <div class="mb-1">
+          <div class="small fw-semibold" style="color: var(--dark-green);">Matched</div>
+          <div class="small">{{ b.matched_skills|join:", " }}</div>
+        </div>
+        {% endif %}
+        {% if b.missing_skills %}
+        <div class="small"><span class="fw-semibold text-danger">Missing</span> {{ b.missing_skills|join:", " }}</div>
+        {% endif %}
         {% endwith %}
-        {% if candidate.match_rationale %}<p class="mb-0">{{ candidate.match_rationale }}</p>{% endif %}
+        {% if candidate.match_rationale %}<p class="small text-muted fst-italic mt-3 mb-0">{{ candidate.match_rationale }}</p>{% endif %}
       {% elif candidate.match_state == 'ERROR' %}
         <p class="text-danger mb-0">Scoring failed: {{ candidate.match_error }}</p>
       {% elif candidate.job and candidate.job.title|lower != "general application" %}

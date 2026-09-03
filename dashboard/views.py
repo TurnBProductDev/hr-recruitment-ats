@@ -60,6 +60,10 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
         ctx['view'] = self.request.GET.get('view', 'summary')
 
         # ---------- Summary ----------
+        # Open vacancies, not candidates - always the global count regardless of
+        # the job/candidate filters above, so picking one role doesn't make it look
+        # like there's only one opening.
+        ctx['open_positions'] = Job.objects.filter(status=Job.Status.OPEN, is_archived=False).count()
         ctx['summary'] = _summary_counts_qs(base)
         ctx['by_job'] = (base.values('job__title')
                          .annotate(**_grouped_counts())
@@ -139,14 +143,19 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
                        ('Rejected', rej_final, 'rejected_after_final')]},
         ]
 
-        # Collapsed-accordion view of the same numbers: one bar per stage
-        # (width relative to total resumes, so every bar shares the same base
-        # and the row narrows the way a funnel should) and every pending/hold/
-        # drop count flattened into clickable chips for the expanded breakdown.
-        BAR_COLORS = ('#0e6f6b', '#1a8b84', '#2ba49b', '#4cbdb3', '#8ad6ce')
-        ctx['funnel_total_color'] = BAR_COLORS[0]
+        # One bar per stage, breakdown baked in as shaded segments: a solid
+        # green segment for the stage's own "cleared" count, then grey
+        # segments (darkest = biggest) for everyone from the previous stage's
+        # cohort who didn't clear - pending + every drop reason, normalised so
+        # they always fill the bar out to exactly the previous stage's share
+        # of peak, however their raw counts add up.
+        GREEN = '#0e6f6b'
+        GREY_RGB = '31,42,42'  # this page's dark neutral (#1f2a2a), same as .val text
+        GREY_ALPHAS = (0.14, 0.11, 0.08, 0.06, 0.04, 0.03)
+        ctx['funnel_total_color'] = GREEN
         peak = base.count() or 1
-        for i, stage in enumerate(ctx['funnel']):
+        prev_value = ctx['funnel_top']['total']
+        for stage in ctx['funnel']:
             label, value, _decided, flow = stage['cleared']
             chips = [{'label': stage['pending'][0], 'count': stage['pending'][1], 'flow': stage['pending'][2]}]
             if 'pending2' in stage:
@@ -155,18 +164,40 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
             # Keep a decimal instead of rounding to a whole percent, so two
             # small-but-different stages (e.g. 10 vs 1) don't collapse onto
             # the same rounded width. A nonzero stage still gets a minimum
-            # sliver so it stays visible even when it rounds under 1%.
+            # sliver so it stays visible - and clickable - even when it
+            # rounds under 1%.
             pct = round(value / peak * 100, 1)
             if value > 0 and pct < 1:
                 pct = 1
+
+            segments = []
+            if value > 0:
+                segments.append({
+                    'flow': flow, 'value': value, 'label': label, 'pct': pct,
+                    'bg': GREEN, 'text_color': '#fff', 'show_inline': pct > 6, 'is_green': True,
+                })
+            breakdown_items = sorted((c for c in chips if c['count'] > 0), key=lambda c: -c['count'])
+            breakdown_pct = round((prev_value - value) / peak * 100, 1)
+            items_total = sum(c['count'] for c in breakdown_items) or 1
+            for j, c in enumerate(breakdown_items):
+                seg_pct = round(c['count'] / items_total * breakdown_pct, 1)
+                if seg_pct < 0.3:
+                    seg_pct = 0.3
+                segments.append({
+                    'flow': c['flow'], 'value': c['count'], 'label': c['label'], 'pct': seg_pct,
+                    'bg': f'rgba({GREY_RGB},{GREY_ALPHAS[min(j, len(GREY_ALPHAS) - 1)]})',
+                    'text_color': '#33393c', 'show_inline': seg_pct > 4.5, 'is_green': False,
+                })
+
             stage.update(
                 value=value,
                 value_label=label,
                 value_flow=flow,
                 pct=pct,
                 chips=chips,
-                color=BAR_COLORS[i % len(BAR_COLORS)],
+                segments=segments,
             )
+            prev_value = value
 
         ctx['upcoming_interviews'] = Interview.objects.select_related('candidate', 'interviewer').filter(
             status=Interview.Status.SCHEDULED, scheduled_date__gte=timezone.now()
