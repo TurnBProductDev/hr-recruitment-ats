@@ -111,7 +111,18 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
 .daily-range-btn:hover { border-color: #b9c8c8; }
 .daily-range-btn i { font-size: .7rem; color: #8a9a9a; }
 .daily-range-days { color: #8a9a9a; margin-left: 2px; }
-.daily-range-input-hidden { position: absolute; top: 100%; right: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+.daily-range-dropdown {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; background: #fff;
+  border: 1px solid #d8e0df; border-radius: 10px; box-shadow: 0 10px 28px rgba(0,0,0,.12); padding: 14px;
+}
+.daily-range-fields { display: flex; gap: 10px; margin-bottom: 10px; }
+.daily-range-field { flex: 1; }
+.daily-range-field label { display: block; font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #8a9a9a; margin-bottom: 3px; }
+.daily-range-field input { width: 100%; border: 1px solid #d8e0df; border-radius: 6px; padding: 5px 8px; font-size: .8rem; color: #1f2a2a; background: #f8fafa; }
+#dailyRangeInput { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.daily-range-dropdown .flatpickr-calendar.inline { box-shadow: none; margin: 0 auto; }
+.daily-range-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
 
 .daily-bars { display: flex; align-items: stretch; gap: 22px; height: 260px; padding: 30px 6px 0; }
 .daily-col {
@@ -365,7 +376,23 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
             </span>
             <i class="bi bi-chevron-down"></i>
           </button>
-          <input type="text" id="dailyRangeInput" class="daily-range-input-hidden">
+          <div class="daily-range-dropdown" id="dailyRangeDropdown" hidden>
+            <div class="daily-range-fields">
+              <div class="daily-range-field">
+                <label for="dailyRangeStart">Start Date</label>
+                <input type="text" id="dailyRangeStart" readonly>
+              </div>
+              <div class="daily-range-field">
+                <label for="dailyRangeEnd">End Date</label>
+                <input type="text" id="dailyRangeEnd" readonly>
+              </div>
+            </div>
+            <input type="text" id="dailyRangeInput">
+            <div class="daily-range-actions">
+              <button type="button" class="btn btn-sm btn-outline-app" id="dailyRangeCancel">Cancel</button>
+              <button type="button" class="btn btn-sm btn-fill-app" id="dailyRangeOk">OK</button>
+            </div>
+          </div>
         </div>
       </div>
       <div class="daily-bars">
@@ -420,32 +447,67 @@ document.querySelectorAll('#funnelBars .fnl-stagewrap').forEach(function (wrap) 
   });
 });
 
-// Daily View's date-range picker: pick a range, then reload with
-// daily_from/daily_to set (preserving the job/scope filters already in the
-// URL) - the server recomputes the whole chart for that range.
+// Daily View's date-range picker: an inline calendar in a dropdown, with its
+// own Start/End Date fields kept in sync as days are clicked. Nothing is
+// applied until OK is pressed (or Cancel/an outside click discards it) -
+// only then does it reload with daily_from/daily_to set (preserving the
+// job/scope filters already in the URL) so the server recomputes the chart.
 (function () {
   var btn = document.getElementById('dailyRangeBtn');
+  var dropdown = document.getElementById('dailyRangeDropdown');
   var input = document.getElementById('dailyRangeInput');
-  if (!btn || !input || typeof flatpickr === 'undefined') return;
+  var startField = document.getElementById('dailyRangeStart');
+  var endField = document.getElementById('dailyRangeEnd');
+  var okBtn = document.getElementById('dailyRangeOk');
+  var cancelBtn = document.getElementById('dailyRangeCancel');
+  if (!btn || !dropdown || !input || typeof flatpickr === 'undefined') return;
+
+  var fmtUrl = function (d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  };
+  var fmtDisplay = function (d) { return d ? flatpickr.formatDate(d, 'd M Y') : ''; };
+
   var picker = flatpickr(input, {
     mode: 'range',
+    inline: true,
     dateFormat: 'Y-m-d',
     defaultDate: ['{{ daily_from|date:"Y-m-d" }}', '{{ daily_to|date:"Y-m-d" }}'],
     maxDate: 'today',
-    positionElement: btn,
-    onClose: function (selectedDates) {
-      if (selectedDates.length < 2) { return; }
-      var fmt = function (d) {
-        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-      };
-      var url = new URL(window.location);
-      url.searchParams.set('view', 'daily');
-      url.searchParams.set('daily_from', fmt(selectedDates[0]));
-      url.searchParams.set('daily_to', fmt(selectedDates[1]));
-      window.location = url;
+    onChange: function (selectedDates) {
+      startField.value = fmtDisplay(selectedDates[0]);
+      endField.value = fmtDisplay(selectedDates[1] || selectedDates[0]);
     },
   });
-  btn.addEventListener('click', function () { picker.open(); });
+  startField.value = fmtDisplay(picker.selectedDates[0]);
+  endField.value = fmtDisplay(picker.selectedDates[1] || picker.selectedDates[0]);
+
+  function outsideClick(e) {
+    if (!dropdown.contains(e.target) && e.target !== btn && !btn.contains(e.target)) { close(); }
+  }
+  function open() {
+    dropdown.hidden = false;
+    document.addEventListener('click', outsideClick);
+  }
+  function close() {
+    dropdown.hidden = true;
+    document.removeEventListener('click', outsideClick);
+  }
+  btn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (dropdown.hidden) { open(); } else { close(); }
+  });
+  cancelBtn.addEventListener('click', close);
+
+  okBtn.addEventListener('click', function () {
+    var dates = picker.selectedDates;
+    if (!dates.length) { return; }
+    var start = dates[0], end = dates[1] || dates[0];
+    var url = new URL(window.location);
+    url.searchParams.set('view', 'daily');
+    url.searchParams.set('daily_from', fmtUrl(start));
+    url.searchParams.set('daily_to', fmtUrl(end));
+    window.location = url;
+  });
 })();
 </script>
 {% endblock %}

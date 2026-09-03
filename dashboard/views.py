@@ -1,6 +1,7 @@
 from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F, Q, Sum
 from django.http import Http404
 from django.shortcuts import get_object_or_404
+from django.urls import reverse
 from django.utils import timezone
 from django.views.generic import TemplateView
 
@@ -262,6 +263,10 @@ class DailyActionDrilldownView(GroupRequiredMixin, TemplateView):
         ctx['selected_job'] = job_id
         ctx['job'] = get_object_or_404(Job, pk=job_id) if job_id else None
         ctx['rows'] = daily_view.events(column, date_range, job_id or None)
+        ctx['back_label'] = 'Back to Daily View'
+        ctx['back_url'] = (f"{reverse('hr_dashboard')}?view=daily"
+                           f"&daily_from={date_range[0]:%Y-%m-%d}&daily_to={date_range[1]:%Y-%m-%d}"
+                           f"{f'&job={job_id}' if job_id else ''}")
         return ctx
 
 
