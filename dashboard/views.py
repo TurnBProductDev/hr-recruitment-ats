@@ -103,18 +103,24 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
         hold_before_final = fc('hold_before_final')
         hold_after_final = fc('hold_after_final')
 
-        ctx['funnel_top'] = {'total': base.count(), 'requirement': requirement, 'unfit': unfit}
+        screening_pending = fc('open')
+        ctx['funnel_top'] = {
+            'total': base.count(), 'requirement': requirement, 'unfit': unfit,
+            # Shown as their own card above the bar chart, not as a funnel
+            # stage - these candidates haven't reached a screening decision
+            # yet, so they're excluded from the bars entirely (see peak below).
+            'screening_pending': screening_pending, 'hold': hold_before_shortlist,
+        }
         # Corner "total" = everyone who got a decision at that stage (cleared + rejected-there)
         ctx['funnel'] = [
             {'name': 'Screened & Shortlisted',
-             'pending': ('Screening Pending', fc('open'), 'open'),
+             # No 'pending' entry here (see the funnel-building loop below) -
+             # Screening Pending and Hold are the "screening_pending"/"hold"
+             # card above, not a bar segment or a breakdown chip, since
+             # they're not a screening *decision* yet.
+             'pending': None,
              'cleared': ('Screened & Shortlisted', shortlisted, shortlisted + unfit, 'ever_shortlisted'),
-             # Hold here is held straight out of screening only - candidates held
-             # after clearing shortlist/round1/etc are already inside 'shortlisted'
-             # above (ever_shortlisted is history-based), so counting them here
-             # too would double-count against Screened & Shortlisted.
-             'drops': [('Hold', hold_before_shortlist, 'hold_before_shortlist'),
-                       ('Rejected', unfit, 'unfit')]},
+             'drops': [('Rejected', unfit, 'unfit')]},
             {'name': 'Shortlisted After Call',
              'pending': ('Yet to Call', yet_call, 'call_pending'),
              'cleared': ('Shortlisted After Call', s_after_call, s_after_call + rej_call, 'shortlisted_after_call'),
@@ -152,12 +158,17 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
         GREEN = '#0e6f6b'
         GREY_RGB = '31,42,42'  # this page's dark neutral (#1f2a2a), same as .val text
         GREY_ALPHAS = (0.14, 0.11, 0.08, 0.06, 0.04, 0.03)
-        ctx['funnel_total_color'] = GREEN
-        peak = base.count() or 1
-        prev_value = ctx['funnel_top']['total']
+        # Every bar's width - and the very first bar's own breakdown fill -
+        # is now relative to "everyone who reached a screening decision"
+        # (shortlisted + rejected-at-screening), not the total candidate
+        # count, since Screening Pending/Hold no longer appear in the bars.
+        peak = (shortlisted + unfit) or 1
+        prev_value = shortlisted + unfit
         for stage in ctx['funnel']:
             label, value, _decided, flow = stage['cleared']
-            chips = [{'label': stage['pending'][0], 'count': stage['pending'][1], 'flow': stage['pending'][2]}]
+            chips = []
+            if stage['pending']:
+                chips.append({'label': stage['pending'][0], 'count': stage['pending'][1], 'flow': stage['pending'][2]})
             if 'pending2' in stage:
                 chips.append({'label': stage['pending2'][0], 'count': stage['pending2'][1], 'flow': stage['pending2'][2]})
             chips += [{'label': d[0], 'count': d[1], 'flow': d[2]} for d in stage['drops']]

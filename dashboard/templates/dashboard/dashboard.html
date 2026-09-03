@@ -55,6 +55,10 @@
 .fnl-stat { text-align: right; }
 .fnl-stat .n { font-size: 1.3rem; font-weight: 700; color: #1f2a2a; }
 .fnl-stat .t { font-size: .66rem; text-transform: uppercase; letter-spacing: .4px; color: #8a9a9a; }
+.fnl-stat-split { display: flex; flex-direction: column; gap: 3px; padding-left: 18px; border-left: 1px solid #eef2f2; justify-content: center; }
+.fnl-stat-split .row { display: flex; align-items: baseline; justify-content: flex-end; gap: 6px; }
+.fnl-stat-split .row .n2 { font-size: 1rem; font-weight: 700; color: #1f2a2a; }
+.fnl-stat-split .row .t2 { font-size: .66rem; text-transform: uppercase; letter-spacing: .3px; color: #8a9a9a; }
 
 .fnl-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 2px 2px 16px 148px; }
 .fnl-chip {
@@ -231,22 +235,15 @@
           <span class="fnl-hint">Hover a stage's bar for its breakdown, or use +/- to list it below instead</span>
         </div>
         <div class="fnl-stats">
+          <div class="fnl-stat"><div class="n">{{ funnel_top.total }}</div><div class="t">Total Candidates</div></div>
           <div class="fnl-stat"><div class="n">{{ funnel_top.requirement }}</div><div class="t">Openings</div></div>
+          <div class="fnl-stat-split">
+            <div class="row"><span class="n2">{{ funnel_top.screening_pending }}</span><span class="t2">Screening Pending</span></div>
+            <div class="row"><span class="n2">{{ funnel_top.hold }}</span><span class="t2">Hold</span></div>
+          </div>
         </div>
       </div>
       <div id="funnelBars">
-        <div class="fnl-stagewrap">
-          <div class="fnl-row3">
-            <span class="lbl">Total Candidates</span>
-            <span class="track">
-              <span class="seg seg-green" style="width:100%;background:{{ funnel_total_color }}">
-                <span class="seg-inline" style="color:#fff">{{ funnel_top.total }}</span>
-              </span>
-            </span>
-            <span class="val">{{ funnel_top.total }}</span>
-            <span class="fnl-toggle-spacer"></span>
-          </div>
-        </div>
         {% for stage in funnel %}
         <div class="fnl-stagewrap">
           <div class="fnl-row3">
