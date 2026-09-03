@@ -4,11 +4,22 @@
 
 {% block extra_css %}
 <style>
+/* Page-wide type scale: just two sizes - .72rem for headings/eyebrows and
+   secondary "meta" text (timestamps, who-did-it, captions), .8rem for
+   sub-heading labels and the actual body content (values, remarks, notes,
+   the CV summary). Weight/case/colour carry the hierarchy instead of a
+   growing list of one-off font sizes, so every card reads the same way. */
+.pd-meta { font-size:.72rem; color:#8a969b; }
+.pd-subhead { font-size:.8rem; font-weight:600; color:#1a2e35; }
+.pd-body { font-size:.8rem; color:#2b3238; }
+.profile-sections strong { font-size:.8rem; font-weight:600; color:#1a2e35; }
+
 /* The AI CV Summary is Markdown (headings, a skills table, bullet lists) -
    rendered client-side by marked.js into this container. */
-.cv-summary-md h3 { font-size:.92rem; font-weight:700; color:var(--dark-green); margin:14px 0 6px; }
+.cv-summary-md { font-size:.8rem; }
+.cv-summary-md h3 { font-size:.8rem; font-weight:600; color:var(--dark-green); margin:14px 0 6px; }
 .cv-summary-md h3:first-child { margin-top:0; }
-.cv-summary-md table { width:100%; font-size:.83rem; margin:6px 0 12px; border-collapse:collapse; }
+.cv-summary-md table { width:100%; font-size:.8rem; margin:6px 0 12px; border-collapse:collapse; }
 .cv-summary-md table th, .cv-summary-md table td { padding:4px 8px; border:1px solid var(--border-color); text-align:left; }
 .cv-summary-md ul { padding-left:1.2rem; margin-bottom:10px; }
 .cv-summary-md p { margin-bottom:8px; }
@@ -23,7 +34,7 @@
 .field-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px 28px; }
 .field-full { grid-column:1 / -1; }
 .field-label { font-size:.72rem; color:#8b9998; margin-bottom:3px; }
-.field-value { font-size:.88rem; color:#2b3238; }
+.field-value { font-size:.8rem; color:#2b3238; }
 .field-value.text-muted { color:#b7c0be !important; }
 
 /* Match Score: big numeral + subscore grid, coloured by score_tier (matches the Repository score meter) */
@@ -31,7 +42,7 @@
 .match-score-high { color: var(--primary-green); }
 .match-score-mid { color: #8a6a12; }
 .match-score-low { color: #dc3545; }
-.match-subscore-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px 24px; padding:12px 0; margin:12px 0; border-top:1px solid var(--border-color); border-bottom:1px solid var(--border-color); font-size:.85rem; }
+.match-subscore-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px 24px; padding:12px 0; margin:12px 0; border-top:1px solid var(--border-color); border-bottom:1px solid var(--border-color); font-size:.8rem; }
 
 /* Candidate Details / AI-Scan / Hiring: top-level page sections */
 .profile-sections { display:flex; flex-direction:column; gap:32px; }
@@ -70,7 +81,7 @@
 .sla-stage { flex:1; display:flex; flex-direction:column; align-items:center; position:relative; }
 .sla-line { position:absolute; top:6px; left:-50%; width:100%; height:2px; background:var(--primary-green); z-index:0; }
 .sla-dot { width:13px; height:13px; border-radius:50%; background:var(--primary-green); border:2px solid #fff; box-shadow:0 0 0 1px var(--primary-green); position:relative; z-index:1; }
-.sla-label { font-size:.78rem; font-weight:600; color:#1a2e35; margin-top:10px; text-align:center; }
+.sla-label { font-size:.8rem; font-weight:600; color:#1a2e35; margin-top:10px; text-align:center; }
 .sla-date { font-size:.72rem; color:#8a969b; }
 
 .activity-row { display:flex; gap:14px; padding-bottom:20px; }
@@ -80,15 +91,15 @@
 .activity-icon-interview { background:#fbf1d6; color:#8a6a12; }
 .activity-line { width:2px; flex:1; background:#eef1f1; margin-top:4px; min-height:14px; }
 .activity-body { flex:1; padding-top:1px; min-width:0; }
-.activity-title { font-size:.88rem; font-weight:600; color:#1a2e35; }
-.activity-meta { font-size:.76rem; color:#8a969b; margin-top:2px; }
-.activity-note { font-size:.82rem; color:#4a5a60; margin-top:6px; background:#f6f8f8; border-radius:6px; padding:9px 12px; }
+.activity-title { font-size:.8rem; font-weight:600; color:#1a2e35; }
+.activity-meta { font-size:.72rem; color:#8a969b; margin-top:2px; }
+.activity-note { font-size:.8rem; color:#4a5a60; margin-top:6px; background:#f6f8f8; border-radius:6px; padding:9px 12px; }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h3 class="mb-0">{{ candidate.full_name }} <span class="text-muted small">{{ candidate.candidate_code }}</span></h3>
+  <h3 class="mb-0">{{ candidate.full_name }} <span class="text-muted pd-meta">{{ candidate.candidate_code }}</span></h3>
   <div>
     <span class="{{ candidate.status|badge_class }}">{{ candidate.status_label }}</span>
     {% if reapply %}<span class="badge-dup ms-2">Reapply</span>{% endif %}
@@ -148,7 +159,7 @@
                 {% if candidate.role_applied %}{{ candidate.role_applied }}
                 {% else %}<span class="text-muted">Not captured</span>{% endif %}
               </div>
-              <div class="form-text mb-0">What the applicant asked for, as captured from their CV / email.</div>
+              <div class="pd-meta mt-1 mb-0">What the applicant asked for, as captured from their CV / email.</div>
             </div>
             <div>
               <div class="field-label mb-1">Mapped Vacancy</div>
@@ -181,7 +192,7 @@
           {% for e in candidate.education.all %}
             <div class="mb-2 pb-2 {% if not forloop.last %}border-bottom{% endif %}">
               <strong>{{ e.qualification }}</strong> {% if e.specialization %}({{ e.specialization }}){% endif %}<br>
-              <span class="text-muted small">{{ e.institution|default:"-" }} &middot; {{ e.year_completed|default:"-" }} &middot; {{ e.percentage|default:"-" }}%</span>
+              <span class="text-muted pd-meta">{{ e.institution|default:"-" }} &middot; {{ e.year_completed|default:"-" }} &middot; {{ e.percentage|default:"-" }}%</span>
             </div>
           {% empty %}<p class="text-muted mb-0">No education records.</p>{% endfor %}
         </div>
@@ -191,7 +202,7 @@
           {% for e in candidate.experience_set.all %}
             <div class="mb-2 pb-2 {% if not forloop.last %}border-bottom{% endif %}">
               <strong>{{ e.designation|default:"-" }}</strong> @ {{ e.company_name }}<br>
-              <span class="text-muted small">{{ e.start_date|default:"-" }} &rarr; {{ e.end_date|default:"Present" }} &middot; {{ e.skills|default:"" }}</span>
+              <span class="text-muted pd-meta">{{ e.start_date|default:"-" }} &rarr; {{ e.end_date|default:"Present" }} &middot; {{ e.skills|default:"" }}</span>
             </div>
           {% empty %}<p class="text-muted mb-0">No experience records.</p>{% endfor %}
         </div>
@@ -210,7 +221,7 @@
           </div>
           {% endif %}
           {% for a in attachments %}
-            <div><a href="{{ a.file.url }}" target="_blank">{{ a.label|default:a.file.name }}</a> <span class="text-muted small">{{ a.uploaded_at|date:"d M Y" }}</span></div>
+            <div><a href="{{ a.file.url }}" target="_blank">{{ a.label|default:a.file.name }}</a> <span class="text-muted pd-meta">{{ a.uploaded_at|date:"d M Y" }}</span></div>
           {% endfor %}
           {% if not candidate.resume_url and not candidate.resume_blob_url and not attachments %}
             <p class="text-muted mb-0">No attachments.</p>
@@ -227,7 +238,7 @@
           {% for n in notes %}
             <div class="mb-2 pb-2 border-bottom">
               <div>{{ n.text }}</div>
-              <div class="small text-muted">{{ n.author|default:"Unknown" }} &middot; {{ n.created_at|date:"d M Y H:i" }}</div>
+              <div class="pd-meta text-muted">{{ n.author|default:"Unknown" }} &middot; {{ n.created_at|date:"d M Y H:i" }}</div>
             </div>
           {% empty %}<p class="text-muted mb-0">No notes yet.</p>{% endfor %}
         </div>
@@ -257,7 +268,7 @@
             </form>
           </div>
           {% if candidate.cv_summary_state == 'ERROR' and candidate.cv_summary_error %}
-          <div class="alert alert-warning small py-2 px-3 mb-3">Last regeneration failed: {{ candidate.cv_summary_error }}</div>
+          <div class="alert alert-warning pd-body py-2 px-3 mb-3">Last regeneration failed: {{ candidate.cv_summary_error }}</div>
           {% endif %}
           {% if candidate.cv_summary %}
             {% comment %}
@@ -298,7 +309,7 @@
               <span class="match-score-num match-score-{{ candidate.match_score|score_tier }}">{{ candidate.match_score }}</span>
               <span class="text-muted">/ 100</span>
             </div>
-            <div class="small text-muted mt-1">{{ candidate.job.title|default:"the mapped vacancy" }} &middot; {{ candidate.match_scored_at|date:"d M Y" }}</div>
+            <div class="pd-meta text-muted mt-1">{{ candidate.job.title|default:"the mapped vacancy" }} &middot; {{ candidate.match_scored_at|date:"d M Y" }}</div>
 
             <div class="match-subscore-grid">
               <div class="d-flex justify-content-between"><span class="text-muted">Skills</span><span class="fw-semibold font-monospace">{{ b.skills_score|default:"-" }}/30</span></div>
@@ -309,15 +320,15 @@
 
             {% if b.matched_skills %}
             <div class="mb-1">
-              <div class="small fw-semibold" style="color: var(--dark-green);">Matched</div>
-              <div class="small">{{ b.matched_skills|join:", " }}</div>
+              <div class="pd-subhead" style="color: var(--dark-green);">Matched</div>
+              <div class="pd-body">{{ b.matched_skills|join:", " }}</div>
             </div>
             {% endif %}
             {% if b.missing_skills %}
-            <div class="small"><span class="fw-semibold text-danger">Missing</span> {{ b.missing_skills|join:", " }}</div>
+            <div class="pd-body"><span class="pd-subhead" style="color:#dc3545;">Missing</span> {{ b.missing_skills|join:", " }}</div>
             {% endif %}
             {% endwith %}
-            {% if candidate.match_rationale %}<p class="small text-muted fst-italic mt-3 mb-0">{{ candidate.match_rationale }}</p>{% endif %}
+            {% if candidate.match_rationale %}<p class="pd-body text-muted fst-italic mt-3 mb-0">{{ candidate.match_rationale }}</p>{% endif %}
           {% elif candidate.match_state == 'ERROR' %}
             <p class="text-danger mb-0">Scoring failed: {{ candidate.match_error }}</p>
           {% elif candidate.job and candidate.job.title|lower != "general application" %}
@@ -348,8 +359,8 @@
           {% if stage.decision %}<span class="stage-decision-badge stage-tone-{{ stage.decision.tone }}">{{ stage.decision.label }}</span>{% endif %}
         </div>
         {% if stage.decision %}
-        <div class="small text-muted mt-2">{{ stage.decision.who|default:"Unknown" }} &middot; {{ stage.decision.when|date:"d M Y H:i" }}</div>
-        {% if stage.decision.remarks %}<div class="small mt-1">{{ stage.decision.remarks }}</div>{% endif %}
+        <div class="pd-meta text-muted mt-2">{{ stage.decision.who|default:"Unknown" }} &middot; {{ stage.decision.when|date:"d M Y H:i" }}</div>
+        {% if stage.decision.remarks %}<div class="pd-body mt-1">{{ stage.decision.remarks }}</div>{% endif %}
         {% endif %}
 
       {% else %}
@@ -358,7 +369,7 @@
           {% if is_on_hold %}<span class="hold-banner"><i class="bi bi-pause-circle-fill"></i> On Hold</span>{% endif %}
         </div>
         {% if stage.entered %}
-        <div class="small text-muted mb-2">
+        <div class="pd-meta text-muted mb-2">
           Entered {{ stage.entered.changed_at|date:"d M Y H:i" }}
           {% if is_on_hold and last_status.remarks %}&middot; {{ last_status.remarks }}{% endif %}
         </div>
@@ -367,7 +378,7 @@
         {% if stage.interview_rounds %}
         <div class="stage-subsection">
           <div class="stage-subsection-title">Interview</div>
-          <div class="small mb-2">
+          <div class="pd-body mb-2">
             {% if stage.open_interview %}
             <span class="text-muted">Scheduled:</span> <strong>{{ stage.open_interview.scheduled_date|date:"d M Y, H:i" }}</strong>
             {% else %}
@@ -416,10 +427,10 @@
           </form>
           {% with logs=comm_logs_by_channel|dict_get:stage.comm_channel %}
           {% for l in logs %}
-          <div class="small mb-1 pb-1 {% if not forloop.last %}border-bottom{% endif %}">
+          <div class="pd-body mb-1 pb-1 {% if not forloop.last %}border-bottom{% endif %}">
             {% if l.outcome %}<strong>{{ l.get_outcome_display }}</strong>{% endif %}
             {% if l.message %} &middot; {{ l.message }}{% endif %}
-            <div class="text-muted">{{ l.logged_by|default:"Unknown" }} &middot; {{ l.logged_at|date:"d M Y H:i" }}</div>
+            <div class="text-muted pd-meta">{{ l.logged_by|default:"Unknown" }} &middot; {{ l.logged_at|date:"d M Y H:i" }}</div>
           </div>
           {% endfor %}
           {% endwith %}
@@ -449,7 +460,7 @@
     {% endfor %}
 
     <div class="card app-card p-4">
-      <div class="section-eyebrow" style="font-size:.62rem;">Final Status</div>
+      <div class="section-eyebrow">Final Status</div>
       <div class="text-center" style="color:{{ final_status.color }}; font-size:1.05rem; font-weight:700;">{{ final_status.label }}</div>
     </div>
   </div>
@@ -460,7 +471,7 @@
     <div class="card app-card p-4 mb-3">
       <div class="d-flex align-items-baseline justify-content-between mb-3">
         <span class="section-eyebrow mb-0">Stage Dates (SLA)</span>
-        <span class="small text-muted">{{ candidate.created_at|timesince }} in pipeline</span>
+        <span class="pd-meta text-muted">{{ candidate.created_at|timesince }} in pipeline</span>
       </div>
       <div class="sla-tracker">
         {% for s in sla_stages %}
@@ -500,8 +511,8 @@
       {% for i in interviews %}
         <div class="mb-2 pb-2 {% if not forloop.last %}border-bottom{% endif %}">
           <strong>{{ i.get_round_type_display }}</strong> &middot; {{ i.scheduled_date|date:"d M Y H:i" }} &middot; {{ i.get_mode_display }}<br>
-          <span class="text-muted small">Interviewer: {{ i.interviewer|default:"Unassigned" }} &middot; Status: {{ i.get_status_display }} &middot; Result: {{ i.get_result_display }}</span>
-          {% if i.feedback %}<div class="small mt-1">{{ i.feedback }}</div>{% endif %}
+          <span class="text-muted pd-meta">Interviewer: {{ i.interviewer|default:"Unassigned" }} &middot; Status: {{ i.get_status_display }} &middot; Result: {{ i.get_result_display }}</span>
+          {% if i.feedback %}<div class="pd-body mt-1">{{ i.feedback }}</div>{% endif %}
         </div>
       {% empty %}<p class="text-muted mb-0">No interviews scheduled.</p>{% endfor %}
     </div>
