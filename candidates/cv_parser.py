@@ -30,23 +30,28 @@ def is_configured():
     return bool(getattr(settings, 'LOGIC_APP_CV_PARSER_URL', ''))
 
 
-def parse_cv(filename, content, role_hint=None, source_hint=None):
+def parse_cv(filename, content, role_hint=None, source_hint=None, upload_to_sharepoint=None):
     """POST one CV to the Logic App and return its parsed JSON.
 
     `content` is the raw file bytes. Raises CVParseError with a message fit for
-    the results screen; never raises anything else.
+    the results screen; never raises anything else. `upload_to_sharepoint`
+    overrides the CV_PARSER_UPLOAD_TO_SHAREPOINT setting when given - used to
+    re-read an already-filed CV (e.g. to refresh its AI summary) without
+    filing a second copy.
     """
     if not is_configured():
         raise CVParseError(
             'CV parsing is not configured - set LOGIC_APP_CV_PARSER_URL '
             '(see logic_apps/README.md).')
 
+    if upload_to_sharepoint is None:
+        upload_to_sharepoint = bool(getattr(settings, 'CV_PARSER_UPLOAD_TO_SHAREPOINT', True))
     payload = {
         'filename': filename,
         'content_base64': base64.b64encode(content).decode('ascii'),
         'role_hint': role_hint or '',
         'source_hint': source_hint or '',
-        'upload_to_sharepoint': bool(getattr(settings, 'CV_PARSER_UPLOAD_TO_SHAREPOINT', True)),
+        'upload_to_sharepoint': bool(upload_to_sharepoint),
     }
     timeout = int(getattr(settings, 'CV_PARSER_TIMEOUT', 180))
     deadline = time.monotonic() + timeout

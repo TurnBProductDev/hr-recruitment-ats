@@ -17,6 +17,9 @@
 /* Contact / Background / Application: labelled two-column grid */
 .section-eyebrow { font-size:.72rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--primary-green); margin-bottom:14px; }
 .section-eyebrow i { margin-right:4px; }
+.card-head-row { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:14px; }
+.card-head-row .section-eyebrow { margin-bottom:0; }
+.card-head-row .btn { flex-shrink:0; }
 .field-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px 28px; }
 .field-full { grid-column:1 / -1; }
 .field-label { font-size:.72rem; color:#8b9998; margin-bottom:3px; }
@@ -189,7 +192,25 @@
     <div class="row g-3">
       <div class="col-lg-6">
         <div class="card app-card p-4 h-100">
-          <div class="section-eyebrow"><i class="bi bi-stars"></i> AI CV Summary</div>
+          <div class="card-head-row">
+            <div class="section-eyebrow"><i class="bi bi-stars"></i> AI CV Summary</div>
+            <form method="post" action="{% url 'candidate_regenerate_summary' candidate.pk %}">
+              {% csrf_token %}
+              {% if candidate.cv_summary_state == 'RUNNING' %}
+              <button type="submit" class="btn btn-sm btn-outline-app" disabled>
+                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Regenerating…
+              </button>
+              {% else %}
+              <button type="submit" class="btn btn-sm btn-outline-app"
+                      {% if not candidate.resume_blob_url %}disabled title="No stored CV file to re-read - this résumé was linked via URL, not uploaded"{% endif %}>
+                <i class="bi bi-arrow-repeat"></i> Regenerate
+              </button>
+              {% endif %}
+            </form>
+          </div>
+          {% if candidate.cv_summary_state == 'ERROR' and candidate.cv_summary_error %}
+          <div class="alert alert-warning small py-2 px-3 mb-3">Last regeneration failed: {{ candidate.cv_summary_error }}</div>
+          {% endif %}
           {% if candidate.cv_summary %}
             {% comment %}
               Markdown source, kept inert - marked.js + DOMPurify below render it into headings/table/bullets.
@@ -207,7 +228,22 @@
 
       <div class="col-lg-6">
         <div class="card app-card p-4 h-100">
-          <div class="section-eyebrow"><i class="bi bi-bullseye"></i> Match Score</div>
+          <div class="card-head-row">
+            <div class="section-eyebrow"><i class="bi bi-bullseye"></i> Match Score</div>
+            <form method="post" action="{% url 'candidate_rescore' candidate.pk %}">
+              {% csrf_token %}
+              {% if candidate.match_state == 'SCORING' %}
+              <button type="submit" class="btn btn-sm btn-outline-app" disabled>
+                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span> Scoring…
+              </button>
+              {% else %}
+              <button type="submit" class="btn btn-sm btn-outline-app"
+                      {% if not candidate.job or candidate.job.title|lower == "general application" %}disabled title="Not mapped to a role, so this candidate can't be scored"{% endif %}>
+                <i class="bi bi-arrow-repeat"></i> Re-score
+              </button>
+              {% endif %}
+            </form>
+          </div>
           {% if candidate.match_score is not None %}
             {% with b=candidate.match_breakdown_parsed %}
             <div class="d-flex align-items-baseline gap-2">
@@ -237,7 +273,7 @@
           {% elif candidate.match_state == 'ERROR' %}
             <p class="text-danger mb-0">Scoring failed: {{ candidate.match_error }}</p>
           {% elif candidate.job and candidate.job.title|lower != "general application" %}
-            <p class="text-muted mb-0">Not scored yet - use <a href="{% url 'candidate_score' %}">Score Candidates</a>.</p>
+            <p class="text-muted mb-0">Not scored yet - use Re-score above.</p>
           {% else %}
             <p class="text-muted mb-0">Not mapped to a role, so this candidate can't be scored.</p>
           {% endif %}
@@ -412,5 +448,26 @@ document.querySelectorAll('.js-autosave').forEach(function (form) {
   channel.addEventListener('change', rebuild);
   rebuild();
 })();
+
+// Re-score / Regenerate AI CV Summary run in the background (they call an
+// external AI service and can take a while) - poll until each one finishes,
+// then reload so the fresh result shows up. Resumes correctly even if the
+// page is reloaded mid-run, since progress lives on the candidate row.
+function pollCandidateAction(url) {
+  var timer = setInterval(function () {
+    fetch(url, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d.finished) { clearInterval(timer); window.location.reload(); }
+      })
+      .catch(function () { /* transient network blip - try again next tick */ });
+  }, 3000);
+}
+{% if candidate.match_state == 'SCORING' %}
+pollCandidateAction("{% url 'candidate_rescore_status' candidate.pk %}");
+{% endif %}
+{% if candidate.cv_summary_state == 'RUNNING' %}
+pollCandidateAction("{% url 'candidate_regenerate_summary_status' candidate.pk %}");
+{% endif %}
 </script>
 {% endblock %}

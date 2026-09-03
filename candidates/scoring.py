@@ -34,6 +34,28 @@ def start_job_scoring(job):
     return thread
 
 
+def start_one(candidate):
+    """Kick off (or resume) scoring for exactly one candidate in the
+    background - the profile page's manual Re-score action. The caller is
+    responsible for resetting match_state to PENDING first if it should
+    re-run a candidate that's already DONE; score_one() only claims rows
+    still in PENDING_STATES."""
+    thread = threading.Thread(target=_run_one, args=(candidate.pk,),
+                              name=f'score-candidate-{candidate.pk}', daemon=True)
+    thread.start()
+    return thread
+
+
+def _run_one(candidate_id):
+    try:
+        candidate = Candidate.objects.select_related('job').get(pk=candidate_id)
+        score_one(candidate)
+    except Candidate.DoesNotExist:
+        pass
+    finally:
+        connection.close()
+
+
 def _run(job_id):
     try:
         while True:

@@ -30,6 +30,13 @@ urlpatterns = [
     path('hr/candidates/<int:pk>/change-job/', views.CandidateChangeJobView.as_view(), name='candidate_change_job'),
     path('hr/candidates/<int:pk>/change-source/', views.CandidateChangeSourceView.as_view(), name='candidate_change_source'),
     path('hr/candidates/<int:pk>/set-status/', views.CandidateSetStatusView.as_view(), name='candidate_set_status'),
+    path('hr/candidates/<int:pk>/rescore/', views.CandidateRescoreView.as_view(), name='candidate_rescore'),
+    path('hr/candidates/<int:pk>/rescore/status/', views.CandidateScoreStatusView.as_view(),
+         name='candidate_rescore_status'),
+    path('hr/candidates/<int:pk>/regenerate-summary/', views.CandidateRegenerateSummaryView.as_view(),
+         name='candidate_regenerate_summary'),
+    path('hr/candidates/<int:pk>/regenerate-summary/status/', views.CandidateSummaryStatusView.as_view(),
+         name='candidate_regenerate_summary_status'),
     path('hr/candidates/<int:pk>/note/', views.AddNoteView.as_view(), name='candidate_add_note'),
     path('hr/candidates/<int:pk>/log/', views.AddCommunicationLogView.as_view(), name='candidate_add_log'),
 

@@ -11,7 +11,7 @@ from django.views.generic import DetailView, ListView, UpdateView
 from interviews.models import Interview, InterviewReschedule
 from jobs.models import Job
 
-from . import bulk, cv_parser, match_scoring, scoring, services
+from . import bulk, cv_parser, match_scoring, scoring, services, summarize
 from .forms import (
     BulkUploadForm,
     CandidateApplicationForm,
@@ -594,6 +594,82 @@ class CandidateSetStatusView(GroupRequiredMixin, View):
                                    remarks=reason or None, performed_by=performed_by)
         messages.success(request, f'{candidate.full_name} moved to "{candidate.status_label}".')
         return redirect('candidate_timeline', pk=pk)
+
+
+class CandidateRescoreView(GroupRequiredMixin, View):
+    """Recreate this one candidate's match score - after they're edited, the
+    mapped role's JD changes, or the scoring prompt/model changes."""
+    allowed_groups = (HR_ADMIN, RECRUITER)
+
+    def post(self, request, pk):
+        candidate = get_object_or_404(Candidate, pk=pk)
+        MS = Candidate.MatchState
+        if not candidate.job or candidate.job.title.strip().lower() == GENERAL_APPLICATION.lower():
+            messages.error(request, "This candidate isn't mapped to a role, so they can't be scored.")
+        elif not match_scoring.is_configured():
+            messages.error(request, 'Scoring is not configured - set AZURE_OPENAI_ENDPOINT '
+                                    'and AZURE_OPENAI_KEY.')
+        elif candidate.match_state == MS.SCORING:
+            messages.info(request, 'Already scoring this candidate.')
+        else:
+            # Reopen it for scoring even if it was already DONE - score_one()
+            # only claims rows in PENDING_STATES (PENDING/ERROR).
+            Candidate.objects.filter(pk=pk).update(match_state=MS.PENDING)
+            scoring.start_one(candidate)
+            messages.success(request, 'Re-scoring this candidate - refresh in a few seconds.')
+        return redirect('candidate_timeline', pk=pk)
+
+
+class CandidateScoreStatusView(GroupRequiredMixin, View):
+    """Poll target for the profile page while a Re-score is running."""
+    allowed_groups = ANY_STAFF
+
+    def get(self, request, pk):
+        candidate = get_object_or_404(Candidate, pk=pk)
+        MS = Candidate.MatchState
+        return JsonResponse({
+            'state': candidate.match_state,
+            'finished': candidate.match_state != MS.SCORING,
+        })
+
+
+class CandidateRegenerateSummaryView(GroupRequiredMixin, View):
+    """Re-read this candidate's stored resume and refresh their AI CV
+    summary - after they're edited, or after the summary prompt/model
+    changes - without re-uploading the file."""
+    allowed_groups = (HR_ADMIN, RECRUITER)
+
+    def post(self, request, pk):
+        candidate = get_object_or_404(Candidate, pk=pk)
+        CSS = Candidate.CVSummaryState
+        if not candidate.resume_blob_url:
+            messages.error(request, "This candidate's resume was linked via URL, not "
+                                    "uploaded, so there's no stored file to re-read.")
+        elif not cv_parser.is_configured():
+            messages.error(request, 'CV parsing is not configured - set LOGIC_APP_CV_PARSER_URL.')
+        else:
+            claimed = Candidate.objects.filter(pk=pk).exclude(cv_summary_state=CSS.RUNNING).update(
+                cv_summary_state=CSS.RUNNING, cv_summary_error=None)
+            if not claimed:
+                messages.info(request, 'Already regenerating the AI CV summary for this candidate.')
+            else:
+                summarize.start(candidate)
+                messages.success(request, 'Regenerating the AI CV summary - this can take a '
+                                          "couple of minutes. Refresh in a bit if it doesn't update itself.")
+        return redirect('candidate_timeline', pk=pk)
+
+
+class CandidateSummaryStatusView(GroupRequiredMixin, View):
+    """Poll target for the profile page while a summary regeneration is running."""
+    allowed_groups = ANY_STAFF
+
+    def get(self, request, pk):
+        candidate = get_object_or_404(Candidate, pk=pk)
+        CSS = Candidate.CVSummaryState
+        return JsonResponse({
+            'state': candidate.cv_summary_state,
+            'finished': candidate.cv_summary_state != CSS.RUNNING,
+        })
 
 
 class AddNoteView(GroupRequiredMixin, View):
