@@ -166,12 +166,12 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
         prev_value = shortlisted + unfit
         for stage in ctx['funnel']:
             label, value, _decided, flow = stage['cleared']
-            chips = []
+            breakdown_chips = []
             if stage['pending']:
-                chips.append({'label': stage['pending'][0], 'count': stage['pending'][1], 'flow': stage['pending'][2]})
+                breakdown_chips.append({'label': stage['pending'][0], 'count': stage['pending'][1], 'flow': stage['pending'][2]})
             if 'pending2' in stage:
-                chips.append({'label': stage['pending2'][0], 'count': stage['pending2'][1], 'flow': stage['pending2'][2]})
-            chips += [{'label': d[0], 'count': d[1], 'flow': d[2]} for d in stage['drops']]
+                breakdown_chips.append({'label': stage['pending2'][0], 'count': stage['pending2'][1], 'flow': stage['pending2'][2]})
+            breakdown_chips += [{'label': d[0], 'count': d[1], 'flow': d[2]} for d in stage['drops']]
             # Keep a decimal instead of rounding to a whole percent, so two
             # small-but-different stages (e.g. 10 vs 1) don't collapse onto
             # the same rounded width. A nonzero stage still gets a minimum
@@ -187,7 +187,7 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
                     'flow': flow, 'value': value, 'label': label, 'pct': pct,
                     'bg': GREEN, 'text_color': '#fff', 'show_inline': pct > 6, 'is_green': True,
                 })
-            breakdown_items = sorted((c for c in chips if c['count'] > 0), key=lambda c: -c['count'])
+            breakdown_items = sorted((c for c in breakdown_chips if c['count'] > 0), key=lambda c: -c['count'])
             breakdown_pct = round((prev_value - value) / peak * 100, 1)
             items_total = sum(c['count'] for c in breakdown_items) or 1
             for j, c in enumerate(breakdown_items):
@@ -200,12 +200,19 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
                     'text_color': '#33393c', 'show_inline': seg_pct > 4.5, 'is_green': False,
                 })
 
+            # Chips shown when the row is toggled to "list it below instead":
+            # the stage's own cleared count first (the bar itself shrinks to
+            # just its own green sliver in that mode, so this is the only
+            # place that value stays visible at full size), then every
+            # breakdown reason that actually has candidates in it.
+            display_chips = [{'label': label, 'count': value, 'flow': flow}] + breakdown_items
+
             stage.update(
                 value=value,
                 value_label=label,
                 value_flow=flow,
                 pct=pct,
-                chips=chips,
+                chips=display_chips,
                 segments=segments,
             )
             prev_value = value

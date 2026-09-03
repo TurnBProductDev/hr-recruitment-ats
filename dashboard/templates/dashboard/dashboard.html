@@ -51,14 +51,18 @@
 .seg-tip b { display: block; font-size: .92rem; line-height: 1.1; font-weight: 700; }
 .seg-tip i { display: block; font-style: normal; font-size: .58rem; letter-spacing: .05em; text-transform: uppercase; opacity: .72; margin-top: 2px; }
 
-.fnl-stats { display: flex; gap: 22px; }
-.fnl-stat { text-align: right; }
-.fnl-stat .n { font-size: 1.3rem; font-weight: 700; color: #1f2a2a; }
-.fnl-stat .t { font-size: .66rem; text-transform: uppercase; letter-spacing: .4px; color: #8a9a9a; }
-.fnl-stat-split { display: flex; flex-direction: column; gap: 3px; padding-left: 18px; border-left: 1px solid #eef2f2; justify-content: center; }
-.fnl-stat-split .row { display: flex; align-items: baseline; justify-content: flex-end; gap: 6px; }
-.fnl-stat-split .row .n2 { font-size: 1rem; font-weight: 700; color: #1f2a2a; }
-.fnl-stat-split .row .t2 { font-size: .66rem; text-transform: uppercase; letter-spacing: .3px; color: #8a9a9a; }
+.fnl-stats { display: flex; gap: 12px; align-items: stretch; }
+.fnl-stat-card {
+  background: #fff; border: 1px solid #e2ebeb; border-top: 3px solid var(--stat-accent, #e2ebeb);
+  border-radius: 10px; padding: 10px 18px; min-width: 96px; text-align: right;
+  display: flex; flex-direction: column; justify-content: center; gap: 2px;
+}
+.fnl-stat-card .n { font-size: 1.3rem; font-weight: 700; color: #1f2a2a; line-height: 1; }
+.fnl-stat-card .t { font-size: .62rem; text-transform: uppercase; letter-spacing: .4px; color: #8a9a9a; margin-top: 2px; }
+.fnl-stat-card-split { gap: 5px; }
+.fnl-stat-card-split .row { display: flex; align-items: baseline; justify-content: flex-end; gap: 6px; }
+.fnl-stat-card-split .row .n { font-size: 1rem; }
+.fnl-stat-card-split .row .t { margin-top: 0; }
 
 .fnl-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 2px 2px 16px 148px; }
 .fnl-chip {
@@ -235,11 +239,17 @@
           <span class="fnl-hint">Hover a stage's bar for its breakdown, or use +/- to list it below instead</span>
         </div>
         <div class="fnl-stats">
-          <div class="fnl-stat"><div class="n">{{ funnel_top.total }}</div><div class="t">Total Candidates</div></div>
-          <div class="fnl-stat"><div class="n">{{ funnel_top.requirement }}</div><div class="t">Openings</div></div>
-          <div class="fnl-stat-split">
-            <div class="row"><span class="n2">{{ funnel_top.screening_pending }}</span><span class="t2">Screening Pending</span></div>
-            <div class="row"><span class="n2">{{ funnel_top.hold }}</span><span class="t2">Hold</span></div>
+          <div class="fnl-stat-card" style="--stat-accent:#0e6f6b">
+            <div class="n" style="color:#0e6f6b">{{ funnel_top.total }}</div>
+            <div class="t">Total Candidates</div>
+          </div>
+          <div class="fnl-stat-card" style="--stat-accent:#1f2a2a">
+            <div class="n">{{ funnel_top.requirement }}</div>
+            <div class="t">Openings</div>
+          </div>
+          <div class="fnl-stat-card fnl-stat-card-split" style="--stat-accent:#8a9a9a">
+            <div class="row"><span class="n">{{ funnel_top.screening_pending }}</span><span class="t">Screening Pending</span></div>
+            <div class="row"><span class="n">{{ funnel_top.hold }}</span><span class="t">Hold</span></div>
           </div>
         </div>
       </div>
