@@ -49,7 +49,7 @@ class Interview(models.Model):
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+'
     )
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:
         ordering = ['scheduled_date']
@@ -88,7 +88,7 @@ class InterviewReschedule(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
     changed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
-    changed_at = models.DateTimeField(default=timezone.now)
+    changed_at = models.DateTimeField(default=timezone.now, db_index=True)
 
     class Meta:
         ordering = ['-changed_at']

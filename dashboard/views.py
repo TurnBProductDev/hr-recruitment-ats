@@ -1,4 +1,6 @@
 from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F, Q, Sum
+from django.http import Http404
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.views.generic import TemplateView
 
@@ -7,6 +9,8 @@ from candidates.models import Candidate, CandidateStatusHistory
 from candidates.permissions import ANY_STAFF, GroupRequiredMixin
 from interviews.models import Interview
 from jobs.models import Job
+
+from . import daily_view
 
 STATUS = Candidate.Status
 
@@ -220,6 +224,44 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
         ctx['upcoming_interviews'] = Interview.objects.select_related('candidate', 'interviewer').filter(
             status=Interview.Status.SCHEDULED, scheduled_date__gte=timezone.now()
         ).order_by('scheduled_date')[:10]
+
+        # ---------- Daily View: actions HR took on a day, not current state ----------
+        daily_range = daily_view.range_from_request(self.request.GET)
+        ctx['daily_from'], ctx['daily_to'] = daily_range
+        ctx['daily_days'] = (daily_range[1] - daily_range[0]).days + 1
+        daily_results = daily_view.compute(daily_range, job_id or None)
+        daily_max = max((c['value'] for c in daily_results), default=0) or 1
+        daily_colors = ['#0e6f6b', '#c9d3d1', '#a9b6b3', '#8a9a9a', '#6b7a7a', '#4f5c5c']
+        for i, c in enumerate(daily_results):
+            c['bar_pct'] = round(c['value'] / daily_max * 100, 1)
+            c['color'] = daily_colors[i % len(daily_colors)]
+        ctx['daily_results'] = daily_results
+        return ctx
+
+
+class DailyActionDrilldownView(GroupRequiredMixin, TemplateView):
+    """What a Daily View bar's click lands on: the actual events (not just
+    the count) behind one column, for the same date range and job filter
+    the chart was showing."""
+    template_name = 'dashboard/daily_drilldown.html'
+    allowed_groups = ANY_STAFF
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        column = kwargs['column']
+        labels = dict(daily_view.COLUMNS)
+        if column not in labels:
+            raise Http404('Unknown Daily View column.')
+
+        job_id = self.request.GET.get('job') or ''
+        date_range = daily_view.range_from_request(self.request.GET)
+
+        ctx['column'] = column
+        ctx['column_label'] = labels[column]
+        ctx['daily_from'], ctx['daily_to'] = date_range
+        ctx['selected_job'] = job_id
+        ctx['job'] = get_object_or_404(Job, pk=job_id) if job_id else None
+        ctx['rows'] = daily_view.events(column, date_range, job_id or None)
         return ctx
 
 

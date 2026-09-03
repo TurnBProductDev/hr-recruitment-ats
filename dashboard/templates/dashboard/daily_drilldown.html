@@ -1,0 +1,40 @@
+{% extends "hr_base.html" %}
+{% load candidates_extras %}
+{% block title %}{{ column_label }} - Daily View{% endblock %}
+
+{% block content %}
+{% url 'hr_dashboard' as dash_url %}
+<a href="{{ dash_url }}?view=daily&daily_from={{ daily_from|date:"Y-m-d" }}&daily_to={{ daily_to|date:"Y-m-d" }}{% if selected_job %}&job={{ selected_job }}{% endif %}"
+   class="btn btn-sm btn-outline-app mb-3"><i class="bi bi-arrow-left"></i> Back to Daily View</a>
+
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+  <div>
+    <h3 class="mb-1">{{ column_label }}</h3>
+    <p class="text-muted mb-0">
+      {{ daily_from|date:"d M Y" }}{% if daily_to != daily_from %} &ndash; {{ daily_to|date:"d M Y" }}{% endif %}
+      {% if job %}&middot; {{ job.title }}{% endif %}
+      &middot; {{ rows|length }} action{{ rows|length|pluralize }}
+    </p>
+  </div>
+</div>
+
+<div class="card app-card p-4">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle w-100 mb-0">
+      <thead><tr><th>When</th><th>Candidate</th><th>Role</th><th>Action</th></tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td class="text-nowrap">{{ row.when|date:"d M Y, H:i" }}</td>
+          <td><a href="{% url 'candidate_timeline' row.candidate.pk %}">{{ row.candidate.full_name }}</a></td>
+          <td>{{ row.candidate.job.title|default:"&mdash;" }}</td>
+          <td>{{ row.action }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" class="text-muted text-center py-4">No {{ column_label|lower }} actions in this range.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

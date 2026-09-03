@@ -154,7 +154,7 @@ class Candidate(models.Model):
     match_error = models.TextField(blank=True, null=True)
     match_scored_at = models.DateTimeField(blank=True, null=True)
 
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -294,11 +294,12 @@ class CandidateStatusHistory(models.Model):
                                     help_text='Who actually performed this action (free text).')
     remarks = models.TextField(blank=True, null=True)
     # default (not auto_now_add) so historical dates can be backfilled on import
-    changed_at = models.DateTimeField(default=timezone.now)
+    changed_at = models.DateTimeField(default=timezone.now, db_index=True)
 
     class Meta:
         ordering = ['-changed_at']
         verbose_name_plural = 'Candidate status histories'
+        indexes = [models.Index(fields=['new_status', 'changed_at'])]
 
     def __str__(self):
         return f"{self.candidate.full_name}: {self.old_status} -> {self.new_status}"
@@ -367,7 +368,7 @@ class CommunicationLog(models.Model):
     message = models.TextField(blank=True, null=True)
     logged_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
     # default (not auto_now_add) so the real call date can be set on import
-    logged_at = models.DateTimeField(default=timezone.now)
+    logged_at = models.DateTimeField(default=timezone.now, db_index=True)
 
     class Meta:
         ordering = ['-logged_at']

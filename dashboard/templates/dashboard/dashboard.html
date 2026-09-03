@@ -2,6 +2,7 @@
 {% block title %}Dashboard{% endblock %}
 
 {% block extra_css %}
+<link href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css" rel="stylesheet">
 <style>
 /* ===== Recruitment funnel (self-contained so it never depends on cached CSS) ===== */
 
@@ -100,6 +101,40 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
 .sm-col-plain { width: 70px; text-align: center; font-size: .78rem; color: #1f2a2a; }
 .sm-col-short { width: 88px; text-align: center; font-size: .78rem; font-weight: 600; color: #0e6f6b; }
 .sm-col-hired { width: 56px; text-align: center; font-size: .78rem; color: #8a9a9a; }
+
+/* ---- Daily View tab: date-range picker + bar chart ---- */
+.daily-range { position: relative; }
+.daily-range-btn {
+  display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid #d8e0df;
+  border-radius: 8px; padding: 7px 14px; font-size: .82rem; color: #45534f; cursor: pointer;
+}
+.daily-range-btn:hover { border-color: #b9c8c8; }
+.daily-range-btn i { font-size: .7rem; color: #8a9a9a; }
+.daily-range-days { color: #8a9a9a; margin-left: 2px; }
+.daily-range-input-hidden { position: absolute; top: 100%; right: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+
+.daily-bars { display: flex; align-items: stretch; gap: 22px; height: 260px; padding: 30px 6px 0; }
+.daily-col {
+  flex: 1; display: flex; flex-direction: column; align-items: center; min-width: 0;
+  text-decoration: none; color: inherit; border-radius: 8px; padding-top: 4px;
+  transition: background .12s ease;
+}
+.daily-col:hover { background: #f6f8f8; }
+.daily-col:hover .daily-lbl { color: #0e6f6b; }
+.daily-val { font-size: 1rem; font-weight: 700; color: #1f2a2a; margin-bottom: 8px; }
+.daily-bar-track { flex: 1; width: 100%; max-width: 96px; display: flex; flex-direction: column; justify-content: flex-end; }
+.daily-bar { width: 100%; border-radius: 6px 6px 0 0; min-height: 3px; transition: height .2s ease; }
+.daily-lbl { font-size: .66rem; font-weight: 700; letter-spacing: .3px; text-transform: uppercase; color: #566664; margin-top: 10px; text-align: center; transition: color .12s ease; }
+
+/* flatpickr: swap the default blue for this app's teal */
+.flatpickr-day.selected, .flatpickr-day.startRange, .flatpickr-day.endRange {
+  background: var(--primary-green, #008C8C); border-color: var(--primary-green, #008C8C);
+}
+.flatpickr-day.inRange {
+  background: #d7ece9; border-color: #d7ece9; box-shadow: -5px 0 0 #d7ece9, 5px 0 0 #d7ece9;
+}
+.flatpickr-day.today { border-color: var(--primary-green, #008C8C); }
+.flatpickr-current-month .flatpickr-monthDropdown-months, .flatpickr-current-month input.cur-year { font-weight: 600; }
 </style>
 {% endblock %}
 
@@ -136,13 +171,14 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
 </div>
 
 <ul class="nav nav-tabs mb-3" id="dashTabs">
-  <li class="nav-item"><button class="nav-link {% if view != 'overview' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#summaryPane">Summary</button></li>
+  <li class="nav-item"><button class="nav-link {% if view != 'overview' and view != 'daily' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#summaryPane">Summary</button></li>
   <li class="nav-item"><button class="nav-link {% if view == 'overview' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#overviewPane">Overview</button></li>
+  <li class="nav-item"><button class="nav-link {% if view == 'daily' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#dailyPane">Daily View</button></li>
 </ul>
 
 <div class="tab-content">
   <!-- ===================== SUMMARY ===================== -->
-  <div class="tab-pane fade {% if view != 'overview' %}show active{% endif %}" id="summaryPane">
+  <div class="tab-pane fade {% if view != 'overview' and view != 'daily' %}show active{% endif %}" id="summaryPane">
     {% with s=summary %}
     <div class="sm-kpis">
       <div class="sm-kpi" style="--kpi-accent:#1f2a2a">
@@ -312,16 +348,53 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
       <a href="{% url 'interview_scheduler' %}" class="btn btn-outline-app btn-sm">Open Interviews</a>
     </div>
   </div>
+
+  <!-- ===================== DAILY VIEW ===================== -->
+  <div class="tab-pane fade {% if view == 'daily' %}show active{% endif %}" id="dailyPane">
+    <div class="fnl-panel">
+      <div class="fnl-panel-head">
+        <div>
+          <h5>Daily Actions</h5>
+          <span class="fnl-hint">How many candidate actions HR took, counted on the day each action happened</span>
+        </div>
+        <div class="daily-range">
+          <button type="button" class="daily-range-btn" id="dailyRangeBtn">
+            <span id="dailyRangeLabel">
+              {{ daily_from|date:"j M" }}{% if daily_to != daily_from %} &ndash; {{ daily_to|date:"j M" }}{% endif %}
+              <span class="daily-range-days">({{ daily_days }}d)</span>
+            </span>
+            <i class="bi bi-chevron-down"></i>
+          </button>
+          <input type="text" id="dailyRangeInput" class="daily-range-input-hidden">
+        </div>
+      </div>
+      <div class="daily-bars">
+        {% for c in daily_results %}
+        <a class="daily-col" title="See the {{ c.value }} action{{ c.value|pluralize }} behind this number"
+           href="{% url 'daily_action_drilldown' c.key %}?daily_from={{ daily_from|date:"Y-m-d" }}&daily_to={{ daily_to|date:"Y-m-d" }}{% if selected_job %}&job={{ selected_job }}{% endif %}">
+          <div class="daily-val">{{ c.value }}</div>
+          <div class="daily-bar-track">
+            <div class="daily-bar" style="height:{{ c.bar_pct }}%;background:{{ c.color }}"></div>
+          </div>
+          <div class="daily-lbl">{{ c.label }}</div>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
 <script>
-// Keep the Summary/Overview choice in the URL + filter form, so applying a
-// filter stays on the current view and the browser back button returns to it.
+// Keep the Summary/Overview/Daily View choice in the URL + filter form, so
+// applying a filter stays on the current view and the browser back button
+// returns to it.
+var DASH_TAB_VIEWS = {'#overviewPane': 'overview', '#dailyPane': 'daily', '#summaryPane': 'summary'};
 document.querySelectorAll('#dashTabs button[data-bs-toggle="tab"]').forEach(function (btn) {
   btn.addEventListener('shown.bs.tab', function (e) {
-    var v = e.target.getAttribute('data-bs-target') === '#overviewPane' ? 'overview' : 'summary';
+    var v = DASH_TAB_VIEWS[e.target.getAttribute('data-bs-target')] || 'summary';
     var vi = document.querySelector('input[name="view"]');
     if (vi) { vi.value = v; }
     var url = new URL(window.location);
@@ -346,5 +419,33 @@ document.querySelectorAll('#funnelBars .fnl-stagewrap').forEach(function (wrap) 
     btn.setAttribute('aria-expanded', toChips ? 'true' : 'false');
   });
 });
+
+// Daily View's date-range picker: pick a range, then reload with
+// daily_from/daily_to set (preserving the job/scope filters already in the
+// URL) - the server recomputes the whole chart for that range.
+(function () {
+  var btn = document.getElementById('dailyRangeBtn');
+  var input = document.getElementById('dailyRangeInput');
+  if (!btn || !input || typeof flatpickr === 'undefined') return;
+  var picker = flatpickr(input, {
+    mode: 'range',
+    dateFormat: 'Y-m-d',
+    defaultDate: ['{{ daily_from|date:"Y-m-d" }}', '{{ daily_to|date:"Y-m-d" }}'],
+    maxDate: 'today',
+    positionElement: btn,
+    onClose: function (selectedDates) {
+      if (selectedDates.length < 2) { return; }
+      var fmt = function (d) {
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      };
+      var url = new URL(window.location);
+      url.searchParams.set('view', 'daily');
+      url.searchParams.set('daily_from', fmt(selectedDates[0]));
+      url.searchParams.set('daily_to', fmt(selectedDates[1]));
+      window.location = url;
+    },
+  });
+  btn.addEventListener('click', function () { picker.open(); });
+})();
 </script>
 {% endblock %}
