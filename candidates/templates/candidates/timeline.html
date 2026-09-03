@@ -16,6 +16,7 @@
 
 /* Contact / Background / Application: labelled two-column grid */
 .section-eyebrow { font-size:.72rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--primary-green); margin-bottom:14px; }
+.section-eyebrow i { margin-right:4px; }
 .field-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px 28px; }
 .field-full { grid-column:1 / -1; }
 .field-label { font-size:.72rem; color:#8b9998; margin-bottom:3px; }
@@ -125,7 +126,7 @@
 
       <div class="col-lg-5">
         <div class="card app-card p-4 mb-3">
-          <h5 class="mb-3">Education</h5>
+          <div class="section-eyebrow">Education</div>
           {% for e in candidate.education.all %}
             <div class="mb-2 pb-2 {% if not forloop.last %}border-bottom{% endif %}">
               <strong>{{ e.qualification }}</strong> {% if e.specialization %}({{ e.specialization }}){% endif %}<br>
@@ -135,7 +136,7 @@
         </div>
 
         <div class="card app-card p-4 mb-3">
-          <h5 class="mb-3">Experience</h5>
+          <div class="section-eyebrow">Experience</div>
           {% for e in candidate.experience_set.all %}
             <div class="mb-2 pb-2 {% if not forloop.last %}border-bottom{% endif %}">
               <strong>{{ e.designation|default:"-" }}</strong> @ {{ e.company_name }}<br>
@@ -145,7 +146,7 @@
         </div>
 
         <div class="card app-card p-4 mb-3">
-          <h5 class="mb-3">Attachments</h5>
+          <div class="section-eyebrow">Attachments</div>
           {% if candidate.resume_url %}
           <div class="mb-{% if attachments %}3{% else %}0{% endif %}">
             <div class="field-label">Resume (CV)</div>
@@ -166,7 +167,7 @@
         </div>
 
         <div class="card app-card p-4">
-          <h5 class="mb-3">Notes</h5>
+          <div class="section-eyebrow">Notes</div>
           <form method="post" action="{% url 'candidate_add_note' candidate.pk %}" class="mb-3 js-autosave">
             {% csrf_token %}
             {{ note_form.text }}
@@ -188,7 +189,7 @@
     <div class="row g-3">
       <div class="col-lg-6">
         <div class="card app-card p-4 h-100">
-          <h5 class="mb-3"><i class="bi bi-stars"></i> AI CV Summary</h5>
+          <div class="section-eyebrow"><i class="bi bi-stars"></i> AI CV Summary</div>
           {% if candidate.cv_summary %}
             {% comment %}
               Markdown source, kept inert - marked.js + DOMPurify below render it into headings/table/bullets.
@@ -206,7 +207,7 @@
 
       <div class="col-lg-6">
         <div class="card app-card p-4 h-100">
-          <h5 class="mb-3"><i class="bi bi-bullseye"></i> Match Score</h5>
+          <div class="section-eyebrow"><i class="bi bi-bullseye"></i> Match Score</div>
           {% if candidate.match_score is not None %}
             {% with b=candidate.match_breakdown_parsed %}
             <div class="d-flex align-items-baseline gap-2">
@@ -250,7 +251,7 @@
     <div class="row g-3">
       <div class="col-lg-6">
         <div class="card app-card p-4 mb-3">
-          <h5 class="mb-3">Current Stage</h5>
+          <div class="section-eyebrow">Current Stage</div>
           {% if last_status %}
           <strong>{{ last_status_label }}</strong>
           {% if last_status.remarks %}<div class="small">{{ last_status.remarks }}</div>{% endif %}
@@ -264,7 +265,7 @@
         </div>
 
         <div class="card app-card p-4 mb-3">
-          <h5 class="mb-3">Next Stage &mdash; Update Status</h5>
+          <div class="section-eyebrow">Next Stage &mdash; Update Status</div>
           <form method="post" action="{% url 'candidate_set_status' candidate.pk %}" class="js-autosave">
             {% csrf_token %}
             <div class="row g-2">
@@ -289,7 +290,7 @@
         </div>
 
         <div class="card app-card p-4 mb-3">
-          <h5 class="mb-3">Communication Log</h5>
+          <div class="section-eyebrow">Communication Log</div>
           <form method="post" action="{% url 'candidate_add_log' candidate.pk %}" class="mb-3 js-autosave">
             {% csrf_token %}
             <div class="row g-2">
@@ -309,14 +310,14 @@
         </div>
 
         <div class="card app-card p-4">
-          <h5 class="mb-3">Final Status</h5>
+          <div class="section-eyebrow">Final Status</div>
           <span class="badge-status" style="background:{{ final_status.color }}; color:#fff; font-size:.82rem; padding:.4em .85em;">{{ final_status.label }}</span>
         </div>
       </div>
 
       <div class="col-lg-6">
         <div class="card app-card p-4 mb-3">
-          <h5 class="mb-3">Stage Dates (SLA)</h5>
+          <div class="section-eyebrow">Stage Dates (SLA)</div>
           <ul class="list-unstyled mb-0">
             <li><strong>Applied:</strong> {{ candidate.created_at|date:"d M Y" }}</li>
             {% for status, date in stage_dates.items %}
@@ -327,7 +328,7 @@
         </div>
 
         <div class="card app-card p-4 mb-3">
-          <h5 class="mb-3">Activity History</h5>
+          <div class="section-eyebrow">Activity History</div>
           {% for e in activity %}
           <div class="timeline-item">
             <div class="fw-semibold"><i class="bi bi-{{ e.icon }} me-1"></i>{{ e.title }}</div>
@@ -338,7 +339,7 @@
         </div>
 
         <div class="card app-card p-4 mb-3">
-          <h5 class="mb-3">Interviews</h5>
+          <div class="section-eyebrow">Interviews</div>
           {% for i in interviews %}
             <div class="mb-2 pb-2 {% if not forloop.last %}border-bottom{% endif %}">
               <strong>{{ i.get_round_type_display }}</strong> &middot; {{ i.scheduled_date|date:"d M Y H:i" }} &middot; {{ i.get_mode_display }}<br>

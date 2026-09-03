@@ -37,6 +37,12 @@
 .rep-row .rate .pct { flex: 0 0 52px; text-align: right; font-size: .78rem; font-weight: 600; color: #0e6f6b; }
 .rep-row .hired { flex: 0 0 46px; text-align: right; font-size: .85rem; color: #1f2a2a; }
 .rep-row .conv { flex: 0 0 62px; text-align: right; font-size: .8rem; color: #8a9a9a; }
+
+@media (max-width: 700px) {
+  /* Rows of fixed-width stat columns: scroll the panel sideways rather than squeezing them unreadable */
+  .rep-panel { overflow-x: auto; }
+  .rep-thead, .rep-row, .rep-vol-row { min-width: 420px; }
+}
 </style>
 {% endblock %}
 
