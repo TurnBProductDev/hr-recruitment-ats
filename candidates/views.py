@@ -48,35 +48,41 @@ STATUS = Candidate.Status
 STAGE_ORDER = [STATUS.OPEN, STATUS.SHORTLISTED, STATUS.ROUND1, STATUS.INTERVIEW, STATUS.FINAL_SELECTION]
 TERMINAL_STATUSES = (STATUS.HIRED, STATUS.REJECTED, STATUS.BLACKLISTED)
 
+# Which Interview.RoundType values belong to "Round 1" vs "Round 2" of the
+# Hiring block - mirrors dashboard/daily_view.py's NON_R1_ROUNDS split.
+ROUND1_TYPES = (Interview.RoundType.ROUND1,)
+ROUND2_TYPES = (Interview.RoundType.TECHNICAL, Interview.RoundType.MANAGERIAL,
+                Interview.RoundType.FINAL, Interview.RoundType.HR)
+
 HIRING_STAGES = [
-    {'key': 'open', 'status': STATUS.OPEN, 'label': 'Open (Resume Received)',
-     'comm_channel': None, 'interview': False, 'actions': [
+    {'key': 'open', 'status': STATUS.OPEN, 'label': 'Open (Resume Received)', 'short_label': 'Open',
+     'comm_channel': None, 'interview_rounds': (), 'actions': [
          {'url': 'candidate_shortlist', 'target': STATUS.SHORTLISTED, 'label': 'Shortlist', 'tone': 'advance'},
          {'url': 'candidate_screening_hold', 'target': STATUS.SCREENING_HOLD, 'label': 'Hold', 'tone': 'hold'},
          {'url': 'candidate_reject', 'target': STATUS.REJECTED, 'label': 'Reject', 'tone': 'reject'},
          {'url': 'candidate_blacklist', 'target': STATUS.BLACKLISTED, 'label': 'Blacklist', 'tone': 'blacklist', 'require_reason': True},
      ]},
-    {'key': 'shortlisted', 'status': STATUS.SHORTLISTED, 'label': 'Shortlisted',
-     'comm_channel': CommunicationLog.Channel.PHONE, 'interview': False, 'actions': [
+    {'key': 'shortlisted', 'status': STATUS.SHORTLISTED, 'label': 'Shortlisted', 'short_label': 'Shortlisted',
+     'comm_channel': CommunicationLog.Channel.PHONE, 'interview_rounds': (), 'actions': [
          {'url': 'candidate_round1', 'target': STATUS.ROUND1, 'label': 'Move to Round 1', 'tone': 'advance'},
          {'url': 'candidate_screening_hold', 'target': STATUS.SCREENING_HOLD, 'label': 'Hold', 'tone': 'hold'},
          {'url': 'candidate_reject', 'target': STATUS.REJECTED, 'label': 'Reject', 'tone': 'reject'},
          {'url': 'candidate_blacklist', 'target': STATUS.BLACKLISTED, 'label': 'Blacklist', 'tone': 'blacklist', 'require_reason': True},
      ]},
-    {'key': 'round1', 'status': STATUS.ROUND1, 'label': 'Round 1',
-     'comm_channel': CommunicationLog.Channel.INTERVIEW, 'interview': True, 'actions': [
+    {'key': 'round1', 'status': STATUS.ROUND1, 'label': 'Round 1', 'short_label': 'Round 1',
+     'comm_channel': CommunicationLog.Channel.INTERVIEW, 'interview_rounds': ROUND1_TYPES, 'actions': [
          {'url': 'candidate_interview_stage', 'target': STATUS.INTERVIEW, 'label': 'Move to Round 2', 'tone': 'advance'},
          {'url': 'candidate_screening_hold', 'target': STATUS.SCREENING_HOLD, 'label': 'Hold', 'tone': 'hold'},
          {'url': 'candidate_reject', 'target': STATUS.REJECTED, 'label': 'Reject', 'tone': 'reject'},
      ]},
-    {'key': 'round2', 'status': STATUS.INTERVIEW, 'label': 'Round 2',
-     'comm_channel': CommunicationLog.Channel.INTERVIEW, 'interview': True, 'actions': [
+    {'key': 'round2', 'status': STATUS.INTERVIEW, 'label': 'Round 2', 'short_label': 'Round 2',
+     'comm_channel': CommunicationLog.Channel.INTERVIEW, 'interview_rounds': ROUND2_TYPES, 'actions': [
          {'url': 'candidate_final_selection', 'target': STATUS.FINAL_SELECTION, 'label': 'Move to Final Selection', 'tone': 'advance'},
          {'url': 'candidate_screening_hold', 'target': STATUS.SCREENING_HOLD, 'label': 'Hold', 'tone': 'hold'},
          {'url': 'candidate_reject', 'target': STATUS.REJECTED, 'label': 'Reject', 'tone': 'reject'},
      ]},
-    {'key': 'final', 'status': STATUS.FINAL_SELECTION, 'label': 'Final Decision',
-     'comm_channel': None, 'interview': False, 'actions': [
+    {'key': 'final', 'status': STATUS.FINAL_SELECTION, 'label': 'Final Decision', 'short_label': 'Final Decision',
+     'comm_channel': None, 'interview_rounds': (), 'actions': [
          {'url': 'candidate_hire', 'target': STATUS.HIRED, 'label': 'Hire', 'tone': 'advance'},
          {'url': 'candidate_screening_hold', 'target': STATUS.SCREENING_HOLD, 'label': 'Hold', 'tone': 'hold'},
          {'url': 'candidate_reject', 'target': STATUS.REJECTED, 'label': 'Reject', 'tone': 'reject'},
@@ -497,15 +503,7 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
         ctx['attachments'] = candidate.attachments.all()
         ctx['offers'] = candidate.offers.all()
         ctx['interviews'] = candidate.interviews.select_related('interviewer').all()
-        # At most one interview can be awaiting a result; while there is one, no
-        # further interview may be scheduled (see interviews.forms.InterviewForm).
-        ctx['open_interview'] = Interview.open_for(candidate).first()
         ctx['note_form'] = CandidateNoteForm()
-
-        stage_dates = {}
-        for h in ctx['history'].order_by('changed_at'):
-            stage_dates.setdefault(h.new_status, h.changed_at)
-        ctx['stage_dates'] = stage_dates
 
         # Unified activity feed: every action (status changes, notes, calls,
         # interviews, offers) in one chronological list with remarks.
@@ -574,8 +572,27 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
 
         ctx['is_on_hold'] = candidate.status == STATUS.SCREENING_HOLD
         hiring_stages, active_stage_index = _build_hiring_stages(candidate, ctx['history'])
+        # Scoped per stage (not candidate-wide): a still-open Round 1
+        # interview must not read as a "Reschedule" once the candidate has
+        # already moved on to Round 2 - each stage only looks at interviews
+        # of its own round_type(s).
+        for stage in hiring_stages:
+            rounds = stage['interview_rounds']
+            stage['open_interview'] = next(
+                (i for i in ctx['interviews'] if i.round_type in rounds
+                 and i.status in Interview.OPEN_STATUSES and i.result == Interview.Result.PENDING),
+                None) if rounds else None
         ctx['hiring_stages'] = hiring_stages
         ctx['active_stage_index'] = active_stage_index
+
+        # Stage Dates (SLA) tracker: Applied, plus every stage actually
+        # reached so far (stages the candidate hasn't gotten to yet don't
+        # have a date and are left off rather than shown blank).
+        sla_stages = [{'label': 'Applied', 'date': candidate.created_at}]
+        for stage in hiring_stages:
+            if stage['entered']:
+                sla_stages.append({'label': stage['short_label'], 'date': stage['entered'].changed_at})
+        ctx['sla_stages'] = sla_stages
 
         comm_logs_by_channel = {}
         for log in ctx['communication_logs']:

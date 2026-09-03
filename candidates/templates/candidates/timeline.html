@@ -64,6 +64,25 @@
 .stage-action-btn.stage-tone-blacklist { border-color:#212529; color:#212529; }
 .stage-action-btn.stage-tone-blacklist:hover { background:#212529; color:#fff; }
 .stage-action-btn:disabled { opacity:.5; cursor:not-allowed; }
+
+/* History: stage-date tracker (connected dots) + colour-coded activity timeline */
+.sla-tracker { display:flex; align-items:flex-start; }
+.sla-stage { flex:1; display:flex; flex-direction:column; align-items:center; position:relative; }
+.sla-line { position:absolute; top:6px; left:-50%; width:100%; height:2px; background:var(--primary-green); z-index:0; }
+.sla-dot { width:13px; height:13px; border-radius:50%; background:var(--primary-green); border:2px solid #fff; box-shadow:0 0 0 1px var(--primary-green); position:relative; z-index:1; }
+.sla-label { font-size:.78rem; font-weight:600; color:#1a2e35; margin-top:10px; text-align:center; }
+.sla-date { font-size:.72rem; color:#8a969b; }
+
+.activity-row { display:flex; gap:14px; padding-bottom:20px; }
+.activity-icon-col { display:flex; flex-direction:column; align-items:center; flex-shrink:0; }
+.activity-icon { width:26px; height:26px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:.72rem; flex-shrink:0; }
+.activity-icon-default { background:#e4eeed; color:var(--primary-green); }
+.activity-icon-interview { background:#fbf1d6; color:#8a6a12; }
+.activity-line { width:2px; flex:1; background:#eef1f1; margin-top:4px; min-height:14px; }
+.activity-body { flex:1; padding-top:1px; min-width:0; }
+.activity-title { font-size:.88rem; font-weight:600; color:#1a2e35; }
+.activity-meta { font-size:.76rem; color:#8a969b; margin-top:2px; }
+.activity-note { font-size:.82rem; color:#4a5a60; margin-top:6px; background:#f6f8f8; border-radius:6px; padding:9px 12px; }
 </style>
 {% endblock %}
 
@@ -345,6 +364,32 @@
         </div>
         {% endif %}
 
+        {% if stage.interview_rounds %}
+        <div class="stage-subsection">
+          <div class="stage-subsection-title">Interview</div>
+          <div class="small mb-2">
+            {% if stage.open_interview %}
+            <span class="text-muted">Scheduled:</span> <strong>{{ stage.open_interview.scheduled_date|date:"d M Y, H:i" }}</strong>
+            {% else %}
+            <span class="text-muted fst-italic">Interview schedule pending</span>
+            {% endif %}
+          </div>
+          {% if stage.open_interview %}
+          <button type="button" class="btn btn-sm btn-outline-app" title="Change the date, time or interviewer"
+                  data-bs-toggle="modal" data-bs-target="#interviewModal"
+                  data-load-url="{% url 'interview_reschedule' stage.open_interview.pk %}" data-modal-title="Reschedule Interview">
+            <i class="bi bi-calendar-event"></i> Reschedule Interview
+          </button>
+          {% else %}
+          <button type="button" class="btn btn-sm btn-outline-app"
+                  data-bs-toggle="modal" data-bs-target="#interviewModal"
+                  data-load-url="{% url 'interview_schedule' candidate.pk %}" data-modal-title="Schedule Interview">
+            <i class="bi bi-calendar-event"></i> Schedule Interview
+          </button>
+          {% endif %}
+        </div>
+        {% endif %}
+
         {% if stage.comm_channel %}
         <div class="stage-subsection">
           <div class="stage-subsection-title">{% if stage.comm_channel == 'PHONE' %}Phone{% else %}Interview{% endif %} Communication Log</div>
@@ -381,25 +426,6 @@
         </div>
         {% endif %}
 
-        {% if stage.interview %}
-        <div class="stage-subsection">
-          <div class="stage-subsection-title">Interview</div>
-          {% if open_interview %}
-          <button type="button" class="btn btn-sm btn-outline-app" title="Change the date, time or interviewer"
-                  data-bs-toggle="modal" data-bs-target="#interviewModal"
-                  data-load-url="{% url 'interview_reschedule' open_interview.pk %}" data-modal-title="Reschedule Interview">
-            <i class="bi bi-calendar-event"></i> Reschedule Interview
-          </button>
-          {% else %}
-          <button type="button" class="btn btn-sm btn-outline-app"
-                  data-bs-toggle="modal" data-bs-target="#interviewModal"
-                  data-load-url="{% url 'interview_schedule' candidate.pk %}" data-modal-title="Schedule Interview">
-            <i class="bi bi-calendar-event"></i> Schedule Interview
-          </button>
-          {% endif %}
-        </div>
-        {% endif %}
-
         <div class="stage-subsection">
           <div class="stage-subsection-title">Update Status</div>
           <form method="post" class="js-stage-form">
@@ -423,63 +449,61 @@
     {% endfor %}
 
     <div class="card app-card p-4">
-      <div class="section-eyebrow">Final Status</div>
-      <span class="badge-status" style="background:{{ final_status.color }}; color:#fff; font-size:.82rem; padding:.4em .85em;">{{ final_status.label }}</span>
+      <div class="section-eyebrow" style="font-size:.62rem;">Final Status</div>
+      <div class="text-center" style="color:{{ final_status.color }}; font-size:1.05rem; font-weight:700;">{{ final_status.label }}</div>
     </div>
   </div>
 
   <div>
     <div class="section-eyebrow">History</div>
-    <div class="row g-3">
-      <div class="col-lg-5">
-        <div class="card app-card p-4 mb-3">
-          <div class="section-eyebrow">Stage Dates (SLA)</div>
-          <ul class="list-unstyled mb-0">
-            <li><strong>Applied:</strong> {{ candidate.created_at|date:"d M Y" }}</li>
-            {% for status, date in stage_dates.items %}
-            <li><strong>{{ status|title }}:</strong> {{ date|date:"d M Y" }}</li>
-            {% endfor %}
-          </ul>
-          <p class="small text-muted mt-2 mb-0">Days in pipeline: {{ candidate.created_at|timesince }}</p>
-        </div>
 
-        <div class="card app-card p-4">
-          <div class="section-eyebrow">Interviews</div>
-          {% for i in interviews %}
-            <div class="mb-2 pb-2 {% if not forloop.last %}border-bottom{% endif %}">
-              <strong>{{ i.get_round_type_display }}</strong> &middot; {{ i.scheduled_date|date:"d M Y H:i" }} &middot; {{ i.get_mode_display }}<br>
-              <span class="text-muted small">Interviewer: {{ i.interviewer|default:"Unassigned" }} &middot; Status: {{ i.get_status_display }} &middot; Result: {{ i.get_result_display }}</span>
-              {% if i.feedback %}<div class="small mt-1">{{ i.feedback }}</div>{% endif %}
-            </div>
-          {% empty %}<p class="text-muted mb-0">No interviews scheduled.</p>{% endfor %}
-          {% if open_interview %}
-          <button type="button" class="btn btn-sm btn-outline-app mt-2" title="Change the date, time or interviewer"
-                  data-bs-toggle="modal" data-bs-target="#interviewModal"
-                  data-load-url="{% url 'interview_reschedule' open_interview.pk %}" data-modal-title="Reschedule Interview">
-            <i class="bi bi-calendar-event"></i> Reschedule
-          </button>
-          {% else %}
-          <button type="button" class="btn btn-sm btn-outline-app mt-2"
-                  data-bs-toggle="modal" data-bs-target="#interviewModal"
-                  data-load-url="{% url 'interview_schedule' candidate.pk %}" data-modal-title="Schedule Interview">
-            Schedule Interview
-          </button>
-          {% endif %}
-        </div>
+    <div class="card app-card p-4 mb-3">
+      <div class="d-flex align-items-baseline justify-content-between mb-3">
+        <span class="section-eyebrow mb-0">Stage Dates (SLA)</span>
+        <span class="small text-muted">{{ candidate.created_at|timesince }} in pipeline</span>
       </div>
+      <div class="sla-tracker">
+        {% for s in sla_stages %}
+        <div class="sla-stage">
+          {% if not forloop.first %}<div class="sla-line"></div>{% endif %}
+          <span class="sla-dot"></span>
+          <div class="sla-label">{{ s.label }}</div>
+          <div class="sla-date">{{ s.date|date:"d M Y" }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
 
-      <div class="col-lg-7">
-        <div class="card app-card p-4">
-          <div class="section-eyebrow">Activity History</div>
-          {% for e in activity %}
-          <div class="timeline-item">
-            <div class="fw-semibold"><i class="bi bi-{{ e.icon }} me-1"></i>{{ e.title }}</div>
-            <div class="small text-muted">{{ e.when|date:"d M Y" }} &middot; {{ e.who|default:"System" }}</div>
-            {% if e.detail %}<div class="small mt-1">{{ e.detail }}</div>{% endif %}
+    <div class="card app-card p-4 mb-3">
+      <div class="section-eyebrow">Activity History</div>
+      <div class="d-flex flex-column">
+        {% for e in activity %}
+        <div class="activity-row">
+          <div class="activity-icon-col">
+            <span class="activity-icon {% if e.icon == 'calendar-event' %}activity-icon-interview{% else %}activity-icon-default{% endif %}">
+              <i class="bi bi-{{ e.icon }}"></i>
+            </span>
+            {% if not forloop.last %}<div class="activity-line"></div>{% endif %}
           </div>
-          {% empty %}<p class="text-muted mb-0">No activity yet.</p>{% endfor %}
+          <div class="activity-body">
+            <div class="activity-title">{{ e.title }}</div>
+            <div class="activity-meta">{{ e.when|date:"d M Y" }} &middot; {{ e.who|default:"System" }}</div>
+            {% if e.detail %}<div class="activity-note">{{ e.detail }}</div>{% endif %}
+          </div>
         </div>
+        {% empty %}<p class="text-muted mb-0">No activity yet.</p>{% endfor %}
       </div>
+    </div>
+
+    <div class="card app-card p-4">
+      <div class="section-eyebrow">Interviews</div>
+      {% for i in interviews %}
+        <div class="mb-2 pb-2 {% if not forloop.last %}border-bottom{% endif %}">
+          <strong>{{ i.get_round_type_display }}</strong> &middot; {{ i.scheduled_date|date:"d M Y H:i" }} &middot; {{ i.get_mode_display }}<br>
+          <span class="text-muted small">Interviewer: {{ i.interviewer|default:"Unassigned" }} &middot; Status: {{ i.get_status_display }} &middot; Result: {{ i.get_result_display }}</span>
+          {% if i.feedback %}<div class="small mt-1">{{ i.feedback }}</div>{% endif %}
+        </div>
+      {% empty %}<p class="text-muted mb-0">No interviews scheduled.</p>{% endfor %}
     </div>
   </div>
 

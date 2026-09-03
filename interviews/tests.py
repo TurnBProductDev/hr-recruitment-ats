@@ -101,7 +101,8 @@ class RescheduleTests(TestCase):
         self.interviewer.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
         self.job = Job.objects.create(job_code='J1', title='Program Manager')
         self.candidate = Candidate.objects.create(
-            full_name='Rose E G', email='rose@example.com', job=self.job)
+            full_name='Rose E G', email='rose@example.com', job=self.job,
+            status=Candidate.Status.ROUND1)
         self.interview = Interview.objects.create(
             candidate=self.candidate, round_type=Interview.RoundType.ROUND1,
             interviewer=self.interviewer,
