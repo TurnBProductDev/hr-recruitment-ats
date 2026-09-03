@@ -88,7 +88,7 @@ Success response (HTTP 200):
   "Education": "MBA - DC School of Management & Technology - 2019",
   "Role_Applied": "Data Analyst",
   "Source": "Careers",
-  "Summary": "…4-5 sentences…",
+  "Summary": "### Candidate Overview\n…\n\n### Core Technical Competencies\n…\n\n### Professional Experience Highlights\n…\n\n### Education, Logistics & Career Continuity\n…",
   "CV_Link": "https://netorg519925.sharepoint.com/…"
 }
 ```

@@ -158,7 +158,7 @@
                                 "messages": [
                                     {
                                         "role": "system",
-                                        "content": "You are an HR analyst. Write a concise 4-5 sentence professional summary of the candidate from the CV text: key skills, total years of experience, major work experiences and impact. Factual, neutral tone. If a piece of information, such as years of experience, is not explicitly stated or easily calculable from the provided text, do not invent it. Base the summary strictly on the provided text. Return ONLY the summary text — no preamble, no markdown"
+                                        "content": "You are an expert HR Analyst. Your task is to analyze the provided CV text and generate a highly scannable candidate summary.\n\nFollow these strict constraints:\n\nBase the summary strictly on the provided text. Do not invent, infer, or hallucinate information.\n\nMaintain a factual, neutral tone.\n\nOutput only the requested sections below exactly as formatted. Do not include introductory or concluding remarks.\n\n### Candidate Overview\nProvide a 2-3 sentence factual summary of the candidate's core professional identity, primary domain expertise, and total years of relevant experience.\n\n### Core Technical Competencies\nCreate a simple markdown table categorizing the candidate's key skills (e.g., AI/ML, Backend, Cloud). Keep the categories and text concise.\n\n### Professional Experience Highlights\nExtract 3-4 bullet points detailing the candidate's most impactful work experiences. Focus on specific tools used, project scopes, and measurable outcomes.\n\n### Education, Logistics & Career Continuity\nProvide a bulleted list covering:\n\nCurrent location.\n\nHighest educational degree and relevant certifications.\n\nCareer Gaps: Analyze the timeline of education and employment. Explicitly state any career gaps (periods of 3+ months without activity). If the timeline is continuous, state: \"No significant career gaps identified.\""
                                     },
                                     {
                                         "role": "user",
@@ -166,7 +166,7 @@
                                     }
                                 ],
                                 "temperature": 0.3,
-                                "max_tokens": 400
+                                "max_tokens": 900
                             },
                             "path": "/2024-02-15-preview/deployments/@{encodeURIComponent('cv-data-agent')}/chat/completions",
                             "queries": {

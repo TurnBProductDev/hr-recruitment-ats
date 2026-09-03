@@ -1,6 +1,21 @@
 {% extends "hr_base.html" %}
 {% load candidates_extras %}
 {% block title %}{{ candidate.full_name }} - Timeline{% endblock %}
+
+{% block extra_css %}
+<style>
+/* The AI CV Summary is Markdown (headings, a skills table, bullet lists) -
+   rendered client-side by marked.js into this container. */
+.cv-summary-md h3 { font-size:.92rem; font-weight:700; color:var(--dark-green); margin:14px 0 6px; }
+.cv-summary-md h3:first-child { margin-top:0; }
+.cv-summary-md table { width:100%; font-size:.83rem; margin:6px 0 12px; border-collapse:collapse; }
+.cv-summary-md table th, .cv-summary-md table td { padding:4px 8px; border:1px solid var(--border-color); text-align:left; }
+.cv-summary-md ul { padding-left:1.2rem; margin-bottom:10px; }
+.cv-summary-md p { margin-bottom:8px; }
+.cv-summary-md p:last-child { margin-bottom:0; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h3 class="mb-0">{{ candidate.full_name }} <span class="text-muted small">{{ candidate.candidate_code }}</span></h3>
@@ -107,7 +122,11 @@
     <div class="card app-card p-4 mb-3">
       <h5 class="mb-3"><i class="bi bi-stars"></i> AI CV Summary</h5>
       {% if candidate.cv_summary %}
-        <p class="mb-0" style="white-space: pre-line;">{{ candidate.cv_summary }}</p>
+        {# Raw Markdown source, kept inert - marked.js + DOMPurify below render it into headings/table/bullets. #}
+        <div id="cv-summary-raw" hidden>{{ candidate.cv_summary }}</div>
+        <div id="cv-summary-md" class="cv-summary-md">
+          <p class="mb-0" style="white-space: pre-line;">{{ candidate.cv_summary }}</p>
+        </div>
       {% else %}
         <p class="text-muted mb-0">No AI summary yet — this is generated from the CV during careers intake.</p>
       {% endif %}
@@ -267,7 +286,20 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
 <script>
+// The AI CV Summary is Markdown - render it into the placeholder built above.
+// Falls back to the plain pre-line text already in the DOM if either library
+// fails to load (e.g. offline), so the summary is never blank.
+(function () {
+  var raw = document.getElementById('cv-summary-raw');
+  var target = document.getElementById('cv-summary-md');
+  if (!raw || !target || typeof marked === 'undefined' || typeof DOMPurify === 'undefined') return;
+  var html = DOMPurify.sanitize(marked.parse(raw.textContent));
+  target.innerHTML = html;
+})();
+
 // Hide each Save button until the user types/selects something (so they don't
 // forget to save). Fail-safe: if JS doesn't run, the buttons stay visible.
 document.querySelectorAll('.js-autosave').forEach(function (form) {
