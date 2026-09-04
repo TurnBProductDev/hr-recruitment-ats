@@ -921,11 +921,9 @@ class HiringBlockStageLabelTests(TestCase):
         c = self._candidate(Candidate.Status.ROUND1)
         response = self.client.get(reverse('candidate_timeline', args=[c.pk]))
         self.assertContains(response, 'Round 1 Schedule')
-        # Hold/Reject stay available even before the interview is Done -
-        # only Cleared (which needs a completed interview) is held back.
-        self.assertContains(response, 'Update Round 1 Status')
-        self.assertContains(response, reverse('candidate_screening_hold', args=[c.pk]))
-        self.assertContains(response, reverse('candidate_reject', args=[c.pk]))
+        # The decision card (Cleared/Hold/Reject) is hidden entirely until
+        # the interview is marked Done - only Schedule/Reschedule show.
+        self.assertNotContains(response, 'Update Round 1 Status')
         self.assertNotContains(response, reverse('candidate_interview_stage', args=[c.pk]))
 
     def test_round1_decision_options_have_no_blacklist(self):
