@@ -172,6 +172,17 @@ HOLD_TAB = 'screening_hold'
 TAB_STATUS_MAP = {key: status for key, _, status in REPOSITORY_TABS}
 STATUS_TAB_MAP = {status: key for key, _, status in REPOSITORY_TABS}
 
+# Candidate Repository's Score filter - non-overlapping bands over match_score
+# (unscored candidates have match_score=None, which every lookup here excludes,
+# so "no score selected" and "not yet scored" never get confused).
+SCORE_BANDS = [
+    ('lt20', 'Below 20', {'match_score__lt': 20}),
+    ('20-50', '20 – 50', {'match_score__gte': 20, 'match_score__lte': 50}),
+    ('50-80', '50 – 80', {'match_score__gt': 50, 'match_score__lte': 80}),
+    ('gt80', 'Above 80', {'match_score__gt': 80}),
+]
+SCORE_BAND_FILTERS = {key: lookup for key, _, lookup in SCORE_BANDS}
+
 
 LIST_URL_SESSION_KEY = 'last_candidate_list_url'
 
@@ -320,6 +331,10 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
         if source:
             qs = qs.filter(source=source)
 
+        score_band = SCORE_BAND_FILTERS.get(self.request.GET.get('score'))
+        if score_band:
+            qs = qs.filter(**score_band)
+
         date_from = self.request.GET.get('date_from')
         if date_from:
             qs = qs.filter(created_at__date__gte=date_from)
@@ -403,6 +418,8 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
         ctx['scope'] = scope
         ctx['sources'] = (Candidate.objects.exclude(source__isnull=True).exclude(source='')
                           .values_list('source', flat=True).distinct().order_by('source'))
+        ctx['score_bands'] = SCORE_BANDS
+        ctx['score'] = self.request.GET.get('score', '')
         # The Hold tab lists one stored status, so it offers the named holds
         # instead; every other tab offers the pipeline statuses.
         if ctx['tab'] == HOLD_TAB:
@@ -585,20 +602,6 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
         ctx['hiring_stages'] = hiring_stages
         ctx['active_stage_index'] = active_stage_index
 
-        # Stage Dates (SLA) tracker: Applied, plus every stage actually
-        # reached so far (stages the candidate hasn't gotten to yet don't
-        # have a date and are left off rather than shown blank).
-        sla_stages = [{'label': 'Applied', 'date': candidate.created_at}]
-        for stage in hiring_stages:
-            if stage['entered']:
-                sla_stages.append({'label': stage['short_label'], 'date': stage['entered'].changed_at})
-        ctx['sla_stages'] = sla_stages
-
-        comm_logs_by_channel = {}
-        for log in ctx['communication_logs']:
-            comm_logs_by_channel.setdefault(log.channel, []).append(log)
-        ctx['comm_logs_by_channel'] = comm_logs_by_channel
-
         if active_stage_index is None:
             outcome_label = {STATUS.HIRED: 'Hired', STATUS.REJECTED: 'Rejected',
                              STATUS.BLACKLISTED: 'Blacklisted'}.get(candidate.status, candidate.status_label)
@@ -608,6 +611,32 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
         else:
             ctx['final_status'] = {'label': f'In Progress · {HIRING_STAGES[active_stage_index]["label"]}',
                                    'color': '#17a2b8'}
+
+        # Stage Dates (SLA) tracker: Applied, plus every later stage actually
+        # reached so far (stages the candidate hasn't gotten to yet don't
+        # have a date and are left off rather than shown blank). "Open" is
+        # skipped as its own node - it's set at intake, the same moment as
+        # "Applied", so showing both is a redundant, same-day duplicate. A
+        # candidate who exited to a terminal outcome (Hired/Rejected/
+        # Blacklisted) gets that outcome appended too, so e.g. someone
+        # rejected at screening shows "Applied -> Rejected" instead of
+        # stopping at "Open" as if that were where they ended up.
+        sla_stages = [{'label': 'Applied', 'date': candidate.created_at}]
+        for stage in hiring_stages:
+            if stage['status'] == STATUS.OPEN:
+                continue
+            if stage['entered']:
+                sla_stages.append({'label': stage['short_label'], 'date': stage['entered'].changed_at})
+        if active_stage_index is None and last and last.new_status == candidate.status:
+            sla_stages.append({'label': ctx['final_status']['label'], 'date': last.changed_at,
+                               'color': ctx['final_status']['color']})
+        ctx['sla_stages'] = sla_stages
+
+        comm_logs_by_channel = {}
+        for log in ctx['communication_logs']:
+            comm_logs_by_channel.setdefault(log.channel, []).append(log)
+        ctx['comm_logs_by_channel'] = comm_logs_by_channel
+
         return ctx
 
 

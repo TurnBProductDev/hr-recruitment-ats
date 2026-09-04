@@ -189,11 +189,16 @@ def _resolve(obj, path):
 
 def compute(date_range, job_id=None):
     """date_range is (start_date, end_date), both inclusive `date` objects.
-    Returns the 6 chart columns in display order."""
+    Returns the 6 chart columns in display order. Each column also carries
+    its `breakdown` - the same per-source counts a bar's tooltip shows -
+    computed from the identical _sources_for() list so it can never
+    disagree with the bar's own total."""
     results = []
     for key, label in COLUMNS:
-        total = sum(qs.count() for qs, *_ in _sources_for(key, date_range, job_id))
-        results.append({'key': key, 'label': label, 'value': total})
+        breakdown = [{'label': action_label, 'value': qs.count()}
+                    for qs, _, action_label, _ in _sources_for(key, date_range, job_id)]
+        total = sum(b['value'] for b in breakdown)
+        results.append({'key': key, 'label': label, 'value': total, 'breakdown': breakdown})
     return results
 
 

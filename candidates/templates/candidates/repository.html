@@ -167,6 +167,15 @@
         </select>
       </div>
       <div>
+        <label class="form-label mb-0 d-block">Score</label>
+        <select name="score" class="form-select form-select-sm" onchange="this.form.submit()" style="min-width:120px;">
+          <option value="">All scores</option>
+          {% for value, label, lookup in score_bands %}
+          <option value="{{ value }}" {% if score == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
         <label class="form-label mb-0 d-block">Status</label>
         <select name="status" class="form-select form-select-sm" onchange="this.form.submit()" style="min-width:140px;">
           <option value="">All statuses</option>

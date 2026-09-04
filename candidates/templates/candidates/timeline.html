@@ -283,7 +283,7 @@ html { scroll-behavior: smooth; }
           </form>
           {% for n in notes %}
             <div class="mb-2 pb-2 border-bottom">
-              <div>{{ n.text }}</div>
+              <div class="pd-body">{{ n.text }}</div>
               <div class="pd-meta text-muted">{{ n.author|default:"Unknown" }} &middot; {{ n.created_at|date:"d M Y H:i" }}</div>
             </div>
           {% empty %}<p class="text-muted mb-0">No notes yet.</p>{% endfor %}
@@ -531,9 +531,9 @@ html { scroll-behavior: smooth; }
       <div class="sla-tracker">
         {% for s in sla_stages %}
         <div class="sla-stage">
-          {% if not forloop.first %}<div class="sla-line"></div>{% endif %}
-          <span class="sla-dot"></span>
-          <div class="sla-label">{{ s.label }}</div>
+          {% if not forloop.first %}<div class="sla-line" {% if s.color %}style="background:{{ s.color }};"{% endif %}></div>{% endif %}
+          <span class="sla-dot" {% if s.color %}style="background:{{ s.color }};box-shadow:0 0 0 1px {{ s.color }};"{% endif %}></span>
+          <div class="sla-label" {% if s.color %}style="color:{{ s.color }};"{% endif %}>{{ s.label }}</div>
           <div class="sla-date">{{ s.date|date:"d M Y" }}</div>
         </div>
         {% endfor %}

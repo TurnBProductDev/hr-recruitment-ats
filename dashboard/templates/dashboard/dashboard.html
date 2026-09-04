@@ -126,7 +126,7 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
 
 .daily-bars { display: flex; align-items: stretch; gap: 22px; height: 260px; padding: 30px 6px 0; }
 .daily-col {
-  flex: 1; display: flex; flex-direction: column; align-items: center; min-width: 0;
+  position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; min-width: 0;
   text-decoration: none; color: inherit; border-radius: 8px; padding-top: 4px;
   transition: background .12s ease;
 }
@@ -136,6 +136,23 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
 .daily-bar-track { flex: 1; width: 100%; max-width: 96px; display: flex; flex-direction: column; justify-content: flex-end; }
 .daily-bar { width: 100%; border-radius: 6px 6px 0 0; min-height: 3px; transition: height .2s ease; }
 .daily-lbl { font-size: .66rem; font-weight: 700; letter-spacing: .3px; text-transform: uppercase; color: #566664; margin-top: 10px; text-align: center; transition: color .12s ease; }
+
+/* Per-bar tooltip: the split of actions that make up that column's total,
+   from the exact same source list the bar itself is summed from. */
+.daily-tooltip {
+  position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%) translateY(-4px);
+  background: #1f2a2a; color: #fff; border-radius: 8px; padding: 10px 14px; min-width: 190px;
+  box-shadow: 0 8px 20px rgba(0,0,0,.18); opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity .12s ease, transform .12s ease; z-index: 30;
+}
+.daily-col:hover .daily-tooltip { opacity: 1; visibility: visible; transform: translateX(-50%) translateY(-8px); }
+.daily-tooltip::after {
+  content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+  border: 6px solid transparent; border-top-color: #1f2a2a;
+}
+.daily-tooltip-title { font-size: .72rem; font-weight: 700; padding-bottom: 6px; margin-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,.18); }
+.daily-tooltip-row { display: flex; justify-content: space-between; gap: 18px; font-size: .72rem; padding: 2px 0; white-space: nowrap; }
+.daily-tooltip-row span:last-child { font-weight: 700; }
 
 /* flatpickr: swap the default blue for this app's teal */
 .flatpickr-day.selected, .flatpickr-day.startRange, .flatpickr-day.endRange {
@@ -397,8 +414,14 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
       </div>
       <div class="daily-bars">
         {% for c in daily_results %}
-        <a class="daily-col" title="See the {{ c.value }} action{{ c.value|pluralize }} behind this number"
+        <a class="daily-col"
            href="{% url 'daily_action_drilldown' c.key %}?daily_from={{ daily_from|date:"Y-m-d" }}&daily_to={{ daily_to|date:"Y-m-d" }}{% if selected_job %}&job={{ selected_job }}{% endif %}">
+          <div class="daily-tooltip">
+            <div class="daily-tooltip-title">{{ c.label }} &middot; {{ c.value }}</div>
+            {% for b in c.breakdown %}
+            <div class="daily-tooltip-row"><span>{{ b.label }}</span><span>{{ b.value }}</span></div>
+            {% endfor %}
+          </div>
           <div class="daily-val">{{ c.value }}</div>
           <div class="daily-bar-track">
             <div class="daily-bar" style="height:{{ c.bar_pct }}%;background:{{ c.color }}"></div>
