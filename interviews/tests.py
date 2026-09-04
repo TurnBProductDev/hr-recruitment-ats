@@ -186,3 +186,75 @@ class RescheduleTests(TestCase):
         response = self.client.get(reverse('interview_scheduler'))
         self.assertContains(
             response, reverse('interview_reschedule', args=[self.interview.pk]))
+
+
+class InterviewDoneCancelTests(TestCase):
+    """Marking an interview "Done" only completes it - it doesn't decide
+    pass/fail. That happens separately, when the Hiring block's Round 1/
+    Round 2 decision card (Cleared/Hold/Reject) is used - see
+    candidates.views.CandidateStatusActionView._settle_round_interview."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('hr', 'hr@example.com', 'pw')
+        self.user.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.client.force_login(self.user)
+        self.job = Job.objects.create(job_code='J1', title='Program Manager')
+        self.candidate = Candidate.objects.create(
+            full_name='Rose E G', email='rose@example.com', job=self.job,
+            status=Candidate.Status.ROUND1)
+        self.interview = Interview.objects.create(
+            candidate=self.candidate, round_type=Interview.RoundType.ROUND1,
+            scheduled_date=(timezone.now() + timezone.timedelta(days=1))
+                           .replace(second=0, microsecond=0))
+
+    def test_done_completes_without_deciding(self):
+        self.client.post(reverse('interview_mark_done', args=[self.interview.pk]))
+        self.interview.refresh_from_db()
+        self.assertEqual(self.interview.status, Interview.Status.COMPLETED)
+        self.assertEqual(self.interview.result, Interview.Result.PENDING)
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.status, Candidate.Status.ROUND1)  # unchanged
+
+    def test_timeline_shows_the_decision_card_once_done(self):
+        self.client.post(reverse('interview_mark_done', args=[self.interview.pk]))
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertContains(response, 'Update Round 1 Status')
+        self.assertContains(response, 'Cleared')
+
+    def test_cleared_settles_the_interview_as_passed(self):
+        self.client.post(reverse('interview_mark_done', args=[self.interview.pk]))
+        self.client.post(reverse('candidate_interview_stage', args=[self.candidate.pk]))
+        self.interview.refresh_from_db()
+        self.assertEqual(self.interview.result, Interview.Result.PASS_)
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.status, Candidate.Status.INTERVIEW)
+
+    def test_reject_settles_the_interview_as_failed(self):
+        self.client.post(reverse('interview_mark_done', args=[self.interview.pk]))
+        self.client.post(reverse('candidate_reject', args=[self.candidate.pk]))
+        self.interview.refresh_from_db()
+        self.assertEqual(self.interview.result, Interview.Result.FAIL)
+
+    def test_hold_leaves_the_interview_pending(self):
+        self.client.post(reverse('interview_mark_done', args=[self.interview.pk]))
+        self.client.post(reverse('candidate_screening_hold', args=[self.candidate.pk]))
+        self.interview.refresh_from_db()
+        self.assertEqual(self.interview.result, Interview.Result.PENDING)
+
+    def test_cancelling_prompts_reject_or_hold(self):
+        self.client.post(reverse('interview_cancel', args=[self.interview.pk]))
+        self.interview.refresh_from_db()
+        self.assertEqual(self.interview.status, Interview.Status.CANCELLED)
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertContains(response, 'Interview cancelled')
+        # Still in the Schedule phase - a fresh interview can be scheduled instead.
+        self.assertContains(response, reverse('interview_schedule', args=[self.candidate.pk]))
+
+    def test_scheduling_a_new_interview_clears_the_cancelled_prompt(self):
+        self.client.post(reverse('interview_cancel', args=[self.interview.pk]))
+        Interview.objects.create(
+            candidate=self.candidate, round_type=Interview.RoundType.ROUND1,
+            scheduled_date=(timezone.now() + timezone.timedelta(days=2))
+                           .replace(second=0, microsecond=0))
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertNotContains(response, 'Interview cancelled')

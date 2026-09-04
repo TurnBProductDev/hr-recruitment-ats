@@ -288,6 +288,7 @@
               {% if tab == 'screening_hold' %}
                 {# Off hold resumes the pipeline at the stage after the one they were held at. #}
                 <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url c.resume_action.url_name c.id %}" data-title="Move {{ c.full_name }} to {{ c.resume_action.stage }}" data-msg="Taking {{ c.full_name }} off hold — this moves them on to {{ c.resume_action.stage }}.">{{ c.resume_action.label }}</button>
+                <button type="button" class="btn btn-sm btn-outline-app act" data-action="{% url 'candidate_move_to_future' c.id %}" data-title="Move {{ c.full_name }} to Future Prospects" data-msg="This stops actively pursuing {{ c.full_name }} for this vacancy and keeps them as a prospect for future openings instead.">Move to Future</button>
               {% elif tab == 'rejected' %}
                 <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url 'candidate_shortlist' c.id %}" data-title="Move {{ c.full_name }} to Qualified" data-msg="Decision changed? This moves the candidate into the Qualified pipeline.">Move to Qualified</button>
               {% endif %}

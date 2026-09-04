@@ -47,37 +47,46 @@ STATUS = Candidate.Status
 # (candidates/urls.py), reused as-is rather than adding a new action view.
 STAGE_ORDER = [STATUS.OPEN, STATUS.SHORTLISTED, STATUS.ROUND1, STATUS.INTERVIEW, STATUS.FINAL_SELECTION]
 TERMINAL_STATUSES = (STATUS.HIRED, STATUS.REJECTED, STATUS.BLACKLISTED)
+# Targets that mean "the candidate passed this round" - used to settle a
+# completed-but-undecided interview's result when the stage decision lands
+# (see CandidateStatusActionView._settle_round_interview).
+ADVANCE_STATUSES = (STATUS.INTERVIEW, STATUS.FINAL_SELECTION, STATUS.HIRED)
 
 # Which Interview.RoundType values belong to "Round 1" vs "Round 2" of the
 # Hiring block - mirrors dashboard/daily_view.py's NON_R1_ROUNDS split.
 ROUND1_TYPES = (Interview.RoundType.ROUND1,)
 ROUND2_TYPES = (Interview.RoundType.TECHNICAL, Interview.RoundType.MANAGERIAL,
                 Interview.RoundType.FINAL, Interview.RoundType.HR)
+# Which round's interview should be settled (Pass/Fail) when the candidate is
+# currently at that stage and a decision (Cleared/Reject/Blacklist) is made.
+ROUND_INTERVIEW_TYPES = {STATUS.ROUND1: ROUND1_TYPES, STATUS.INTERVIEW: ROUND2_TYPES}
 
 HIRING_STAGES = [
-    {'key': 'open', 'status': STATUS.OPEN, 'label': 'Open (Resume Received)', 'short_label': 'Open',
+    {'key': 'open', 'status': STATUS.OPEN, 'label': 'CV Screening', 'short_label': 'CV Screening',
      'comm_channel': None, 'interview_rounds': (), 'actions': [
          {'url': 'candidate_shortlist', 'target': STATUS.SHORTLISTED, 'label': 'Qualify', 'tone': 'advance'},
          {'url': 'candidate_screening_hold', 'target': STATUS.SCREENING_HOLD, 'label': 'Hold', 'tone': 'hold'},
          {'url': 'candidate_reject', 'target': STATUS.REJECTED, 'label': 'Reject', 'tone': 'reject'},
          {'url': 'candidate_blacklist', 'target': STATUS.BLACKLISTED, 'label': 'Blacklist', 'tone': 'blacklist', 'require_reason': True},
      ]},
-    {'key': 'shortlisted', 'status': STATUS.SHORTLISTED, 'label': 'Qualified', 'short_label': 'Qualified',
+    {'key': 'shortlisted', 'status': STATUS.SHORTLISTED, 'label': 'Tele Screening', 'short_label': 'Tele Screening',
      'comm_channel': CommunicationLog.Channel.PHONE, 'interview_rounds': (), 'actions': [
-         {'url': 'candidate_round1', 'target': STATUS.ROUND1, 'label': 'Move to Round 1', 'tone': 'advance'},
+         {'url': 'candidate_round1', 'target': STATUS.ROUND1, 'label': 'Shortlist', 'tone': 'advance'},
          {'url': 'candidate_screening_hold', 'target': STATUS.SCREENING_HOLD, 'label': 'Hold', 'tone': 'hold'},
          {'url': 'candidate_reject', 'target': STATUS.REJECTED, 'label': 'Reject', 'tone': 'reject'},
          {'url': 'candidate_blacklist', 'target': STATUS.BLACKLISTED, 'label': 'Blacklist', 'tone': 'blacklist', 'require_reason': True},
      ]},
     {'key': 'round1', 'status': STATUS.ROUND1, 'label': 'Round 1', 'short_label': 'Round 1',
+     'schedule_label': 'Round 1 Schedule', 'decision_label': 'Round 1',
      'comm_channel': CommunicationLog.Channel.INTERVIEW, 'interview_rounds': ROUND1_TYPES, 'actions': [
-         {'url': 'candidate_interview_stage', 'target': STATUS.INTERVIEW, 'label': 'Move to Round 2', 'tone': 'advance'},
+         {'url': 'candidate_interview_stage', 'target': STATUS.INTERVIEW, 'label': 'Cleared', 'tone': 'advance'},
          {'url': 'candidate_screening_hold', 'target': STATUS.SCREENING_HOLD, 'label': 'Hold', 'tone': 'hold'},
          {'url': 'candidate_reject', 'target': STATUS.REJECTED, 'label': 'Reject', 'tone': 'reject'},
      ]},
     {'key': 'round2', 'status': STATUS.INTERVIEW, 'label': 'Round 2', 'short_label': 'Round 2',
+     'schedule_label': 'Round 2 Schedule', 'decision_label': 'Round 2',
      'comm_channel': CommunicationLog.Channel.INTERVIEW, 'interview_rounds': ROUND2_TYPES, 'actions': [
-         {'url': 'candidate_final_selection', 'target': STATUS.FINAL_SELECTION, 'label': 'Move to Final Selection', 'tone': 'advance'},
+         {'url': 'candidate_final_selection', 'target': STATUS.FINAL_SELECTION, 'label': 'Cleared', 'tone': 'advance'},
          {'url': 'candidate_screening_hold', 'target': STATUS.SCREENING_HOLD, 'label': 'Hold', 'tone': 'hold'},
          {'url': 'candidate_reject', 'target': STATUS.REJECTED, 'label': 'Reject', 'tone': 'reject'},
      ]},
@@ -644,10 +653,23 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
         # of its own round_type(s).
         for stage in hiring_stages:
             rounds = stage['interview_rounds']
+            if not rounds:
+                continue
+            relevant = [i for i in ctx['interviews'] if i.round_type in rounds]
             stage['open_interview'] = next(
-                (i for i in ctx['interviews'] if i.round_type in rounds
-                 and i.status in Interview.OPEN_STATUSES and i.result == Interview.Result.PENDING),
-                None) if rounds else None
+                (i for i in relevant if i.status in Interview.OPEN_STATUSES
+                 and i.result == Interview.Result.PENDING), None)
+            # Marked "Done" (see InterviewMarkDoneView) but not yet decided -
+            # this is what flips the card from Schedule to Decision mode.
+            stage['done_interview'] = next(
+                (i for i in relevant if i.status == Interview.Status.COMPLETED
+                 and i.result == Interview.Result.PENDING), None)
+            # A cancelled interview prompts Reject/Hold - but only while
+            # nothing newer has been scheduled since (the latest row by id).
+            latest = max(relevant, key=lambda i: i.pk, default=None)
+            stage['cancelled_interview'] = (
+                latest if latest and latest.status == Interview.Status.CANCELLED else None)
+            stage['round_phase'] = 'decision' if stage['done_interview'] else 'schedule'
         ctx['hiring_stages'] = hiring_stages
         ctx['active_stage_index'] = active_stage_index
 
@@ -863,12 +885,48 @@ class CandidateStatusActionView(GroupRequiredMixin, View):
             messages.error(request, 'A reason is required.')
             return redirect(request.POST.get('next') or reverse('candidate_timeline', args=[pk]))
 
+        self._settle_round_interview(candidate)
+
         if self.target_status == STATUS.BLACKLISTED:
             services.blacklist_candidate(candidate, reason, user=request.user, performed_by=performed_by)
         else:
             services.change_status(candidate, self.target_status, user=request.user,
                                    remarks=reason or None, performed_by=performed_by)
         messages.success(request, f'{candidate.full_name} moved to "{candidate.status_label}".')
+        next_url = request.POST.get('next')
+        return redirect(next_url or reverse('candidate_timeline', args=[pk]))
+
+    def _settle_round_interview(self, candidate):
+        """The Round 1/Round 2 stage card's Cleared/Hold/Reject/Blacklist
+        decides the candidate, but the interview that got them there was
+        marked merely "Done" (completed, no result yet - see
+        interviews.views.InterviewMarkDoneView) rather than decided in the
+        same step. Settle it to match now, so it doesn't sit "Pending"
+        forever. Hold doesn't decide anything, so it's left alone."""
+        round_types = ROUND_INTERVIEW_TYPES.get(candidate.status)
+        if not round_types or self.target_status == STATUS.SCREENING_HOLD:
+            return
+        interview = candidate.interviews.filter(
+            round_type__in=round_types, status=Interview.Status.COMPLETED,
+            result=Interview.Result.PENDING).order_by('-scheduled_date').first()
+        if not interview:
+            return
+        interview.result = Interview.Result.PASS_ if self.target_status in ADVANCE_STATUSES else Interview.Result.FAIL
+        interview.save(update_fields=['result'])
+
+
+class CandidateMoveToFutureView(GroupRequiredMixin, View):
+    """Re-tag a held candidate (any stage) as a Future Prospect - see
+    services.move_to_future_prospects. Offered alongside the normal
+    resume-the-pipeline action, not instead of it."""
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
+
+    def post(self, request, pk):
+        candidate = get_object_or_404(Candidate, pk=pk)
+        reason = request.POST.get('reason', '').strip()
+        services.move_to_future_prospects(
+            candidate, user=request.user, remarks=reason or None, performed_by=_performed_by(request))
+        messages.success(request, f'{candidate.full_name} moved to Future Prospects.')
         next_url = request.POST.get('next')
         return redirect(next_url or reverse('candidate_timeline', args=[pk]))
 

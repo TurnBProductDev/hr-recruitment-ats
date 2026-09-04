@@ -411,7 +411,10 @@ html { scroll-behavior: smooth; }
 
       {% else %}
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-1">
-          <div class="section-eyebrow mb-0"><i class="bi bi-arrow-right-circle-fill"></i> {{ stage.label }}</div>
+          <div class="section-eyebrow mb-0">
+            <i class="bi bi-arrow-right-circle-fill"></i>
+            {% if stage.interview_rounds and stage.round_phase == 'schedule' %}{{ stage.schedule_label }}{% else %}{{ stage.label }}{% endif %}
+          </div>
           {% if is_on_hold %}<span class="hold-banner"><i class="bi bi-pause-circle-fill"></i> On Hold</span>{% endif %}
         </div>
         {% if stage.entered %}
@@ -421,22 +424,47 @@ html { scroll-behavior: smooth; }
         </div>
         {% endif %}
 
-        {% if stage.interview_rounds %}
+        {% if stage.interview_rounds and stage.round_phase == 'schedule' %}
         <div class="stage-subsection">
           <div class="stage-subsection-title">Interview</div>
+          {% if stage.cancelled_interview %}
+          <div class="alert alert-warning py-2 px-3 mb-2">
+            <div class="pd-body mb-2">Interview cancelled / candidate did not turn up.</div>
+            <form method="post" class="js-stage-form">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <input type="hidden" name="performed_by" value="{{ user.get_full_name|default:user.get_username }}">
+              <textarea name="reason" class="form-control form-control-sm mb-2 js-stage-reason" rows="2" placeholder="Remarks / reason…"></textarea>
+              <div class="stage-action-row">
+                <button type="submit" formaction="{% url 'candidate_reject' candidate.pk %}" class="stage-action-btn stage-tone-reject">Reject</button>
+                <button type="submit" formaction="{% url 'candidate_screening_hold' candidate.pk %}" class="stage-action-btn stage-tone-hold">Hold</button>
+              </div>
+            </form>
+          </div>
+          {% endif %}
           <div class="pd-body mb-2">
             {% if stage.open_interview %}
             <span class="text-muted">Scheduled:</span> <strong>{{ stage.open_interview.scheduled_date|date:"d M Y, H:i" }}</strong>
-            {% else %}
+            {% elif not stage.cancelled_interview %}
             <span class="text-muted fst-italic">Interview schedule pending</span>
             {% endif %}
           </div>
           {% if stage.open_interview %}
-          <button type="button" class="btn btn-sm btn-outline-app" title="Change the date, time or interviewer"
-                  data-bs-toggle="modal" data-bs-target="#interviewModal"
-                  data-load-url="{% url 'interview_reschedule' stage.open_interview.pk %}" data-modal-title="Reschedule Interview">
-            <i class="bi bi-calendar-event"></i> Reschedule Interview
-          </button>
+          <div class="d-flex flex-wrap gap-2">
+            <form method="post" action="{% url 'interview_mark_done' stage.open_interview.pk %}">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-fill-app"><i class="bi bi-check2-circle"></i> Done</button>
+            </form>
+            <button type="button" class="btn btn-sm btn-outline-app" title="Change the date, time or interviewer"
+                    data-bs-toggle="modal" data-bs-target="#interviewModal"
+                    data-load-url="{% url 'interview_reschedule' stage.open_interview.pk %}" data-modal-title="Reschedule Interview">
+              <i class="bi bi-calendar-event"></i> Reschedule
+            </button>
+            <form method="post" action="{% url 'interview_cancel' stage.open_interview.pk %}">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-outline-danger">Cancelled</button>
+            </form>
+          </div>
           {% else %}
           <button type="button" class="btn btn-sm btn-outline-app"
                   data-bs-toggle="modal" data-bs-target="#interviewModal"
@@ -447,6 +475,7 @@ html { scroll-behavior: smooth; }
         </div>
         {% endif %}
 
+        {% if not stage.interview_rounds or stage.round_phase == 'decision' %}
         {% if stage.comm_channel %}
         <div class="stage-subsection">
           <div class="stage-subsection-title">{% if stage.comm_channel == 'PHONE' %}Phone{% else %}Interview{% endif %} Communication Log</div>
@@ -482,9 +511,13 @@ html { scroll-behavior: smooth; }
           {% endwith %}
         </div>
         {% endif %}
+        {% endif %}
 
         <div class="stage-subsection">
-          <div class="stage-subsection-title">Update Status</div>
+          <div class="stage-subsection-title">Update {{ stage.label }} Status</div>
+          {% if stage.interview_rounds and stage.round_phase == 'schedule' %}
+          <div class="pd-meta text-muted mb-2">Cleared/Blacklist need the interview marked Done first - Hold and Reject are always available.</div>
+          {% endif %}
           <form method="post" class="js-stage-form">
             {% csrf_token %}
             <input type="hidden" name="next" value="{{ request.get_full_path }}">
@@ -492,11 +525,13 @@ html { scroll-behavior: smooth; }
             <textarea name="reason" class="form-control form-control-sm mb-2 js-stage-reason" rows="2" placeholder="Remarks / reason…"></textarea>
             <div class="stage-action-row">
               {% for action in stage.actions %}
+              {% if action.tone == 'advance' and stage.interview_rounds and stage.round_phase == 'schedule' %}{% else %}
               <button type="submit" formaction="{% url action.url candidate.pk %}"
                       class="stage-action-btn stage-tone-{{ action.tone }}"
                       {% if action.require_reason %}data-require-reason="1" disabled{% endif %}>
                 {{ action.label }}
               </button>
+              {% endif %}
               {% endfor %}
             </div>
           </form>
@@ -508,6 +543,23 @@ html { scroll-behavior: smooth; }
     <div class="card app-card p-4">
       <div class="section-eyebrow">Final Status</div>
       <div class="text-center" style="color:{{ final_status.color }}; font-size:1.05rem; font-weight:700;">{{ final_status.label }}</div>
+      {% if is_on_hold %}
+      <div class="stage-subsection">
+        <form method="post" class="js-stage-form">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ request.get_full_path }}">
+          <input type="hidden" name="performed_by" value="{{ user.get_full_name|default:user.get_username }}">
+          <textarea name="reason" class="form-control form-control-sm mb-2 js-stage-reason" rows="2" placeholder="Remarks / reason…"></textarea>
+          <div class="stage-action-row justify-content-center">
+            <button type="submit" formaction="{% url candidate.resume_action.url_name candidate.pk %}" class="stage-action-btn stage-tone-advance">{{ candidate.resume_action.label }}</button>
+            <button type="submit" formaction="{% url 'candidate_reject' candidate.pk %}" class="stage-action-btn stage-tone-reject">Reject</button>
+            {% if candidate.hold_from_status != 'OPEN' %}
+            <button type="submit" formaction="{% url 'candidate_move_to_future' candidate.pk %}" class="stage-action-btn stage-tone-hold">Move to Future</button>
+            {% endif %}
+          </div>
+        </form>
+      </div>
+      {% endif %}
     </div>
   </div>
 

@@ -191,6 +191,34 @@ class InterviewRescheduleView(GroupRequiredMixin, UpdateView):
         return reverse('candidate_timeline', args=[self.object.candidate_id])
 
 
+class InterviewMarkDoneView(GroupRequiredMixin, View):
+    """Marks an interview attended without committing to a result yet - the
+    Hiring block's Round 1/Round 2 Schedule card offers this separately from
+    the pass/fail decision, which the candidate's next stage card (Cleared/
+    Hold/Reject/Blacklist) makes instead - see CandidateStatusActionView,
+    which settles this interview's result to match once that decision lands."""
+    allowed_groups = (HR_ADMIN, RECRUITER)
+
+    def post(self, request, pk):
+        interview = get_object_or_404(Interview, pk=pk)
+        interview.status = Interview.Status.COMPLETED
+        interview.save(update_fields=['status'])
+        return redirect('candidate_timeline', pk=interview.candidate_id)
+
+
+class InterviewCancelView(GroupRequiredMixin, View):
+    """Marks an interview cancelled/no-show. Not a result (pass/fail) - the
+    Hiring block prompts for Reject or Hold once an interview is cancelled,
+    rather than silently leaving the candidate stuck at this stage."""
+    allowed_groups = (HR_ADMIN, RECRUITER)
+
+    def post(self, request, pk):
+        interview = get_object_or_404(Interview, pk=pk)
+        interview.status = Interview.Status.CANCELLED
+        interview.save(update_fields=['status'])
+        return redirect('candidate_timeline', pk=interview.candidate_id)
+
+
 class InterviewResultView(GroupRequiredMixin, UpdateView):
     model = Interview
     form_class = InterviewResultForm

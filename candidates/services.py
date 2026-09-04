@@ -73,6 +73,26 @@ def change_status(candidate, new_status, user=None, remarks=None, performed_by=N
     return candidate
 
 
+def move_to_future_prospects(candidate, user=None, remarks=None, performed_by=None):
+    """Re-tag a hold taken at any stage as a screening-stage hold, so it's
+    tracked on the Future Prospects page and counted as Rejected (see
+    dashboard.views.INITIAL_HOLD / candidates.flows.screened_out) the exact
+    same way a hold taken before screening already is - without inventing a
+    second, parallel "not pursuing this candidate" mechanism. Status itself
+    doesn't change (still Hold); only which stage it's attributed to does.
+    A no-op if the candidate isn't currently on hold."""
+    if candidate.status != STATUS.SCREENING_HOLD:
+        return candidate
+    candidate.hold_from_status = STATUS.OPEN
+    candidate.save(update_fields=['hold_from_status', 'updated_at'])
+    CandidateStatusHistory.objects.create(
+        candidate=candidate, old_status=STATUS.SCREENING_HOLD, new_status=STATUS.SCREENING_HOLD,
+        changed_by=user, performed_by=performed_by,
+        remarks=remarks or 'Moved to Future Prospects.',
+    )
+    return candidate
+
+
 def hold_source_from_history(candidate):
     """Which stage the candidate's current hold was taken from, read back from
     history. Used when a status is restored rather than changed (undo)."""

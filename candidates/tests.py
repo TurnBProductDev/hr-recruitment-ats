@@ -11,7 +11,9 @@ from django.contrib.auth.models import Group
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
+from interviews.models import Interview
 from jobs.models import Job
 
 from . import bulk, cv_parser, services
@@ -829,3 +831,112 @@ class FutureProspectsPageTests(TestCase):
         self.assertEqual(c.status, Candidate.Status.SHORTLISTED)
         response = self.client.get(reverse('candidate_future_prospects'))
         self.assertNotIn(c, response.context['candidates'])
+
+
+class MoveToFutureProspectsTests(TestCase):
+    """A hold taken at any stage can be moved to Future Prospects, alongside
+    (not instead of) the normal resume-the-pipeline action - see
+    services.move_to_future_prospects."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('hr5', 'hr5@example.com', 'pw')
+        self.user.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.client.force_login(self.user)
+        self.candidate = Candidate.objects.create(full_name='Amal Raj', email='amal@example.com')
+        services.record_creation(self.candidate)
+        services.change_status(self.candidate, Candidate.Status.ROUND1)
+        services.change_status(self.candidate, Candidate.Status.SCREENING_HOLD)
+
+    def test_move_to_future_retags_the_hold_and_lists_on_future_prospects(self):
+        self.assertEqual(self.candidate.hold_from_status, Candidate.Status.ROUND1)
+        response = self.client.get(reverse('candidate_future_prospects'))
+        self.assertNotIn(self.candidate, response.context['candidates'])
+
+        self.client.post(reverse('candidate_move_to_future', args=[self.candidate.pk]))
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.status, Candidate.Status.SCREENING_HOLD)  # unchanged
+        self.assertEqual(self.candidate.hold_from_status, Candidate.Status.OPEN)  # re-tagged
+
+        response = self.client.get(reverse('candidate_future_prospects'))
+        self.assertIn(self.candidate, response.context['candidates'])
+
+    def test_move_to_future_counts_as_rejected_afterwards(self):
+        from dashboard.views import _summary_counts_qs
+        counts = _summary_counts_qs(Candidate.objects.filter(pk=self.candidate.pk))
+        self.assertEqual(counts['shortlisted'], 1)  # later-stage hold = Active Pool today
+
+        self.client.post(reverse('candidate_move_to_future', args=[self.candidate.pk]))
+        counts = _summary_counts_qs(Candidate.objects.filter(pk=self.candidate.pk))
+        self.assertEqual(counts['rejected'], 1)
+        self.assertEqual(counts['shortlisted'], 0)
+
+    def test_a_candidate_not_on_hold_is_unaffected(self):
+        services.change_status(self.candidate, Candidate.Status.ROUND1)  # takes them off hold
+        self.client.post(reverse('candidate_move_to_future', args=[self.candidate.pk]))
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.status, Candidate.Status.ROUND1)
+
+    def test_final_status_box_offers_resume_reject_and_move_to_future(self):
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertContains(response, reverse('candidate_interview_stage', args=[self.candidate.pk]))
+        self.assertContains(response, reverse('candidate_reject', args=[self.candidate.pk]))
+        self.assertContains(response, reverse('candidate_move_to_future', args=[self.candidate.pk]))
+
+    def test_final_status_box_hides_move_to_future_once_already_there(self):
+        self.client.post(reverse('candidate_move_to_future', args=[self.candidate.pk]))
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertNotContains(response, reverse('candidate_move_to_future', args=[self.candidate.pk]))
+
+
+class HiringBlockStageLabelTests(TestCase):
+    """The Hiring block's stage headings and decision-button text."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('hr6', 'hr6@example.com', 'pw')
+        self.user.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.client.force_login(self.user)
+
+    def _candidate(self, status=Candidate.Status.OPEN):
+        c = Candidate.objects.create(full_name='Devi Menon', email='devi@example.com')
+        services.record_creation(c)
+        if status != Candidate.Status.OPEN:
+            services.change_status(c, status)
+        return c
+
+    def test_cv_screening_stage(self):
+        c = self._candidate(Candidate.Status.OPEN)
+        response = self.client.get(reverse('candidate_timeline', args=[c.pk]))
+        self.assertContains(response, 'CV Screening')
+        self.assertContains(response, 'Update CV Screening Status')
+        self.assertContains(response, 'Qualify')
+
+    def test_tele_screening_stage(self):
+        c = self._candidate(Candidate.Status.SHORTLISTED)
+        response = self.client.get(reverse('candidate_timeline', args=[c.pk]))
+        self.assertContains(response, 'Tele Screening')
+        self.assertContains(response, 'Update Tele Screening Status')
+        self.assertContains(response, 'Shortlist')
+
+    def test_round1_schedule_phase_shows_schedule_heading(self):
+        c = self._candidate(Candidate.Status.ROUND1)
+        response = self.client.get(reverse('candidate_timeline', args=[c.pk]))
+        self.assertContains(response, 'Round 1 Schedule')
+        # Hold/Reject stay available even before the interview is Done -
+        # only Cleared (which needs a completed interview) is held back.
+        self.assertContains(response, 'Update Round 1 Status')
+        self.assertContains(response, reverse('candidate_screening_hold', args=[c.pk]))
+        self.assertContains(response, reverse('candidate_reject', args=[c.pk]))
+        self.assertNotContains(response, reverse('candidate_interview_stage', args=[c.pk]))
+
+    def test_round1_decision_options_have_no_blacklist(self):
+        c = self._candidate(Candidate.Status.ROUND1)
+        Interview.objects.create(
+            candidate=c, round_type=Interview.RoundType.ROUND1,
+            status=Interview.Status.COMPLETED,
+            scheduled_date=timezone.now())
+        response = self.client.get(reverse('candidate_timeline', args=[c.pk]))
+        self.assertContains(response, 'Update Round 1 Status')
+        self.assertContains(response, 'Cleared')
+        # No Blacklist action button at Round 1 (a JS comment on the page
+        # mentions the word generically, so check for the actual action URL).
+        self.assertNotContains(response, reverse('candidate_blacklist', args=[c.pk]))
