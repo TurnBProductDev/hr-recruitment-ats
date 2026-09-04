@@ -63,7 +63,7 @@ def change_status(candidate, new_status, user=None, remarks=None, performed_by=N
         return candidate
     candidate.status = new_status
     # Hold is available from every stage, so remember which one it was taken
-    # from - that is what names it ("Interview Hold"). Leaving hold clears it.
+    # from - that is what names it ("Round 2 Hold"). Leaving hold clears it.
     candidate.hold_from_status = old_status if new_status == STATUS.SCREENING_HOLD else ''
     candidate.save(update_fields=['status', 'hold_from_status', 'updated_at'])
     CandidateStatusHistory.objects.create(

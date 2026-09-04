@@ -77,9 +77,9 @@ class Candidate(models.Model):
 
     class Status(models.TextChoices):
         OPEN = 'OPEN', 'Open'
-        SHORTLISTED = 'SHORTLISTED', 'Shortlisted'
+        SHORTLISTED = 'SHORTLISTED', 'Qualified'
         ROUND1 = 'ROUND1', 'Round 1'
-        INTERVIEW = 'INTERVIEW', 'Interview'
+        INTERVIEW = 'INTERVIEW', 'Round 2'
         FINAL_SELECTION = 'FINAL_SELECTION', 'Final Selection'
         HIRED = 'HIRED', 'Hired'
         REJECTED = 'REJECTED', 'Rejected'
@@ -164,7 +164,7 @@ class Candidate(models.Model):
     @property
     def status_label(self):
         """What the status is called on screen. A hold is named after the stage
-        it was taken at, so the badge reads "Interview Hold", not just "Hold"."""
+        it was taken at, so the badge reads "Round 2 Hold", not just "Hold"."""
         if self.status == self.Status.SCREENING_HOLD:
             return hold_label(self.hold_from_status)
         return self.get_status_display()
@@ -172,8 +172,8 @@ class Candidate(models.Model):
     @property
     def resume_action(self):
         """The move offered to a held candidate: the stage after the one they
-        were held at, so a Round 1 Hold is taken off hold into Interview.
-        Falls back to Shortlisted when the stage was never recorded."""
+        were held at, so a Round 1 Hold is taken off hold into Round 2.
+        Falls back to Qualified when the stage was never recorded."""
         url_name, stage = HOLD_RESUME_ACTIONS.get(
             self.hold_from_status, HOLD_RESUME_ACTIONS[self.Status.OPEN])
         return {'url_name': url_name, 'stage': stage, 'label': f'Move to {stage}'}
@@ -221,11 +221,11 @@ class Candidate(models.Model):
 HOLD_STAGE_NAMES = {Candidate.Status.OPEN: 'Screening'}
 
 # The pipeline stages a hold can be taken at, and where lifting it goes: back
-# into the pipeline at the next stage, so a Round 1 Hold resumes at Interview.
+# into the pipeline at the next stage, so a Round 1 Hold resumes at Round 2.
 HOLD_RESUME_ACTIONS = {
-    Candidate.Status.OPEN: ('candidate_shortlist', 'Shortlisted'),
+    Candidate.Status.OPEN: ('candidate_shortlist', 'Qualified'),
     Candidate.Status.SHORTLISTED: ('candidate_round1', 'Round 1'),
-    Candidate.Status.ROUND1: ('candidate_interview_stage', 'Interview'),
+    Candidate.Status.ROUND1: ('candidate_interview_stage', 'Round 2'),
     Candidate.Status.INTERVIEW: ('candidate_final_selection', 'Final Selection'),
     Candidate.Status.FINAL_SELECTION: ('candidate_hire', 'Hired'),
 }

@@ -78,6 +78,11 @@ class JobUpdateView(GroupRequiredMixin, UpdateView):
     allowed_groups = (HR_ADMIN,)
     success_url = reverse_lazy('job_manage_list')
 
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx['breadcrumb_current'] = f'Edit {self.object.title}'
+        return ctx
+
     def form_valid(self, form):
         messages.success(self.request, f'Vacancy "{form.instance.title}" updated.')
         return super().form_valid(form)

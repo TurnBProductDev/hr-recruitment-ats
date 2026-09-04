@@ -57,12 +57,12 @@ ROUND2_TYPES = (Interview.RoundType.TECHNICAL, Interview.RoundType.MANAGERIAL,
 HIRING_STAGES = [
     {'key': 'open', 'status': STATUS.OPEN, 'label': 'Open (Resume Received)', 'short_label': 'Open',
      'comm_channel': None, 'interview_rounds': (), 'actions': [
-         {'url': 'candidate_shortlist', 'target': STATUS.SHORTLISTED, 'label': 'Shortlist', 'tone': 'advance'},
+         {'url': 'candidate_shortlist', 'target': STATUS.SHORTLISTED, 'label': 'Qualify', 'tone': 'advance'},
          {'url': 'candidate_screening_hold', 'target': STATUS.SCREENING_HOLD, 'label': 'Hold', 'tone': 'hold'},
          {'url': 'candidate_reject', 'target': STATUS.REJECTED, 'label': 'Reject', 'tone': 'reject'},
          {'url': 'candidate_blacklist', 'target': STATUS.BLACKLISTED, 'label': 'Blacklist', 'tone': 'blacklist', 'require_reason': True},
      ]},
-    {'key': 'shortlisted', 'status': STATUS.SHORTLISTED, 'label': 'Shortlisted', 'short_label': 'Shortlisted',
+    {'key': 'shortlisted', 'status': STATUS.SHORTLISTED, 'label': 'Qualified', 'short_label': 'Qualified',
      'comm_channel': CommunicationLog.Channel.PHONE, 'interview_rounds': (), 'actions': [
          {'url': 'candidate_round1', 'target': STATUS.ROUND1, 'label': 'Move to Round 1', 'tone': 'advance'},
          {'url': 'candidate_screening_hold', 'target': STATUS.SCREENING_HOLD, 'label': 'Hold', 'tone': 'hold'},
@@ -159,9 +159,9 @@ def _build_hiring_stages(candidate, history):
 
 REPOSITORY_TABS = [
     ('open', 'Open Applications', STATUS.OPEN),
-    ('shortlisted', 'Shortlisted', STATUS.SHORTLISTED),
+    ('shortlisted', 'Qualified', STATUS.SHORTLISTED),
     ('round1', 'Round 1', STATUS.ROUND1),
-    ('interview', 'Interview', STATUS.INTERVIEW),
+    ('interview', 'Round 2', STATUS.INTERVIEW),
     ('final_selection', 'Final Selection', STATUS.FINAL_SELECTION),
     ('hired', 'Hired', STATUS.HIRED),
     ('rejected', 'Rejected', STATUS.REJECTED),
@@ -220,7 +220,8 @@ def _repository_back_url(candidate, request=None):
 # Readable titles for the dashboard funnel drill-downs (?flow=…)
 FLOW_TITLES = {
     'all': 'All Candidates', 'open': 'Screening Pending', 'unfit': 'Unfit Resumes',
-    'ever_shortlisted': 'Screened & Shortlisted', 'call_pending': 'Yet to Call',
+    'screened_out': 'Rejected at CV Screening',
+    'ever_shortlisted': 'Screened & Qualified', 'call_pending': 'Yet to Call',
     'shortlisted_after_call': 'Shortlisted After Call', 'unable_to_connect': 'Unable to Connect',
     'call_decision_pending': 'Call — Decision Pending',
     'rejected_after_call': 'Rejected After Call',
@@ -561,6 +562,7 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
         candidate = self.object
         ctx['back_url'] = _repository_back_url(candidate, self.request)
         ctx['back_label'] = 'Back to Candidates'
+        ctx['breadcrumb_current'] = candidate.full_name
         ctx['history'] = candidate.history.select_related('changed_by').all()
         ctx['notes'] = candidate.notes.select_related('author').all()
         ctx['communication_logs'] = candidate.communication_logs.select_related('logged_by').all()
@@ -697,6 +699,7 @@ class CandidateUpdateView(GroupRequiredMixin, UpdateView):
         ctx = super().get_context_data(**kwargs)
         ctx['back_url'] = _repository_back_url(self.object, self.request)
         ctx['back_label'] = 'Back to Candidates'
+        ctx['breadcrumb_current'] = f'Edit {self.object.full_name}'
         return ctx
 
     def form_valid(self, form):
@@ -1232,6 +1235,7 @@ class ScoreCandidatesProgressView(GroupRequiredMixin, View):
             'job': job, 'counts': counts, 'candidates': candidates,
             'back_url': reverse('candidate_score'),
             'back_label': 'Back to Score Candidates',
+            'breadcrumb_current': job.title,
         })
 
 

@@ -6,10 +6,13 @@ Run against sqlite so the live Azure DB is never touched:
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
+from candidates import services
 from candidates.models import Candidate
 from jobs.models import Job
 
+from . import daily_view
 from .views import _summary_counts_qs
 
 
@@ -127,17 +130,54 @@ class OverviewFunnelTests(TestCase):
         content = self._get().content.decode()
         self.assertLess(content.index('>Openings<'), content.index('>Total Candidates<'))
 
-    def test_initial_hold_appears_as_future_prospects_not_a_hold_segment(self):
+    def test_initial_hold_is_folded_into_the_single_rejected_segment(self):
         Candidate.objects.create(
             full_name='Held Early', email='held-early@example.com', job=self.job,
             status=Candidate.Status.SCREENING_HOLD, hold_from_status=Candidate.Status.OPEN)
         response = self._get()
         cv_screening = response.context['funnel'][0]
-        drop_labels = [d[0] for d in cv_screening['drops']]
-        self.assertIn('Future Prospects', drop_labels)
+        # One merged "Rejected" drop, not a separate Future Prospects card/segment.
+        self.assertEqual(len(cv_screening['drops']), 1)
+        label, count, flow, cat = cv_screening['drops'][0]
+        self.assertEqual((label, flow, cat), ('Rejected', 'screened_out', 'red'))
+        self.assertEqual(count, 1)
 
     def test_unable_to_connect_is_folded_into_yet_to_call(self):
         response = self._get()
         tele_screening = response.context['funnel'][1]
         drop_labels = [d[0] for d in tele_screening['drops']]
         self.assertNotIn('Unable to Connect', drop_labels)
+
+
+class DailyViewScreenedColumnTests(TestCase):
+    """A screening-stage hold counts as a Daily View "Screened" action, same
+    as an outright rejection (see dashboard.daily_view._rejected_or_held_at_screening_qs)."""
+
+    def setUp(self):
+        self.job = Job.objects.create(title='Analyst')
+        self.today = timezone.localdate()
+
+    def _held_candidate(self, name):
+        c = Candidate.objects.create(full_name=name, email=f'{name}@example.com', job=self.job)
+        services.record_creation(c)
+        services.change_status(c, Candidate.Status.SCREENING_HOLD)
+        return c
+
+    def test_screening_hold_counts_in_the_screened_total(self):
+        self._held_candidate('Held Early')
+        [screened] = [c for c in daily_view.compute((self.today, self.today), None) if c['key'] == 'screened']
+        self.assertEqual(screened['value'], 1)
+
+    def test_screening_hold_is_labelled_rejected_in_the_breakdown(self):
+        self._held_candidate('Held Early')
+        [screened] = [c for c in daily_view.compute((self.today, self.today), None) if c['key'] == 'screened']
+        breakdown = {b['label']: b['value'] for b in screened['breakdown']}
+        self.assertEqual(breakdown.get('Rejected at Screening'), 1)
+        self.assertNotIn('Hold', breakdown)
+
+    def test_events_drilldown_includes_the_held_candidate(self):
+        c = self._held_candidate('Held Early')
+        rows = daily_view.events('screened', (self.today, self.today), None)
+        matches = [r for r in rows if r['candidate'].pk == c.pk]
+        self.assertEqual(len(matches), 1)
+        self.assertEqual(matches[0]['action'], 'Rejected at Screening')

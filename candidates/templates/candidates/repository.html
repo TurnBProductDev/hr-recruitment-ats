@@ -203,7 +203,7 @@
         <button type="button" class="btn btn-sm btn-outline-secondary" id="bulkClear">Clear</button>
         {% if tab in 'open,rejected' %}
         <button type="button" class="btn btn-sm btn-fill-app bulk-act" id="bulkShortlist"
-                data-action="{% url 'candidate_bulk_shortlist' %}" data-title="Shortlist the selected candidates">Shortlist</button>
+                data-action="{% url 'candidate_bulk_shortlist' %}" data-title="Qualify the selected candidates">Qualify</button>
         {% endif %}
         {% if tab in 'open,shortlisted,round1,interview,final_selection' %}
         <button type="button" class="btn btn-sm btn-hold bulk-act" id="bulkHold"
@@ -275,11 +275,11 @@
             <td class="text-nowrap text-end">
               <a href="{% url 'candidate_timeline' c.id %}" class="btn btn-sm btn-outline-app">View</a>
               {% if tab == 'open' %}
-                <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url 'candidate_shortlist' c.id %}" data-title="Shortlist {{ c.full_name }}">Shortlist</button>
+                <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url 'candidate_shortlist' c.id %}" data-title="Qualify {{ c.full_name }}">Qualify</button>
               {% elif tab == 'shortlisted' %}
                 <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url 'candidate_round1' c.id %}" data-title="Move {{ c.full_name }} to Round 1">Move to Round 1</button>
               {% elif tab == 'round1' %}
-                <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url 'candidate_interview_stage' c.id %}" data-title="Move {{ c.full_name }} to Interview">Move to Interview</button>
+                <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url 'candidate_interview_stage' c.id %}" data-title="Move {{ c.full_name }} to Round 2">Move to Round 2</button>
               {% elif tab == 'interview' %}
                 <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url 'candidate_final_selection' c.id %}" data-title="Move {{ c.full_name }} to Final Selection">Final Selection</button>
               {% elif tab == 'final_selection' %}
@@ -289,7 +289,7 @@
                 {# Off hold resumes the pipeline at the stage after the one they were held at. #}
                 <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url c.resume_action.url_name c.id %}" data-title="Move {{ c.full_name }} to {{ c.resume_action.stage }}" data-msg="Taking {{ c.full_name }} off hold — this moves them on to {{ c.resume_action.stage }}.">{{ c.resume_action.label }}</button>
               {% elif tab == 'rejected' %}
-                <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url 'candidate_shortlist' c.id %}" data-title="Move {{ c.full_name }} to Shortlisted" data-msg="Decision changed? This moves the candidate into the Shortlisted pipeline.">Move to Shortlisted</button>
+                <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url 'candidate_shortlist' c.id %}" data-title="Move {{ c.full_name }} to Qualified" data-msg="Decision changed? This moves the candidate into the Qualified pipeline.">Move to Qualified</button>
               {% endif %}
               {% if tab in 'open,shortlisted,round1,interview,final_selection' or is_hr_admin %}
               <div class="dropdown d-inline-block">

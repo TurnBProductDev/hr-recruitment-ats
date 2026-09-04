@@ -248,9 +248,10 @@ class BackButtonTests(TestCase):
 
     def test_timeline_back_points_at_the_candidates_tab(self):
         response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
-        self.assertEqual(response.context['back_url'],
-                         f"{reverse('candidate_repository')}?tab=shortlisted")
-        self.assertContains(response, 'Back to Candidates')
+        expected = f"{reverse('candidate_repository')}?tab=shortlisted"
+        self.assertEqual(response.context['back_url'], expected)
+        # Rendered as a breadcrumb crumb now, not a "Back to Candidates" button.
+        self.assertContains(response, f'<a href="{expected}">Candidates</a>')
         # A multi-line {# #} comment renders as visible text - never ship one.
         self.assertNotContains(response, '{#')
 
@@ -266,8 +267,12 @@ class BackButtonTests(TestCase):
         self.assertEqual(response.context['back_url'],
                          f"{reverse('candidate_repository')}?tab=hired")
 
-    def test_pages_without_an_obvious_parent_keep_the_history_button(self):
-        response = self.client.get(reverse('candidate_repository'))
+    def test_home_keeps_the_history_button(self):
+        """Every other page now gets a breadcrumb trail (see
+        dashboard.templatetags.dashboard_extras.BREADCRUMB_REGISTRY) - Home
+        itself is the one page deliberately excluded, since it's already the
+        root of the trail."""
+        response = self.client.get(reverse('hr_dashboard'))
         self.assertIsNone(response.context.get('back_url'))
         self.assertContains(response, 'goBack()')
 
@@ -575,7 +580,7 @@ class BulkUploadViewTests(TestCase):
 
 class HoldNamingTests(TestCase):
     """Hold can be taken at any stage, and is named after the stage it was
-    taken at: held after an interview reads "Interview Hold"."""
+    taken at: held after Round 2 reads "Round 2 Hold"."""
 
     def setUp(self):
         self.user = get_user_model().objects.create_user('hr', 'hr@example.com', 'pw')
@@ -589,12 +594,12 @@ class HoldNamingTests(TestCase):
         return self.client.post(reverse('candidate_set_status', args=[self.candidate.pk]),
                                 {'status': Candidate.Status.SCREENING_HOLD})
 
-    def test_hold_after_an_interview_is_called_interview_hold(self):
+    def test_hold_after_round_2_is_called_round_2_hold(self):
         services.change_status(self.candidate, Candidate.Status.INTERVIEW)
         self._hold()
         self.candidate.refresh_from_db()
         self.assertEqual(self.candidate.hold_from_status, Candidate.Status.INTERVIEW)
-        self.assertEqual(self.candidate.status_label, 'Interview Hold')
+        self.assertEqual(self.candidate.status_label, 'Round 2 Hold')
 
     def test_hold_at_round1_is_called_round_1_hold(self):
         services.change_status(self.candidate, Candidate.Status.ROUND1)
@@ -618,14 +623,14 @@ class HoldNamingTests(TestCase):
         services.change_status(self.candidate, Candidate.Status.SHORTLISTED)
         self.candidate.refresh_from_db()
         self.assertEqual(self.candidate.hold_from_status, '')
-        self.assertEqual(self.candidate.status_label, 'Shortlisted')
+        self.assertEqual(self.candidate.status_label, 'Qualified')
 
     def test_activity_history_names_the_hold(self):
         services.change_status(self.candidate, Candidate.Status.INTERVIEW)
         self._hold()
         response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
-        self.assertContains(response, 'Status: Interview → Interview Hold')
-        self.assertEqual(response.context['last_status_label'], 'Interview Hold')
+        self.assertContains(response, 'Status: Round 2 → Round 2 Hold')
+        self.assertEqual(response.context['last_status_label'], 'Round 2 Hold')
 
     def test_activity_history_names_the_hold_being_left_too(self):
         services.change_status(self.candidate, Candidate.Status.INTERVIEW)
@@ -633,7 +638,7 @@ class HoldNamingTests(TestCase):
         self.candidate.refresh_from_db()
         services.change_status(self.candidate, Candidate.Status.FINAL_SELECTION)
         response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
-        self.assertContains(response, 'Status: Interview Hold → Final Selection')
+        self.assertContains(response, 'Status: Round 2 Hold → Final Selection')
 
     def test_the_action_is_offered_as_hold(self):
         response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
@@ -645,7 +650,7 @@ class HoldNamingTests(TestCase):
         self._hold()
         response = self.client.get(f"{reverse('candidate_repository')}?tab=screening_hold")
         self.assertContains(response, '>Hold</a>')  # the tab itself
-        self.assertContains(response, 'badge-screening_hold">Interview Hold')
+        self.assertContains(response, 'badge-screening_hold">Round 2 Hold')
 
     def test_hold_is_offered_on_every_pipeline_tab(self):
         hold_url = reverse('candidate_screening_hold', args=[self.candidate.pk])
@@ -680,12 +685,12 @@ class HoldNamingTests(TestCase):
         self.client.post(reverse('candidate_revert', args=[self.candidate.pk]))
         self.candidate.refresh_from_db()
         self.assertEqual(self.candidate.status, Candidate.Status.SCREENING_HOLD)
-        self.assertEqual(self.candidate.status_label, 'Interview Hold')
+        self.assertEqual(self.candidate.status_label, 'Round 2 Hold')
 
 
 class HoldResumeActionTests(TestCase):
     """Taking a candidate off hold puts them back in the pipeline at the stage
-    after the one they were held at - a Round 1 Hold resumes at Interview."""
+    after the one they were held at - a Round 1 Hold resumes at Round 2."""
 
     def setUp(self):
         self.user = get_user_model().objects.create_user('hr', 'hr@example.com', 'pw')
@@ -703,9 +708,9 @@ class HoldResumeActionTests(TestCase):
 
     def test_the_offered_move_follows_the_stage_held_at(self):
         expected = {
-            Candidate.Status.OPEN: ('Move to Shortlisted', 'candidate_shortlist'),
+            Candidate.Status.OPEN: ('Move to Qualified', 'candidate_shortlist'),
             Candidate.Status.SHORTLISTED: ('Move to Round 1', 'candidate_round1'),
-            Candidate.Status.ROUND1: ('Move to Interview', 'candidate_interview_stage'),
+            Candidate.Status.ROUND1: ('Move to Round 2', 'candidate_interview_stage'),
             Candidate.Status.INTERVIEW: ('Move to Final Selection', 'candidate_final_selection'),
             Candidate.Status.FINAL_SELECTION: ('Move to Hired', 'candidate_hire'),
         }
@@ -715,17 +720,17 @@ class HoldResumeActionTests(TestCase):
                 self.assertEqual(self.candidate.resume_action['label'], label)
                 self.assertEqual(self.candidate.resume_action['url_name'], url_name)
 
-    def test_an_unrecorded_stage_falls_back_to_shortlisted(self):
+    def test_an_unrecorded_stage_falls_back_to_qualified(self):
         self.candidate.hold_from_status = ''
-        self.assertEqual(self.candidate.resume_action['label'], 'Move to Shortlisted')
+        self.assertEqual(self.candidate.resume_action['label'], 'Move to Qualified')
 
     def test_the_hold_tab_shows_the_matching_button(self):
         self._hold_at(Candidate.Status.ROUND1)
         response = self.client.get(f"{reverse('candidate_repository')}?tab={HOLD_TAB}")
-        self.assertContains(response, 'Move to Interview')
+        self.assertContains(response, 'Move to Round 2')
         self.assertContains(
             response, reverse('candidate_interview_stage', args=[self.candidate.pk]))
-        self.assertNotContains(response, 'Move to Shortlisted')
+        self.assertNotContains(response, 'Move to Qualified')
 
     def test_the_button_actually_resumes_the_pipeline(self):
         self._hold_at(Candidate.Status.ROUND1)

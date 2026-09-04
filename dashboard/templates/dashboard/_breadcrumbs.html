@@ -1,0 +1,21 @@
+{% if crumbs %}
+<nav aria-label="breadcrumb" class="app-breadcrumb mb-3">
+  <ol class="breadcrumb mb-0">
+    {% for c in crumbs %}
+      {% if c.url %}
+        <li class="breadcrumb-item"><a href="{{ c.url }}">{{ c.label }}</a></li>
+      {% else %}
+        <li class="breadcrumb-item active" aria-current="page">{{ c.label }}</li>
+      {% endif %}
+    {% endfor %}
+  </ol>
+</nav>
+{% elif back_url %}
+  <a href="{{ back_url }}" class="btn btn-sm btn-outline-app mb-3">
+    <i class="bi bi-arrow-left"></i> {{ back_label|default:"Back" }}
+  </a>
+{% else %}
+  <button type="button" id="backBtn" class="btn btn-sm btn-outline-app mb-3" onclick="goBack()">
+    <i class="bi bi-arrow-left"></i> Back
+  </button>
+{% endif %}

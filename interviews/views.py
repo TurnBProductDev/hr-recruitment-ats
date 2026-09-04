@@ -91,6 +91,8 @@ class InterviewScheduleView(GroupRequiredMixin, CreateView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx['candidate'] = self.candidate
+        ctx['back_url'] = reverse('candidate_timeline', args=[self.candidate.pk])
+        ctx['back_label'] = self.candidate.full_name
         return ctx
 
     def form_valid(self, form):
@@ -157,6 +159,8 @@ class InterviewRescheduleView(GroupRequiredMixin, UpdateView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx['candidate'] = self.object.candidate
+        ctx['back_url'] = reverse('candidate_timeline', args=[self.object.candidate_id])
+        ctx['back_label'] = self.object.candidate.full_name
         return ctx
 
     def form_valid(self, form):
@@ -202,6 +206,11 @@ class InterviewResultView(GroupRequiredMixin, UpdateView):
         Candidate.Status.INTERVIEW: Candidate.Status.FINAL_SELECTION,
         Candidate.Status.FINAL_SELECTION: Candidate.Status.HIRED,
     }
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx['breadcrumb_current'] = f'{self.object.candidate.full_name} — {self.object.get_round_type_display()}'
+        return ctx
 
     def form_valid(self, form):
         # Marking a result completes the interview and drives the candidate's

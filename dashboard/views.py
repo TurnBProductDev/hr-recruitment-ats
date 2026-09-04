@@ -113,7 +113,7 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
         requirement = jobs_scope.aggregate(s=Sum('openings'))['s'] or 0
 
         shortlisted = fc('ever_shortlisted')
-        unfit = fc('unfit')
+        screened_out = fc('screened_out')
         s_after_call = fc('shortlisted_after_call')
         # 'Unable to Connect' is folded into 'Yet to Call' below - call_pending's
         # flow filter already includes it (see flows.py) - rather than shown as
@@ -129,8 +129,9 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
         # On-Hold-status carve-outs, one per stage, keyed to the status the
         # candidate was held from - so nobody who gets put on Hold disappears
         # from the funnel, and nobody is double-counted against both their
-        # Hold chip and the "cleared" stage they'd already passed.
-        hold_before_shortlist = fc('hold_before_shortlist')
+        # Hold chip and the "cleared" stage they'd already passed. (The
+        # before-screening carve-out is folded into 'screened_out' above,
+        # not listed here - it's Rejected, not Hold, from this stage on.)
         hold_before_round1 = fc('hold_before_round1')
         hold_before_round2 = fc('hold_before_round2')
         hold_before_final = fc('hold_before_final')
@@ -147,9 +148,8 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
         # Candidates held before ever reaching screening don't get a card or
         # bar segment of their own any more - they're tracked on the Future
         # Prospects page instead (candidates.views.FutureProspectsListView) -
-        # and count as "screened out" here, same as an outright screening
-        # rejection.
-        screened_out = unfit + hold_before_shortlist
+        # and are folded into the single Rejected count/segment here, same as
+        # an outright screening rejection (see flows.screened_out).
         # Corner "total" = everyone who got a decision at that stage (cleared + rejected-there)
         ctx['funnel'] = [
             {'name': 'CV Screening',
@@ -159,8 +159,7 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
              # *decision* yet.
              'pending': None,
              'cleared': ('Qualified', shortlisted, shortlisted + screened_out, 'ever_shortlisted'),
-             'drops': [('Rejected', unfit, 'unfit', 'red'),
-                       ('Future Prospects', hold_before_shortlist, 'hold_before_shortlist', 'red')]},
+             'drops': [('Rejected', screened_out, 'screened_out', 'red')]},
             {'name': 'Tele Screening',
              'pending': ('Yet to Call', yet_call, 'call_pending', 'yellow'),
              'cleared': ('Shortlisted', s_after_call, s_after_call + rej_call, 'shortlisted_after_call'),
@@ -299,6 +298,7 @@ class DailyActionDrilldownView(GroupRequiredMixin, TemplateView):
 
         ctx['column'] = column
         ctx['column_label'] = labels[column]
+        ctx['breadcrumb_current'] = labels[column]
         ctx['daily_from'], ctx['daily_to'] = date_range
         ctx['selected_job'] = job_id
         ctx['job'] = get_object_or_404(Job, pk=job_id) if job_id else None

@@ -17,7 +17,7 @@ drill-through) - so the chart and its drill-through can never disagree.
 """
 from datetime import timedelta
 
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 
@@ -108,6 +108,21 @@ def _reject_qs(date_range, job_id, not_yet, reached=None):
     return qs.select_related('candidate', 'candidate__job')
 
 
+def _rejected_or_held_at_screening_qs(date_range, job_id):
+    """CV-Screening dropouts on that day: rejected outright, or held before
+    ever being screened. A screening-stage hold is tracked separately on the
+    Future Prospects page, but counts here the same as a rejection - same
+    treatment as the Overview funnel and Summary tab (see
+    candidates.flows.screened_out / dashboard.views.INITIAL_HOLD)."""
+    qs = CandidateStatusHistory.objects.filter(
+        Q(new_status__in=TERMINAL) | Q(new_status=S.SCREENING_HOLD, old_status=S.OPEN),
+        changed_at__date__range=date_range)
+    if job_id:
+        qs = qs.filter(candidate__job_id=job_id)
+    qs = qs.annotate(advanced=_reached_by(S.SHORTLISTED)).filter(advanced=False)
+    return qs.select_related('candidate', 'candidate__job')
+
+
 def _comm_log_qs(outcome, date_range, job_id):
     qs = CommunicationLog.objects.filter(
         channel=CommunicationLog.Channel.PHONE, outcome=outcome, logged_at__date__range=date_range)
@@ -145,8 +160,8 @@ def _sources_for(column, date_range, job_id):
 
     if column == 'screened':
         return [
-            (_history_qs(S.SHORTLISTED, date_range, job_id), 'changed_at', 'Screened & Shortlisted', 'candidate'),
-            (_reject_qs(date_range, job_id, not_yet=S.SHORTLISTED), 'changed_at', 'Rejected at Screening', 'candidate'),
+            (_history_qs(S.SHORTLISTED, date_range, job_id), 'changed_at', 'Screened & Qualified', 'candidate'),
+            (_rejected_or_held_at_screening_qs(date_range, job_id), 'changed_at', 'Rejected at Screening', 'candidate'),
         ]
 
     if column == 'calls':

@@ -68,6 +68,13 @@ def flow_filter(qs, flow):
         # Unfit = never shortlisted (rejected at / before shortlisting)
         'unfit': qs.filter(status__in=TERMINAL).exclude(_reached(S.SHORTLISTED)),
         'ever_shortlisted': qs.filter(_reached(S.SHORTLISTED)),
+        # Never reached Shortlisted and won't be pursued further for this
+        # vacancy - either formally rejected (unfit) or held before screening
+        # (tracked on Future Prospects instead of the pipeline). The funnel's
+        # CV Screening stage and the Summary tab's Rejected bucket both treat
+        # these as one group, not two.
+        'screened_out': qs.filter(status__in=TERMINAL).exclude(_reached(S.SHORTLISTED))
+                        | qs.filter(status=S.SCREENING_HOLD, hold_from_status=S.OPEN),
 
         # ----- Call -----
         # Every call-stage bucket below is scoped to status=SHORTLISTED and keyed
