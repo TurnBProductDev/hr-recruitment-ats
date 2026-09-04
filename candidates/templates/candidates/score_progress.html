@@ -1,4 +1,5 @@
 {% extends "hr_base.html" %}
+{% load candidates_extras %}
 {% block title %}Score Candidates - {{ job.title }}{% endblock %}
 {% block content %}
 <h3 class="mb-1">Score Candidates</h3>
@@ -48,7 +49,7 @@
           {% else %}—{% endif %}
         </td>
         <td class="small">
-          {{ c.match_breakdown_parsed.matched_skills|join:", "|default:"-" }}
+          {{ c.match_breakdown_parsed.matched_skills|skill_names|default:"-" }}
         </td>
         <td class="small">
           {% if c.match_error %}<span class="text-danger">{{ c.match_error }}</span>

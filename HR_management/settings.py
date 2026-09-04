@@ -180,7 +180,9 @@ BULK_UPLOAD_MAX_MB = int(os.environ.get("BULK_UPLOAD_MAX_MB", "10"))
 AZURE_OPENAI_ENDPOINT = os.environ.get("AZURE_OPENAI_ENDPOINT", "")
 AZURE_OPENAI_KEY = os.environ.get("AZURE_OPENAI_KEY", "")
 AZURE_OPENAI_SCORING_DEPLOYMENT = os.environ.get("AZURE_OPENAI_SCORING_DEPLOYMENT", "cv-data-agent")
-AZURE_OPENAI_API_VERSION = os.environ.get("AZURE_OPENAI_API_VERSION", "2024-02-01")
+# 2024-08-01-preview+ is required for structured outputs (response_format:
+# json_schema), which match_scoring.py relies on for a guaranteed-valid reply.
+AZURE_OPENAI_API_VERSION = os.environ.get("AZURE_OPENAI_API_VERSION", "2024-08-01-preview")
 SCORE_CANDIDATES_TIMEOUT = int(os.environ.get("SCORE_CANDIDATES_TIMEOUT", "60"))
 
 LOGIN_URL = 'login'

@@ -25,6 +25,31 @@ def score_badge_class(score):
     return 'bg-danger'
 
 
+def _normalise_matched_skills(matched_skills):
+    pairs = []
+    for item in matched_skills or []:
+        if isinstance(item, dict):
+            pairs.append((item.get('skill', ''), item.get('evidence', '')))
+        elif item:
+            pairs.append((str(item), ''))
+    return pairs
+
+
+@register.filter
+def matched_skill_pairs(matched_skills):
+    """(skill, evidence) tuples from a match_breakdown matched_skills list.
+    Handles both the current {skill, evidence} object format and the plain
+    skill-name strings stored before evidence-backed matching was added, so
+    already-scored candidates still render correctly."""
+    return _normalise_matched_skills(matched_skills)
+
+
+@register.filter
+def skill_names(matched_skills):
+    """Comma-separated skill names, from either matched_skills format."""
+    return ', '.join(skill for skill, _ in _normalise_matched_skills(matched_skills) if skill)
+
+
 @register.filter
 def score_tier(score):
     """Same strong/borderline/weak cutoffs as score_badge_class, named for the

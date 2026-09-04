@@ -22,6 +22,14 @@
           <div class="col-md-6"><label class="form-label">Closing Date</label>{{ form.closing_date }}</div>
           <div class="col-12"><label class="form-label">Description</label>{{ form.description }}</div>
           <div class="col-12"><label class="form-label">Requirements</label>{{ form.requirements }}</div>
+          <div class="col-md-4">
+            <label class="form-label">Scoring Profile</label>{{ form.job_type }}
+            <div class="form-text">Sets how Score Candidates weighs skills / experience / education for this role.</div>
+          </div>
+          <div class="col-md-8">
+            <label class="form-label">Must-Have Requirements</label>{{ form.must_have_requirements }}
+            <div class="form-text">One per line. A candidate missing one is flagged for HR review instead of being scored down.</div>
+          </div>
           <div class="col-12">
             <label class="form-label">Job Description File</label>{{ form.jd_file }}
             {% if object.jd_file %}<div class="small mt-1"><a href="{{ object.jd_file.url }}" target="_blank">Current JD</a></div>{% endif %}

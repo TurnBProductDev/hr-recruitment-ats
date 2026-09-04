@@ -361,16 +361,26 @@ html { scroll-behavior: smooth; }
             <div class="pd-meta text-muted mt-1">{{ candidate.job.title|default:"the mapped vacancy" }} &middot; {{ candidate.match_scored_at|date:"d M Y" }}</div>
 
             <div class="match-subscore-grid">
-              <div class="d-flex justify-content-between"><span class="text-muted">Skills</span><span class="fw-semibold font-monospace">{{ b.skills_score|default:"-" }}/30</span></div>
-              <div class="d-flex justify-content-between"><span class="text-muted">Experience</span><span class="fw-semibold font-monospace">{{ b.experience_score|default:"-" }}/30</span></div>
-              <div class="d-flex justify-content-between"><span class="text-muted">Education</span><span class="fw-semibold font-monospace">{{ b.education_score|default:"-" }}/30</span></div>
-              <div class="d-flex justify-content-between"><span class="text-muted">Overall Fit</span><span class="fw-semibold font-monospace">{{ b.fit_score|default:"-" }}/10</span></div>
+              <div class="d-flex justify-content-between"><span class="text-muted">Skills</span><span class="fw-semibold font-monospace">{{ b.skills_score|default:"-" }}/{{ b.weights.skills|default:30 }}</span></div>
+              <div class="d-flex justify-content-between"><span class="text-muted">Experience</span><span class="fw-semibold font-monospace">{{ b.experience_score|default:"-" }}/{{ b.weights.experience|default:30 }}</span></div>
+              <div class="d-flex justify-content-between"><span class="text-muted">Education</span><span class="fw-semibold font-monospace">{{ b.education_score|default:"-" }}/{{ b.weights.education|default:30 }}</span></div>
+              <div class="d-flex justify-content-between"><span class="text-muted">Overall Fit</span><span class="fw-semibold font-monospace">{{ b.fit_score|default:"-" }}/{{ b.weights.fit|default:10 }}</span></div>
             </div>
 
+            {% if b.disqualifiers %}
+            <div class="mb-1">
+              <div class="pd-subhead" style="color:#dc3545;">Must-Have Not Confirmed</div>
+              <ul class="pd-body mb-0 ps-3">
+                {% for item in b.disqualifiers %}<li>{{ item }}</li>{% endfor %}
+              </ul>
+            </div>
+            {% endif %}
             {% if b.matched_skills %}
             <div class="mb-1">
               <div class="pd-subhead" style="color: var(--dark-green);">Matched</div>
-              <div class="pd-body">{{ b.matched_skills|join:", " }}</div>
+              <div class="pd-body">
+                {% for skill, evidence in b.matched_skills|matched_skill_pairs %}<span {% if evidence %}title="{{ evidence }}"{% endif %}>{{ skill }}</span>{% if not forloop.last %}, {% endif %}{% endfor %}
+              </div>
             </div>
             {% endif %}
             {% if b.missing_skills %}
