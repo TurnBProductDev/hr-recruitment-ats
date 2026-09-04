@@ -58,6 +58,7 @@
           <ul class="dropdown-menu">
             <li><a class="dropdown-item" href="{% url 'candidate_repository' %}">Repository</a></li>
             <li><a class="dropdown-item" href="{% url 'candidate_general_applications' %}">General Applications</a></li>
+            <li><a class="dropdown-item" href="{% url 'candidate_future_prospects' %}">Future Prospects</a></li>
           </ul>
         </div>
         <a class="app-nav-link {% if '/hr/jobs/' in request.path %}active{% endif %}" href="{% url 'job_manage_list' %}">Vacancies</a>

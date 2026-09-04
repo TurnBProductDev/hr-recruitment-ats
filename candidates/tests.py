@@ -767,7 +767,16 @@ class RepositoryStatusFilterTests(TestCase):
     def test_hold_tab_offers_the_named_holds(self):
         response = self.client.get(f"{reverse('candidate_repository')}?tab={HOLD_TAB}")
         self.assertContains(response, 'Round 1 Hold')
-        self.assertContains(response, 'Screening Hold')
+        # Held-before-screening candidates live on Future Prospects now, not
+        # this tab, so their stage is no longer offered here.
+        self.assertNotContains(response, 'Screening Hold')
+
+    def test_hold_tab_excludes_candidates_held_before_screening(self):
+        self._candidate('Held at round 1', Candidate.Status.ROUND1, held=True)
+        self._candidate('Held at screening', Candidate.Status.OPEN, held=True)
+        response = self.client.get(f"{reverse('candidate_repository')}?tab={HOLD_TAB}")
+        self.assertContains(response, 'Held at round 1')
+        self.assertNotContains(response, 'Held at screening')
 
     def test_flow_view_filters_by_status(self):
         self._candidate('Shortlisted one', Candidate.Status.SHORTLISTED)
@@ -784,3 +793,34 @@ class RepositoryStatusFilterTests(TestCase):
             f"{reverse('candidate_repository')}?tab={HOLD_TAB}&status={Candidate.Status.ROUND1}&q=rose")
         self.assertNotIn('status', response.context['preserved_qs'])
         self.assertIn('q=rose', response.context['preserved_qs'])
+
+
+class FutureProspectsPageTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('hr4', 'hr4@example.com', 'pw')
+        self.user.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.client.force_login(self.user)
+
+    def _candidate(self, name, stage, held=False):
+        c = Candidate.objects.create(full_name=name, email=f'{name}@example.com')
+        services.record_creation(c)
+        if stage != Candidate.Status.OPEN:
+            services.change_status(c, stage)
+        if held:
+            services.change_status(c, Candidate.Status.SCREENING_HOLD)
+        return c
+
+    def test_lists_only_candidates_held_before_screening(self):
+        self._candidate('Held Early', Candidate.Status.OPEN, held=True)
+        self._candidate('Held At Round1', Candidate.Status.ROUND1, held=True)
+        response = self.client.get(reverse('candidate_future_prospects'))
+        self.assertContains(response, 'Held Early')
+        self.assertNotContains(response, 'Held At Round1')
+
+    def test_resume_button_moves_to_shortlisted(self):
+        c = self._candidate('Held Early', Candidate.Status.OPEN, held=True)
+        self.client.post(reverse('candidate_shortlist', args=[c.pk]))
+        c.refresh_from_db()
+        self.assertEqual(c.status, Candidate.Status.SHORTLISTED)
+        response = self.client.get(reverse('candidate_future_prospects'))
+        self.assertNotIn(c, response.context['candidates'])

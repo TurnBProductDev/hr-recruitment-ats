@@ -11,7 +11,7 @@ from django.views.generic import DetailView, ListView, UpdateView
 from interviews.models import Interview, InterviewReschedule
 from jobs.models import Job
 
-from . import bulk, cv_parser, match_scoring, scoring, services, summarize
+from . import bulk, cv_parser, match_scoring, scoring, services
 from .forms import (
     BulkUploadForm,
     CandidateApplicationForm,
@@ -234,7 +234,7 @@ FLOW_TITLES = {
     'rejected_after_round2': 'Rejected After Round 2',
     'on_hold': 'On Hold', 'hired': 'Hired', 'rejected': 'Rejected', 'blacklisted': 'Blacklisted',
     'rejected_after_final': 'Rejected After Final Round',
-    'screening_hold': 'Hold', 'hold_before_shortlist': 'Hold (Before Shortlist)',
+    'screening_hold': 'Hold', 'hold_before_shortlist': 'Future Prospects',
     'hold_before_round1': 'Hold (Before Round 1)', 'hold_before_round2': 'Hold (Before Round 2)',
     'hold_before_final': 'Hold (Before Final Decision)', 'hold_after_final': 'Hold (After Final Decision)',
 }
@@ -377,6 +377,10 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
             status = TAB_STATUS_MAP.get(self.get_tab())
             if status is not None:
                 qs = qs.filter(status=status)
+                if self.get_tab() == HOLD_TAB:
+                    # Held before ever being screened = Future Prospects, not
+                    # the general Hold tab - see FutureProspectsListView.
+                    qs = qs.exclude(hold_from_status=STATUS.OPEN)
 
         # Status filter. On the Hold tab every row is the same stored status, so
         # what distinguishes them - and what the dropdown offers - is the stage
@@ -405,9 +409,14 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
         ctx['tabs'] = REPOSITORY_TABS
         # Counts for the tab pills - per status, under the vacancy/source/date/search
         # filters currently applied (but not the tab or its own status/hide switches,
-        # so every pill stays comparable to the others).
+        # so every pill stays comparable to the others). Held-before-screening
+        # candidates are excluded here too - see FutureProspectsListView - so
+        # the Hold pill (and the repository's total) matches what the Hold tab
+        # actually lists.
         ctx['tab_counts'] = {row['status']: row['n'] for row in
-                            self._filtered_queryset().values('status').annotate(n=Count('id'))}
+                            self._filtered_queryset()
+                            .exclude(status=STATUS.SCREENING_HOLD, hold_from_status=STATUS.OPEN)
+                            .values('status').annotate(n=Count('id'))}
         ctx['total_candidates'] = sum(ctx['tab_counts'].values())
         ctx['awaiting_count'] = ctx['tab_counts'].get(STATUS.OPEN, 0)
         scope = self.request.GET.get('scope', '')
@@ -423,7 +432,8 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
         # The Hold tab lists one stored status, so it offers the named holds
         # instead; every other tab offers the pipeline statuses.
         if ctx['tab'] == HOLD_TAB:
-            ctx['status_options'] = [(s, hold_label(s)) for s in HOLD_STAGES]
+            # Screening-stage holds live on Future Prospects now, not this tab.
+            ctx['status_options'] = [(s, hold_label(s)) for s in HOLD_STAGES if s != STATUS.OPEN]
         else:
             ctx['status_options'] = list(Candidate.Status.choices)
         # every current filter except the tab, so switching tabs keeps the vacancy/scope/search
@@ -498,6 +508,43 @@ class GeneralApplicationsListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
         ctx['selected_roles'] = self.selected_roles()
         ctx['q'] = self.request.GET.get('q', '')
         ctx['total'] = base.count()
+        u = self.request.user
+        ctx['is_hr_admin'] = u.is_superuser or u.groups.filter(name=HR_ADMIN).exists()
+        return ctx
+
+
+class FutureProspectsListView(RemembersListUrlMixin, GroupRequiredMixin, ListView):
+    """Candidates put on Hold before they were ever screened - kept as a pool
+    to revisit for future openings rather than counted as an active
+    application. Everyone here also counts as "Rejected" for this vacancy in
+    the dashboard's Summary/Overview tabs - see dashboard.views.INITIAL_HOLD."""
+    model = Candidate
+    template_name = 'candidates/future_prospects.html'
+    context_object_name = 'candidates'
+    allowed_groups = ANY_STAFF
+
+    def base_queryset(self):
+        return Candidate.objects.select_related('job').filter(
+            status=STATUS.SCREENING_HOLD, hold_from_status=STATUS.OPEN)
+
+    def get_queryset(self):
+        last_hold = (CandidateStatusHistory.objects
+                     .filter(candidate=OuterRef('pk'), new_status=STATUS.SCREENING_HOLD)
+                     .order_by('-changed_at').values('changed_at')[:1])
+        hold_reason = (CandidateStatusHistory.objects
+                       .filter(candidate=OuterRef('pk'), new_status=STATUS.SCREENING_HOLD)
+                       .order_by('-changed_at').values('remarks')[:1])
+        qs = self.base_queryset().annotate(held_at=Subquery(last_hold), hold_reason=Subquery(hold_reason))
+
+        q = self.request.GET.get('q')
+        if q:
+            qs = qs.filter(Q(full_name__icontains=q) | Q(email__icontains=q))
+        return qs.order_by('-held_at')
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx['q'] = self.request.GET.get('q', '')
+        ctx['total'] = self.base_queryset().count()
         u = self.request.user
         ctx['is_hr_admin'] = u.is_superuser or u.groups.filter(name=HR_ADMIN).exists()
         return ctx
@@ -764,45 +811,6 @@ class CandidateScoreStatusView(GroupRequiredMixin, View):
         return JsonResponse({
             'state': candidate.match_state,
             'finished': candidate.match_state != MS.SCORING,
-        })
-
-
-class CandidateRegenerateSummaryView(GroupRequiredMixin, View):
-    """Re-read this candidate's stored resume and refresh their AI CV
-    summary - after they're edited, or after the summary prompt/model
-    changes - without re-uploading the file."""
-    allowed_groups = (HR_ADMIN, RECRUITER)
-
-    def post(self, request, pk):
-        candidate = get_object_or_404(Candidate, pk=pk)
-        CSS = Candidate.CVSummaryState
-        if not candidate.resume_blob_url:
-            messages.error(request, "This candidate's resume was linked via URL, not "
-                                    "uploaded, so there's no stored file to re-read.")
-        elif not cv_parser.is_configured():
-            messages.error(request, 'CV parsing is not configured - set LOGIC_APP_CV_PARSER_URL.')
-        else:
-            claimed = Candidate.objects.filter(pk=pk).exclude(cv_summary_state=CSS.RUNNING).update(
-                cv_summary_state=CSS.RUNNING, cv_summary_error=None)
-            if not claimed:
-                messages.info(request, 'Already regenerating the AI CV summary for this candidate.')
-            else:
-                summarize.start(candidate)
-                messages.success(request, 'Regenerating the AI CV summary - this can take a '
-                                          "couple of minutes. Refresh in a bit if it doesn't update itself.")
-        return redirect('candidate_timeline', pk=pk)
-
-
-class CandidateSummaryStatusView(GroupRequiredMixin, View):
-    """Poll target for the profile page while a summary regeneration is running."""
-    allowed_groups = ANY_STAFF
-
-    def get(self, request, pk):
-        candidate = get_object_or_404(Candidate, pk=pk)
-        CSS = Candidate.CVSummaryState
-        return JsonResponse({
-            'state': candidate.cv_summary_state,
-            'finished': candidate.cv_summary_state != CSS.RUNNING,
         })
 
 

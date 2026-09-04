@@ -78,13 +78,16 @@ def flow_filter(qs, flow):
         # (Round 1+), been rejected, or put on Hold are excluded here; they are
         # covered by 'shortlisted_after_call', 'rejected_after_call' and
         # 'hold_before_round1' respectively.
-        # Yet to Call = no call logged yet, or last outcome was "Call back"
-        # (still needs to be reached)
+        # Yet to Call = no call logged yet, or last outcome was "Call back" or
+        # "Unable to connect" (still needs to be reached - the funnel folds
+        # Unable to Connect into this bucket rather than showing it separately)
         'call_pending': _with_latest_call_outcome(qs.filter(status=S.SHORTLISTED)).filter(
-            Q(latest_call_outcome__isnull=True) | Q(latest_call_outcome=OUT.CALLBACK)),
+            Q(latest_call_outcome__isnull=True) | Q(latest_call_outcome__in=[OUT.CALLBACK, OUT.UNABLE])),
         # Cleared the call = moved on to Round 1 (signalled by the status action)
         'shortlisted_after_call': qs.filter(_reached(S.ROUND1)),
-        # Attempted but not reached: last logged outcome was "Unable to connect"
+        # Attempted but not reached: last logged outcome was "Unable to connect".
+        # Kept as its own flow for drill-down/reporting even though the funnel
+        # dashboard now folds it into 'call_pending' above.
         'unable_to_connect': _with_latest_call_outcome(qs.filter(status=S.SHORTLISTED)).filter(
             latest_call_outcome=OUT.UNABLE),
         # Reached on the call but no decision taken yet (never moved on to Round 1)

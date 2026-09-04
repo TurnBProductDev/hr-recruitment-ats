@@ -1,0 +1,257 @@
+{% extends "hr_base.html" %}
+{% load candidates_extras %}
+{% block title %}Future Prospects{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ===== Future Prospects (self-contained so it never depends on cached CSS) ===== */
+.ga-head { display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:16px; margin-bottom:18px; }
+.ga-title { font-size:1.5rem; font-weight:700; color:#1a2e35; margin:0; }
+.ga-subtitle { font-size:.8rem; color:#6b7a7a; margin-top:2px; }
+
+.ga-toolbar { display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap; padding:14px 18px; border-bottom:1px solid var(--border-color); }
+.ga-search-wrap { position:relative; flex:1 1 220px; max-width:280px; }
+.ga-search-wrap .bi-search { position:absolute; left:11px; top:50%; transform:translateY(-50%); color:#8a969b; font-size:.8rem; pointer-events:none; }
+.ga-search-wrap input { padding-left:30px; }
+.ga-export-slot { margin-left:auto; }
+.ga-export-slot .dt-buttons .btn { white-space:nowrap; }
+
+.ga-bulkbar { display:none; align-items:center; gap:14px; padding:10px 18px; background:#eef6f5; border-bottom:1px solid #dbe9e7; flex-wrap:wrap; }
+.ga-bulkbar.show { display:flex; }
+.ga-bulkbar .bulk-actions { display:flex; gap:8px; flex-wrap:wrap; margin-left:auto; }
+
+.kebab-btn { padding:0.25rem 0.55rem; line-height:1; }
+.ga-name a { font-weight:600; }
+.ga-meta { font-size:.72rem; color:#8a969b; }
+.ga-reason { font-style:italic; color:#6b7a7a; }
+
+#prospectsTable_wrapper { display:flex; flex-wrap:wrap; }
+#prospectsTable_wrapper > table { width:100% !important; order:1; }
+#prospectsTable_wrapper > .dataTables_processing { order:0; width:100%; }
+#prospectsTable_wrapper > .dataTables_info { order:2; flex:1; padding:14px 18px 16px; font-size:.78rem; color:#8a969b; }
+#prospectsTable_wrapper > .dataTables_paginate { order:3; padding:10px 18px 12px; }
+.dataTables_wrapper .pagination { justify-content:flex-end; margin-bottom:0; }
+.dataTables_wrapper .pagination .page-link { border-radius:6px; margin-left:4px; border-color:var(--border-color); color:var(--dark-green); font-size:.78rem; }
+.dataTables_wrapper .pagination .page-item.active .page-link { background:var(--primary-green); border-color:var(--primary-green); color:#fff; }
+.dataTables_wrapper .pagination .page-item.disabled .page-link { color:#c3cbcb; }
+
+@media (max-width: 900px) {
+  .ga-toolbar { align-items:stretch; }
+  .ga-export-slot { margin-left:0; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ga-head">
+  <div>
+    <h3 class="ga-title mb-0">Future Prospects</h3>
+    <div class="ga-subtitle">{{ total }} candidate{{ total|pluralize }} &middot; held before screening - a pool to revisit for future openings rather than an active application</div>
+  </div>
+</div>
+
+<form method="get" id="fpFilterForm">
+  <div class="app-card">
+    <div class="ga-toolbar">
+      <div class="ga-search-wrap">
+        <i class="bi bi-search"></i>
+        <input type="text" name="q" value="{{ q }}" class="form-control form-control-sm" placeholder="Name or email">
+      </div>
+      <button type="submit" class="btn btn-sm btn-outline-app"><i class="bi bi-search"></i> Search</button>
+      <a href="{% url 'candidate_future_prospects' %}" class="btn btn-sm btn-outline-secondary">Clear</a>
+      <div class="ga-export-slot" id="exportSlot"></div>
+    </div>
+
+    {% if is_hr_admin %}
+    <div id="bulkBar" class="ga-bulkbar">
+      <span><strong id="bulkCount">0</strong> selected</span>
+      <div class="bulk-actions">
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="bulkClear">Clear</button>
+        <button type="button" class="btn btn-sm btn-fill-app bulk-act" id="bulkShortlist"
+                data-action="{% url 'candidate_bulk_shortlist' %}" data-title="Move the selected candidates to Shortlisted">Move to Shortlisted</button>
+        <button type="button" class="btn btn-sm btn-outline-danger bulk-act" id="bulkReject"
+                data-action="{% url 'candidate_bulk_reject' %}" data-title="Reject the selected candidates" data-require="1">Reject</button>
+        <button type="button" class="btn btn-sm btn-danger" id="bulkDelete">Delete</button>
+      </div>
+    </div>
+    <form method="post" action="{% url 'candidate_bulk_delete' %}" id="bulkDeleteForm" class="d-none">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+      <div id="bulkDeleteIds"></div>
+    </form>
+    {% endif %}
+
+    <div class="table-responsive">
+      <table id="prospectsTable" class="table table-hover align-middle w-100">
+        <thead>
+          <tr>
+            {% if is_hr_admin %}<th class="no-export" style="width:2rem">
+              <input type="checkbox" class="form-check-input" id="selectAll" title="Select all on this page">
+            </th>{% endif %}
+            <th>Candidate</th><th>Vacancy</th><th>Source</th><th>Held Since</th><th>Reason</th><th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in candidates %}
+          <tr>
+            {% if is_hr_admin %}<td class="no-export">
+              <input type="checkbox" class="form-check-input row-select" value="{{ c.id }}"
+                     aria-label="Select {{ c.full_name }}">
+            </td>{% endif %}
+            <td class="ga-name">
+              <a href="{% url 'candidate_timeline' c.id %}">{{ c.full_name }}</a>
+              <div class="ga-meta">{{ c.email }} &middot; {{ c.candidate_code }}</div>
+            </td>
+            <td>{{ c.job.title|default:"-" }}</td>
+            <td>{{ c.source|default:"-" }}</td>
+            <td>
+              {% if c.held_at %}{{ c.held_at|date:"d M Y" }}
+              <div class="ga-meta">{{ c.held_at|timesince }} ago</div>
+              {% else %}-{% endif %}
+            </td>
+            <td class="small ga-reason">{{ c.hold_reason|default:"-" }}</td>
+            <td class="text-nowrap text-end">
+              <a href="{% url 'candidate_timeline' c.id %}" class="btn btn-sm btn-outline-app">View</a>
+              <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url c.resume_action.url_name c.id %}"
+                      data-title="Move {{ c.full_name }} to {{ c.resume_action.stage }}"
+                      data-msg="Taking {{ c.full_name }} off hold - this moves them into the {{ c.resume_action.stage }} pipeline.">{{ c.resume_action.label }}</button>
+              <div class="dropdown d-inline-block">
+                <button class="btn btn-sm btn-outline-app kebab-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">&#8942;</button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                  <li><button type="button" class="dropdown-item text-danger act"
+                              data-action="{% url 'candidate_reject' c.id %}"
+                              data-title="Reject {{ c.full_name }}" data-require="1"
+                              data-btn="btn-outline-danger" data-label="Reject">Reject</button></li>
+                  {% if is_hr_admin %}
+                  <li><hr class="dropdown-divider"></li>
+                  <li><button type="button" class="dropdown-item text-danger act"
+                              data-action="{% url 'candidate_delete' c.id %}"
+                              data-title="Delete {{ c.full_name }}?" data-nofields="1"
+                              data-btn="btn-danger" data-label="Delete permanently"
+                              data-msg="This permanently deletes the candidate and all their interviews, notes and history. This cannot be undone.">Delete</button></li>
+                  {% endif %}
+                </ul>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="7" class="text-muted">No candidates on hold before screening.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</form>
+
+{# Same single reusable confirm modal the Candidate Repository uses. #}
+<div class="modal fade" id="actionModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form method="post" id="actionForm">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+      <div id="actionBulkIds"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="actionModalTitle">Confirm action</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p id="actionModalMsg" class="text-muted small mb-3"></p>
+          <div id="actionFields">
+            <div class="mb-3">
+              <label class="form-label">Remarks / Reason <span id="reasonReq" class="text-danger d-none">*</span></label>
+              <textarea name="reason" id="actionReason" class="form-control" rows="3"></textarea>
+            </div>
+            <div class="mb-1">
+              <label class="form-label">Done by</label>
+              <input type="text" name="performed_by" id="actionPerformedBy" class="form-control"
+                     value="{{ user.get_full_name|default:user.get_username }}">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-app btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-fill-app btn-sm" id="actionSubmit">Confirm</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(function () {
+  var table = $('#prospectsTable').DataTable({
+    order: [], dom: 'rtip', pageLength: 25,
+    columnDefs: [{ targets: 'no-export', orderable: false, searchable: false }],
+    language: { info: 'Showing _START_ to _END_ of _TOTAL_', infoEmpty: 'No candidates', zeroRecords: 'No candidates match this filter.' },
+    buttons: [{ extend: 'excelHtml5', text: '<i class="bi bi-file-earmark-excel"></i> Export to Excel',
+               className: 'btn btn-outline-app btn-sm', exportOptions: { columns: ':not(.no-export)' } }]
+  });
+  table.buttons().container().appendTo('#exportSlot');
+
+  // --- Per-row actions: same confirm modal as the Candidate Repository -------
+  $('#actionModal').on('show.bs.modal', function (event) {
+    var b = event.relatedTarget;
+    if (!b.classList.contains('bulk-act')) { $('#actionBulkIds').empty(); }
+    $('#actionForm').attr('action', b.getAttribute('data-action'));
+    $('#actionModalTitle').text(b.getAttribute('data-title') || 'Confirm action');
+    $('#actionModalMsg').text(b.getAttribute('data-msg') || '');
+    var required = b.getAttribute('data-require') === '1';
+    $('#actionReason').prop('required', required).val('');
+    $('#reasonReq').toggleClass('d-none', !required);
+    $('#actionFields').toggle(b.getAttribute('data-nofields') !== '1');
+    var btnCls = b.getAttribute('data-btn') || 'btn-fill-app';
+    $('#actionSubmit').attr('class', 'btn btn-sm ' + btnCls).text(b.getAttribute('data-label') || 'Confirm');
+  });
+  $('.act').on('click', function () {
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('actionModal')).show(this);
+  });
+
+  {% if is_hr_admin %}
+  // --- Multi-select bulk bar -------------------------------------------------
+  function selectedIds() {
+    return $('#prospectsTable').find('.row-select:checked').map(function () { return this.value; }).get();
+  }
+  function refreshBulkBar() {
+    var n = selectedIds().length;
+    $('#bulkCount').text(n);
+    $('#bulkBar').toggleClass('show', n > 0);
+  }
+  $('#prospectsTable').on('change', '.row-select', refreshBulkBar);
+  $('#selectAll').on('change', function () {
+    // Only rows on the current DataTables page are in the DOM to tick.
+    $('#prospectsTable tbody .row-select').prop('checked', this.checked);
+    refreshBulkBar();
+  });
+  $('#bulkClear').on('click', function () {
+    $('#prospectsTable').find('.row-select, #selectAll').prop('checked', false);
+    refreshBulkBar();
+  });
+  $('#bulkDelete').on('click', function () {
+    var ids = selectedIds();
+    if (!ids.length) { return; }
+    if (!window.confirm('Permanently delete ' + ids.length + ' candidate(s) and all their ' +
+                        'interviews, notes and history? This cannot be undone.')) { return; }
+    var holder = $('#bulkDeleteIds').empty();
+    ids.forEach(function (id) {
+      $('<input>').attr({ type: 'hidden', name: 'ids', value: id }).appendTo(holder);
+    });
+    $('#bulkDeleteForm').trigger('submit');
+  });
+  $('.bulk-act').on('click', function () {
+    var ids = selectedIds();
+    if (!ids.length) { return; }
+    var holder = $('#actionBulkIds').empty();
+    ids.forEach(function (id) {
+      $('<input>').attr({ type: 'hidden', name: 'ids', value: id }).appendTo(holder);
+    });
+    var btn = this;
+    btn.setAttribute('data-msg', ids.length + ' candidate(s) selected.');
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('actionModal')).show(btn);
+  });
+  {% endif %}
+});
+</script>
+{% endblock %}

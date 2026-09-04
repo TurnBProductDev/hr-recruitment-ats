@@ -67,8 +67,8 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
 .fnl-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 2px 2px 16px 148px; }
 .fnl-chip {
   display: block; text-decoration: none; color: inherit; min-width: 92px;
-  padding: 8px 12px; background: #f6f8f8; border: 1px solid #e2ebeb; border-radius: 6px;
-  transition: box-shadow .12s ease, border-color .12s ease;
+  padding: 8px 12px 8px 10px; background: #f6f8f8; border: 1px solid #e2ebeb; border-left-width: 3px;
+  border-radius: 6px; transition: box-shadow .12s ease, border-color .12s ease;
 }
 .fnl-chip:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color: #cbd9d9; }
 .fnl-chip .n { font-weight: 700; font-size: 1rem; color: #1f2a2a; }
@@ -304,24 +304,19 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
           <span class="fnl-hint">Hover a stage's bar for its breakdown, or use +/- to list it below instead</span>
         </div>
         <div class="fnl-stats">
+          <div class="fnl-stat-card" style="--stat-accent:#1f2a2a">
+            <div class="n">{{ funnel_top.requirement }}</div>
+            <div class="t">Openings</div>
+          </div>
           <a class="fnl-stat-card" style="--stat-accent:#0e6f6b"
              href="{% url 'candidate_repository' %}{% if jobq %}?job={{ jobq }}{% endif %}">
             <div class="n" style="color:#0e6f6b">{{ funnel_top.total }}</div>
             <div class="t">Total Candidates</div>
           </a>
-          <div class="fnl-stat-card" style="--stat-accent:#1f2a2a">
-            <div class="n">{{ funnel_top.requirement }}</div>
-            <div class="t">Openings</div>
-          </div>
           <a class="fnl-stat-card" style="--stat-accent:#8a9a9a"
              href="{% url 'candidate_repository' %}?flow=open{% if jobq %}&job={{ jobq }}{% endif %}">
             <div class="n">{{ funnel_top.screening_pending }}</div>
             <div class="t">Screening Pending</div>
-          </a>
-          <a class="fnl-stat-card" style="--stat-accent:#8a9a9a"
-             href="{% url 'candidate_repository' %}?flow=hold_before_shortlist{% if jobq %}&job={{ jobq }}{% endif %}">
-            <div class="n">{{ funnel_top.hold }}</div>
-            <div class="t">Hold</div>
           </a>
         </div>
       </div>
@@ -335,17 +330,18 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
               <a class="seg{% if seg.is_green %} seg-green{% endif %}"
                  href="{% url 'candidate_repository' %}?flow={{ seg.flow }}{% if jobq %}&job={{ jobq }}{% endif %}"
                  style="width:{{ seg.pct }}%;background:{{ seg.bg }}">
-                {% if seg.show_inline %}<span class="seg-inline" style="color:{{ seg.text_color }}">{{ seg.value }}</span>{% endif %}
+                {% if seg.show_inline %}<span class="seg-inline" style="color:{{ seg.text_color }};font-size:{{ seg.font_size }}">{{ seg.value }}</span>{% endif %}
                 <span class="seg-tip"><b>{{ seg.value }}</b><i>{{ seg.label }}</i></span>
               </a>
               {% endfor %}
             </span>
-            <span class="val">{{ stage.value }}</span>
+            <span class="val">{{ stage.total }}</span>
             <button type="button" class="fnl-toggle" aria-expanded="false" aria-label="List this stage's breakdown below instead">+</button>
           </div>
           <div class="fnl-chips" hidden>
             {% for chip in stage.chips %}
-            <a class="fnl-chip" href="{% url 'candidate_repository' %}?flow={{ chip.flow }}{% if jobq %}&job={{ jobq }}{% endif %}">
+            <a class="fnl-chip" style="border-left-color:{{ chip.accent }}"
+               href="{% url 'candidate_repository' %}?flow={{ chip.flow }}{% if jobq %}&job={{ jobq }}{% endif %}">
               <div class="n">{{ chip.count }}</div><div class="t">{{ chip.label }}</div>
             </a>
             {% endfor %}

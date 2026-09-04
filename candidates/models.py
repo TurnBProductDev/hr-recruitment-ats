@@ -75,11 +75,6 @@ class Candidate(models.Model):
         DONE = 'DONE', 'Scored'
         ERROR = 'ERROR', 'Failed'
 
-    class CVSummaryState(models.TextChoices):
-        IDLE = 'IDLE', 'Idle'
-        RUNNING = 'RUNNING', 'Regenerating'
-        ERROR = 'ERROR', 'Failed'
-
     class Status(models.TextChoices):
         OPEN = 'OPEN', 'Open'
         SHORTLISTED = 'SHORTLISTED', 'Shortlisted'
@@ -137,12 +132,6 @@ class Candidate(models.Model):
     is_on_hold = models.BooleanField(default=False)
     cv_summary = models.TextField('AI CV Summary', blank=True, null=True,
                                   help_text='Short AI-generated summary of the resume.')
-    # Lets HR re-read an already-stored résumé and refresh cv_summary from the
-    # candidate profile page - after correcting details, or after the
-    # summary prompt/model changes - without re-uploading the file.
-    cv_summary_state = models.CharField(max_length=10, choices=CVSummaryState.choices,
-                                        default=CVSummaryState.IDLE)
-    cv_summary_error = models.TextField(blank=True, null=True)
 
     # AI match score against the mapped vacancy's JD (0-100). Never computed for
     # "General Application" - see candidates/match_scoring.py. match_breakdown
