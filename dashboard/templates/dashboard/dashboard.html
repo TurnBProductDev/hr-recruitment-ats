@@ -92,6 +92,9 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
 .sm-kpi .sub { font-size: .72rem; color: #8a9a9a; margin-top: 4px; }
 .sm-kpi-bar { height: 4px; border-radius: 999px; background: #edf1f0; overflow: hidden; margin-top: 10px; }
 .sm-kpi-bar-fill { height: 100%; border-radius: 999px; }
+.sm-kpi-subval { margin-top: 10px; padding-top: 8px; border-top: 1px solid #edf1f0; }
+.sm-kpi-subval .lbl { font-size: .66rem; }
+.sm-kpi-subval .val { font-size: 1rem; margin-top: 2px; }
 
 .sm-thead { display: flex; align-items: center; gap: 14px; padding: 10px 0 8px; border-bottom: 1px solid #e2ebeb; font-size: .68rem; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: #6b7a7a; }
 .sm-row { display: flex; align-items: center; gap: 14px; padding: 13px 0; border-bottom: 1px solid #eef2f2; }
@@ -217,14 +220,13 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
       <div class="sm-kpi" style="--kpi-accent:#c9d3d1">
         <div class="lbl">Total Applicants</div>
         <div class="val">{{ s.total }}</div>
-      </div>
-      <div class="sm-kpi" style="--kpi-accent:#c9d3d1">
-        <div class="lbl">Unattended</div>
-        <div class="val" style="color:#6b7a7a">{{ s.open }}</div>
-        <div class="sm-kpi-bar"><div class="sm-kpi-bar-fill" style="width:{% if s.total %}{% widthratio s.open s.total 100 %}{% else %}0{% endif %}%;background:#8a9a9a"></div></div>
+        <div class="sm-kpi-subval">
+          <div class="lbl">Unattended</div>
+          <div class="val" style="color:#6b7a7a">{{ s.open }}</div>
+        </div>
       </div>
       <div class="sm-kpi" style="--kpi-accent:#0e6f6b">
-        <div class="lbl">Shortlisted</div>
+        <div class="lbl">Active Pool</div>
         <div class="val" style="color:#0e6f6b">{{ s.shortlisted }}</div>
         <div class="sm-kpi-bar"><div class="sm-kpi-bar-fill" style="width:{% if s.total %}{% widthratio s.shortlisted s.total 100 %}{% else %}0{% endif %}%;background:#0e6f6b"></div></div>
       </div>
@@ -250,7 +252,7 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
             <span class="sm-col-name">Role</span>
             <span class="sm-col-num">Applicants</span>
             <span class="sm-col-plain">Unattended</span>
-            <span class="sm-col-short">Shortlisted</span>
+            <span class="sm-col-short">Active Pool</span>
             <span class="sm-col-plain">Rejected</span>
             <span class="sm-col-hired">Hired</span>
           </div>
@@ -273,7 +275,7 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
             <span class="sm-col-name">Source</span>
             <span class="sm-col-num">Applicants</span>
             <span class="sm-col-plain">Unattended</span>
-            <span class="sm-col-short">Shortlisted</span>
+            <span class="sm-col-short">Active Pool</span>
             <span class="sm-col-plain">Rejected</span>
             <span class="sm-col-hired">Hired</span>
           </div>
