@@ -130,6 +130,10 @@ html { scroll-behavior: smooth; }
 .quick-nav-link.active[data-block="ai"] { border-color:#6f42c1; color:#4d2d99; background:#ede4f8; }
 .quick-nav-link.active[data-block="hiring"] { border-color:#e0c97e; color:#7a5c00; background:#fbf1c9; }
 .quick-nav-link.active[data-block="history"] { border-color:#8ea3ac; color:#37474f; background:#e9eef0; }
+@media (max-width: 767.98px) {
+  .quick-nav { flex-wrap: wrap; }
+  .quick-nav > .text-end { text-align: left !important; }
+}
 </style>
 {% endblock %}
 
@@ -156,14 +160,14 @@ html { scroll-behavior: smooth; }
   {% endif %}
 </div>
 
-<nav class="quick-nav d-flex justify-content-between align-items-center flex-wrap gap-2">
+<nav class="quick-nav d-flex justify-content-between align-items-center flex-nowrap gap-3">
   <div class="d-flex flex-wrap gap-2">
     <a href="#block-details" class="quick-nav-link" data-block="details"><i class="bi bi-person-vcard"></i> Candidate Details</a>
     <a href="#block-ai" class="quick-nav-link" data-block="ai"><i class="bi bi-stars"></i> AI-Scan</a>
     <a href="#block-hiring" class="quick-nav-link" data-block="hiring"><i class="bi bi-signpost-split"></i> Hiring</a>
     <a href="#block-history" class="quick-nav-link" data-block="history"><i class="bi bi-clock-history"></i> History</a>
   </div>
-  <div class="text-end">
+  <div class="text-end flex-shrink-0">
     <div class="fw-bold" style="font-size:1.4rem; line-height:1.2;">{{ candidate.full_name }}</div>
     <div class="pd-meta text-muted">{{ candidate.candidate_code }}</div>
   </div>

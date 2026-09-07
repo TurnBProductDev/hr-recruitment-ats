@@ -19,20 +19,20 @@
     display: flex; align-items: center; justify-content: space-between;
     padding: 14px 18px; border-bottom: 1px solid var(--border-color); flex-shrink: 0;
   }
-  .cv-edit-panel-body { flex: 1; overflow: auto; background: #f4f6f6; display: flex; flex-direction: column; }
-  .cv-edit-panel-body iframe { width: 100%; flex: 1; min-height: 70vh; border: 0; }
-  .cv-edit-panel-hint {
-    display: flex; align-items: center; gap: 8px; flex-shrink: 0;
-    font-size: .78rem; color: #6c757d; background: #fff8e1; border-bottom: 1px solid var(--border-color);
-    padding: 8px 18px;
+  .cv-edit-panel-body { flex: 1; overflow: auto; background: #f4f6f6; }
+  .cv-edit-panel-body iframe { width: 100%; height: 100%; min-height: 75vh; border: 0; }
+  .cv-edit-panel-fallback {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 10px; text-align: center; min-height: 75vh; padding: 32px;
   }
+  .cv-edit-panel-fallback i { font-size: 2rem; color: var(--primary-green); }
   #viewAttachedCvBtn { text-decoration: none; }
   #viewAttachedCvBtn:hover { text-decoration: underline; }
   .cv-resume-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; }
   @media (max-width: 991.98px) {
     .cv-edit-layout { flex-direction: column; }
     .cv-edit-panel-col { position: static; max-height: none; }
-    .cv-edit-panel-body iframe { min-height: 60vh; }
+    .cv-edit-panel-body iframe, .cv-edit-panel-fallback { min-height: 60vh; }
   }
 </style>
 {% endblock %}
@@ -98,12 +98,17 @@
       </div>
       <div class="cv-edit-panel-body">
         {% if cv_is_external %}
-        <div class="cv-edit-panel-hint">
-          <i class="bi bi-info-circle"></i>
-          <span>Live preview depends on your organization's SharePoint sharing settings. If nothing appears below, use "Open in new tab" above.</span>
-        </div>
+          <div class="cv-edit-panel-fallback">
+            <i class="bi bi-file-earmark-person"></i>
+            <div class="fw-semibold">This CV is stored on SharePoint</div>
+            <p class="text-muted small mb-2" style="max-width:360px;">SharePoint links can't be shown inside another page, so open it directly instead.</p>
+            <a href="{{ cv_view_url }}" target="_blank" rel="noopener" class="btn btn-fill-app btn-sm">
+              <i class="bi bi-box-arrow-up-right"></i> Open CV in new tab
+            </a>
+          </div>
+        {% else %}
+          <iframe id="cvIframe" src="" title="Attached CV"></iframe>
         {% endif %}
-        <iframe id="cvIframe" src="" title="Attached CV"></iframe>
       </div>
     </div>
   </div>
@@ -119,10 +124,10 @@
   var layout = document.getElementById('cvEditLayout');
   var panel = document.getElementById('cvPanel');
   var iframe = document.getElementById('cvIframe');
-  var cvEmbedUrl = '{{ cv_embed_url|escapejs }}';
+  var cvUrl = '{{ cv_view_url|escapejs }}';
 
   openBtn.addEventListener('click', function () {
-    if (iframe && !iframe.src) { iframe.src = cvEmbedUrl; }
+    if (iframe && !iframe.src) { iframe.src = cvUrl; }
     panel.classList.remove('d-none');
     layout.classList.add('cv-open');
   });

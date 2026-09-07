@@ -753,21 +753,14 @@ class CandidateUpdateView(GroupRequiredMixin, UpdateView):
         # it raises ValueError on an empty FileField.
         ctx['cv_view_url'] = self.object.resume_url or (
             self.object.resume_blob_url.url if self.object.resume_blob_url else '')
+        # SharePoint sharing links refuse to render inside another site's
+        # iframe (X-Frame-Options) - tried the action=embedview trick and a
+        # dedicated Graph API proxy; neither panned out (tenant setting
+        # wasn't it, and the CVs live in a separate M365 tenant from the one
+        # this app's Azure AD access covers). Only a locally-uploaded file
+        # (resume_blob_url, served same-origin by this app) can actually be
+        # embedded, so that's the only case that gets a live preview.
         ctx['cv_is_external'] = bool(self.object.resume_url)
-        # A plain SharePoint sharing link ("open in browser") is served with
-        # X-Frame-Options set to block framing. action=embedview requests the
-        # same rendition SharePoint's own "Embed" button generates, which is
-        # the one variant it will actually serve inside an iframe - but only
-        # if the tenant's SharePoint admin has the Embed feature turned on;
-        # that's an org-wide policy this app has no way to read or override,
-        # so this is a best-effort attempt, not a guarantee. Locally-uploaded
-        # files (resume_blob_url) need no such trick - same-origin, no framing
-        # restriction to work around.
-        if ctx['cv_is_external']:
-            sep = '&' if '?' in ctx['cv_view_url'] else '?'
-            ctx['cv_embed_url'] = f"{ctx['cv_view_url']}{sep}action=embedview"
-        else:
-            ctx['cv_embed_url'] = ctx['cv_view_url']
         return ctx
 
     def form_valid(self, form):
