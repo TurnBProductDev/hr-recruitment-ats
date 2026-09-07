@@ -1,8 +1,38 @@
 {% extends "hr_base.html" %}
 {% block title %}Edit {{ object.full_name }}{% endblock %}
+{% block extra_css %}
+<style>
+  .cv-edit-layout { display: flex; align-items: flex-start; gap: 24px; }
+  .cv-edit-form-col { flex: 1 1 0; min-width: 0; max-width: 760px; margin: 0 auto; transition: max-width .15s ease; }
+  .cv-edit-layout.cv-open .cv-edit-form-col { max-width: none; margin: 0; }
+  .cv-edit-panel-col {
+    flex: 1 1 0; min-width: 0;
+    position: sticky; top: 16px;
+    max-height: calc(100vh - 32px);
+    display: flex; flex-direction: column;
+  }
+  .cv-edit-panel-col .app-card {
+    display: flex; flex-direction: column;
+    height: 100%; overflow: hidden; padding: 0 !important;
+  }
+  .cv-edit-panel-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px; border-bottom: 1px solid var(--border-color); flex-shrink: 0;
+  }
+  .cv-edit-panel-body { flex: 1; overflow: auto; background: #f4f6f6; }
+  .cv-edit-panel-body iframe { width: 100%; height: 100%; min-height: 75vh; border: 0; }
+  #viewAttachedCvBtn { text-decoration: none; }
+  #viewAttachedCvBtn:hover { text-decoration: underline; }
+  @media (max-width: 991.98px) {
+    .cv-edit-layout { flex-direction: column; }
+    .cv-edit-panel-col { position: static; max-height: none; }
+    .cv-edit-panel-body iframe { min-height: 60vh; }
+  }
+</style>
+{% endblock %}
 {% block content %}
-<div class="row justify-content-center">
-  <div class="col-lg-8">
+<div class="cv-edit-layout" id="cvEditLayout">
+  <div class="cv-edit-form-col">
     <div class="card app-card p-4">
       <h4 class="mb-3">Edit Candidate</h4>
       <p class="text-muted small">Education and experience rows can be managed from the <a href="{% url 'candidate_timeline' object.pk %}">Candidate Timeline</a> page or Django admin.</p>
@@ -20,7 +50,17 @@
           <div class="col-md-6"><label class="form-label">Last Company</label>{{ form.last_company }}</div>
           <div class="col-md-6"><label class="form-label">Total Experience (years)</label>{{ form.total_experience_years }}</div>
           <div class="col-12"><label class="form-label">{{ form.skills.label }}</label>{{ form.skills }}</div>
-          <div class="col-md-6"><label class="form-label">{{ form.resume_blob_url.label }}</label>{{ form.resume_blob_url }}</div>
+          <div class="col-md-6">
+            <label class="form-label">{{ form.resume_blob_url.label }}</label>
+            {{ form.resume_blob_url }}
+            {% if cv_view_url %}
+              <div class="mt-1">
+                <button type="button" class="btn btn-link btn-sm p-0" id="viewAttachedCvBtn">
+                  <i class="bi bi-file-earmark-person"></i> View attached CV
+                </button>
+              </div>
+            {% endif %}
+          </div>
           <div class="col-md-6"><label class="form-label">LinkedIn</label>{{ form.linkedin }}</div>
           <div class="col-md-6"><label class="form-label">Portfolio URL</label>{{ form.portfolio_url }}</div>
           <div class="col-md-4"><label class="form-label">Notice Period</label>{{ form.notice_period }}</div>
@@ -34,5 +74,46 @@
       </form>
     </div>
   </div>
+
+  {% if cv_view_url %}
+  <div class="cv-edit-panel-col d-none" id="cvPanel">
+    <div class="card app-card">
+      <div class="cv-edit-panel-head">
+        <strong><i class="bi bi-file-earmark-person"></i> Attached CV</strong>
+        <div class="d-flex align-items-center gap-3">
+          <a href="{{ cv_view_url }}" target="_blank" rel="noopener" class="small">Open in new tab <i class="bi bi-box-arrow-up-right"></i></a>
+          <button type="button" class="btn-close" id="cvCloseBtn" aria-label="Close"></button>
+        </div>
+      </div>
+      <div class="cv-edit-panel-body">
+        <iframe id="cvIframe" src="" title="Attached CV"></iframe>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 </div>
+{% endblock %}
+{% block extra_js %}
+{% if cv_view_url %}
+<script>
+(function () {
+  var openBtn = document.getElementById('viewAttachedCvBtn');
+  var closeBtn = document.getElementById('cvCloseBtn');
+  var layout = document.getElementById('cvEditLayout');
+  var panel = document.getElementById('cvPanel');
+  var iframe = document.getElementById('cvIframe');
+  var cvUrl = '{{ cv_view_url|escapejs }}';
+
+  openBtn.addEventListener('click', function () {
+    if (!iframe.src) { iframe.src = cvUrl; }
+    panel.classList.remove('d-none');
+    layout.classList.add('cv-open');
+  });
+  closeBtn.addEventListener('click', function () {
+    panel.classList.add('d-none');
+    layout.classList.remove('cv-open');
+  });
+})();
+</script>
+{% endif %}
 {% endblock %}

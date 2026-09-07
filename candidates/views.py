@@ -722,6 +722,12 @@ class CandidateUpdateView(GroupRequiredMixin, UpdateView):
         ctx['back_url'] = _repository_back_url(self.object, self.request)
         ctx['back_label'] = 'Back to Candidates'
         ctx['breadcrumb_current'] = f'Edit {self.object.full_name}'
+        # The CV a candidate already came in with - either a SharePoint link
+        # from the intake/bulk-upload flow, or a file HR uploaded by hand.
+        # Never touch resume_blob_url.url unless the field is truthy first,
+        # it raises ValueError on an empty FileField.
+        ctx['cv_view_url'] = self.object.resume_url or (
+            self.object.resume_blob_url.url if self.object.resume_blob_url else '')
         return ctx
 
     def form_valid(self, form):
