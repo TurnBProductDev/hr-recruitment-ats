@@ -1,12 +1,33 @@
-# Logic App: `cv-parse-single`
+# Logic Apps
+
+Two workflows in the **HRMS** resource group feed candidates into the ATS, and
+both are tracked here so the prompt/config live in Azure can be diffed against
+git instead of trusted from memory:
+
+| Workflow (Azure name) | File | Trigger | Writes candidates via |
+|---|---|---|---|
+| `CV-Automation-Flow` | [`mailbox_intake.json`](mailbox_intake.json) | New email in the careers inbox | `sp_intake_add_candidate` (stored proc) |
+| `cv-parse-single` | [`cv_parse_single.json`](cv_parse_single.json) | HTTP POST from the ATS **Bulk Upload CV** screen | Django writes the row itself |
+
+A third workflow, `CV-Automation-Flow-Final`, exists in the resource group but
+is **Disabled** — an old draft, not tracked here.
+
+Both workflows' `Summary_completion` step shares the same structured-Markdown
+prompt (headings, a skills table, bulleted sections — see either file's system
+message) and `max_tokens: 900`. Update both together if the prompt changes
+again, then re-export with `az logic workflow show --resource-group HRMS
+--name <workflow-name> --query definition -o json` to keep this copy in sync.
+
+## `cv-parse-single`
 
 Parses **one** CV on demand and returns the extracted fields as JSON. Used by the
 ATS **Bulk Upload CV** screen, so bulk-uploaded CVs get the same email / phone /
 education / summary extraction that the careers-mailbox intake flow already does.
 
-The careers intake workflow (email trigger → `sp_intake_add_candidate`) is
-**unchanged**. This is a second, separate workflow that shares the same
-Form Recognizer, Azure OpenAI and SharePoint connections.
+The careers intake workflow (email trigger → `sp_intake_add_candidate`,
+tracked as [`mailbox_intake.json`](mailbox_intake.json)) is **unchanged** by
+this one. This is a second, separate workflow that shares the same Form
+Recognizer, Azure OpenAI and SharePoint connections.
 
 ```
 Django (bulk upload)  --POST one CV-->  cv-parse-single  --JSON-->  Django
@@ -108,20 +129,21 @@ If a CV takes longer than the Request trigger's synchronous window, Azure
 answers **202 Accepted** with a `Location` header instead. The Django client
 polls that URL until the run finishes, so slow CVs are not lost.
 
-## Differences from the intake workflow (deliberate)
+## Differences from the intake workflow
 
-1. **Summary input.** The intake flow feeds the summary model
-   `base64ToString(contentBytes)` — the raw PDF bytes decoded as text, which is
-   mostly binary noise. Here the summary is built from
-   `body('AnalyzeCV')?['analyzeResult']?['content']`, the text Form Recognizer
-   already extracted. **Worth porting back into the intake flow** — it is a
-   one-expression change to `Summary_completion`.
-2. **Retry policy** trimmed from `count 5 / PT20S` to `count 2 / PT10S` on both
-   OpenAI calls, so one CV finishes inside the synchronous response window.
-3. **Error handling.** See below — success is decided by the data, not by the
+1. **Retry policy.** `cv-parse-single` trims both OpenAI calls to
+   `count 2 / PT10S` so one CV finishes inside the synchronous response
+   window. The intake flow's `Summary_completion` has also been trimmed to
+   `count 2`, but keeps a `PT20S` interval since it isn't racing a synchronous
+   HTTP response; `Extract_completion` there is still `count 5 / PT20S`.
+2. **Error handling.** See below — success is decided by the data, not by the
    scope's status.
-4. **No SP call, no Excel agency lookup.** Vacancy and source come from the
+3. **No SP call, no Excel agency lookup.** Vacancy and source come from the
    upload form.
+
+Both flows now build the summary from `body('AnalyzeCV')?['analyzeResult']?['content']`
+(the text Form Recognizer extracted) rather than raw decoded PDF bytes — that
+was ported back into the intake flow after this doc originally called it out.
 
 ## Why the graph looks like this
 
