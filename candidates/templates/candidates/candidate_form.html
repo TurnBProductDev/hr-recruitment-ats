@@ -59,7 +59,7 @@
             <label class="form-label">{{ form.resume_blob_url.label }}</label>
             {{ form.resume_blob_url }}
             <div class="cv-resume-row mt-1">
-              {% if cv_view_url %}
+              {% if has_cv %}
                 <button type="button" class="btn btn-link btn-sm p-0" id="viewAttachedCvBtn">
                   <i class="bi bi-file-earmark-person"></i> View attached CV
                 </button>
@@ -86,28 +86,28 @@
     </div>
   </div>
 
-  {% if cv_view_url %}
+  {% if has_cv %}
   <div class="cv-edit-panel-col d-none" id="cvPanel">
     <div class="card app-card">
       <div class="cv-edit-panel-head">
         <strong><i class="bi bi-file-earmark-person"></i> Attached CV</strong>
         <div class="d-flex align-items-center gap-3">
-          <a href="{{ cv_view_url }}" target="_blank" rel="noopener" class="small">Open in new tab <i class="bi bi-box-arrow-up-right"></i></a>
+          <a href="{% url 'candidate_cv' object.pk %}" target="_blank" rel="noopener" class="small">Open in new tab <i class="bi bi-box-arrow-up-right"></i></a>
           <button type="button" class="btn-close" id="cvCloseBtn" aria-label="Close"></button>
         </div>
       </div>
       <div class="cv-edit-panel-body">
-        {% if cv_is_external %}
+        {% if cv_is_previewable %}
+          <iframe id="cvIframe" src="" title="Attached CV"></iframe>
+        {% else %}
           <div class="cv-edit-panel-fallback">
             <i class="bi bi-file-earmark-person"></i>
             <div class="fw-semibold">This CV is stored on SharePoint</div>
             <p class="text-muted small mb-2" style="max-width:360px;">SharePoint links can't be shown inside another page, so open it directly instead.</p>
-            <a href="{{ cv_view_url }}" target="_blank" rel="noopener" class="btn btn-fill-app btn-sm">
+            <a href="{% url 'candidate_cv' object.pk %}" target="_blank" rel="noopener" class="btn btn-fill-app btn-sm">
               <i class="bi bi-box-arrow-up-right"></i> Open CV in new tab
             </a>
           </div>
-        {% else %}
-          <iframe id="cvIframe" src="" title="Attached CV"></iframe>
         {% endif %}
       </div>
     </div>
@@ -116,7 +116,7 @@
 </div>
 {% endblock %}
 {% block extra_js %}
-{% if cv_view_url %}
+{% if has_cv %}
 <script>
 (function () {
   var openBtn = document.getElementById('viewAttachedCvBtn');
@@ -124,7 +124,7 @@
   var layout = document.getElementById('cvEditLayout');
   var panel = document.getElementById('cvPanel');
   var iframe = document.getElementById('cvIframe');
-  var cvUrl = '{{ cv_view_url|escapejs }}';
+  var cvUrl = '{% url "candidate_cv" object.pk %}';
 
   openBtn.addEventListener('click', function () {
     if (iframe && !iframe.src) { iframe.src = cvUrl; }

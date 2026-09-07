@@ -185,6 +185,17 @@ AZURE_OPENAI_SCORING_DEPLOYMENT = os.environ.get("AZURE_OPENAI_SCORING_DEPLOYMEN
 AZURE_OPENAI_API_VERSION = os.environ.get("AZURE_OPENAI_API_VERSION", "2024-08-01-preview")
 SCORE_CANDIDATES_TIMEOUT = int(os.environ.get("SCORE_CANDIDATES_TIMEOUT", "60"))
 
+# --- CV storage (Azure Blob) ------------------------------------------------
+# Candidates from the careers-mailbox intake flow have their CV written to
+# this container (in addition to the existing SharePoint copy); Candidate.
+# resume_url stores the blob's plain URL, and candidates/cv_storage.py signs
+# a short-lived SAS URL on demand for viewing it. Unset = candidates whose
+# resume_url happens to look like a blob URL are treated as a normal
+# external link instead (falls back to "open in new tab", nothing crashes).
+AZURE_STORAGE_ACCOUNT_NAME = os.environ.get("AZURE_STORAGE_ACCOUNT_NAME", "")
+AZURE_STORAGE_ACCOUNT_KEY = os.environ.get("AZURE_STORAGE_ACCOUNT_KEY", "")
+AZURE_STORAGE_CV_CONTAINER = os.environ.get("AZURE_STORAGE_CV_CONTAINER", "candidate-cvs")
+
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'hr_dashboard'
 LOGOUT_REDIRECT_URL = 'vacancy_list'

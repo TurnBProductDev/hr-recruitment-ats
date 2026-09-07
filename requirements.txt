@@ -10,6 +10,8 @@ whitenoise>=6.6
 openpyxl>=3.1
 # Calls the cv-parse-single Logic App from Bulk Upload CV
 requests>=2.31
+# Signs short-lived SAS URLs for candidate CVs filed to Azure Blob Storage
+azure-storage-blob>=12.19
 # Builds the .ics calendar attachment for interview invite emails
 icalendar>=5.0,<6.0
 # PostgreSQL (optional, only if DB_ENGINE=postgres)

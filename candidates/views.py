@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.contrib import messages
 from django.db.models import Count, Exists, F, Max, OuterRef, Q, Subquery
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -11,7 +11,7 @@ from django.views.generic import DetailView, ListView, UpdateView
 from interviews.models import Interview, InterviewReschedule
 from jobs.models import Job
 
-from . import bulk, cv_parser, match_scoring, scoring, services
+from . import bulk, cv_parser, cv_storage, match_scoring, scoring, services
 from .forms import (
     BulkUploadForm,
     CandidateApplicationForm,
@@ -747,20 +747,31 @@ class CandidateUpdateView(GroupRequiredMixin, UpdateView):
         ctx['back_url'] = _repository_back_url(self.object, self.request)
         ctx['back_label'] = 'Back to Candidates'
         ctx['breadcrumb_current'] = f'Edit {self.object.full_name}'
-        # The CV a candidate already came in with - either a SharePoint link
-        # from the intake/bulk-upload flow, or a file HR uploaded by hand.
-        # Never touch resume_blob_url.url unless the field is truthy first,
-        # it raises ValueError on an empty FileField.
-        ctx['cv_view_url'] = self.object.resume_url or (
-            self.object.resume_blob_url.url if self.object.resume_blob_url else '')
-        # SharePoint sharing links refuse to render inside another site's
-        # iframe (X-Frame-Options) - tried the action=embedview trick and a
-        # dedicated Graph API proxy; neither panned out (tenant setting
-        # wasn't it, and the CVs live in a separate M365 tenant from the one
-        # this app's Azure AD access covers). Only a locally-uploaded file
-        # (resume_blob_url, served same-origin by this app) can actually be
-        # embedded, so that's the only case that gets a live preview.
-        ctx['cv_is_external'] = bool(self.object.resume_url)
+        # The CV a candidate already came in with - either a link (a blob
+        # this app itself signs, or a legacy SharePoint sharing URL) or a
+        # file HR uploaded by hand. Every view of it goes through
+        # candidate_cv (CandidateCvView), which resolves and redirects with
+        # this exact same resume_url-wins-over-resume_blob_url precedence -
+        # never link resume_url or resume_blob_url.url directly, a blob URL
+        # has no SAS token attached and a bare FileField.url raises
+        # ValueError when no file is present.
+        resume_url = (self.object.resume_url or '').strip()
+        if resume_url:
+            ctx['has_cv'] = True
+            # SharePoint sharing links refuse to render inside another
+            # site's iframe (X-Frame-Options) - tried the action=embedview
+            # trick and a dedicated Graph API proxy; neither panned out
+            # (tenant setting wasn't it, and SharePoint CVs live in a
+            # separate M365 tenant from the one this app's Azure AD access
+            # covers). A blob-stored CV embeds fine via our own SAS
+            # redirect; a non-blob resume_url (SharePoint) can't.
+            ctx['cv_is_previewable'] = cv_storage.is_our_blob_url(resume_url)
+        elif self.object.resume_blob_url:
+            ctx['has_cv'] = True
+            ctx['cv_is_previewable'] = True  # served same-origin by this app
+        else:
+            ctx['has_cv'] = False
+            ctx['cv_is_previewable'] = False
         return ctx
 
     def form_valid(self, form):
@@ -769,6 +780,27 @@ class CandidateUpdateView(GroupRequiredMixin, UpdateView):
 
     def get_success_url(self):
         return reverse('candidate_timeline', args=[self.object.pk])
+
+
+class CandidateCvView(GroupRequiredMixin, View):
+    """The one place any template links to view a candidate's CV. Resolves
+    resume_url (signing it if it's one of our own blobs, redirecting as-is
+    if it's an external link like a legacy SharePoint sharing URL) or falls
+    back to resume_blob_url - same precedence CandidateUpdateView uses to
+    decide has_cv/cv_is_previewable, so what's promised as previewable there
+    is exactly what this view can actually serve."""
+    allowed_groups = ANY_STAFF
+
+    def get(self, request, pk):
+        candidate = get_object_or_404(Candidate, pk=pk)
+        resume_url = (candidate.resume_url or '').strip()
+        if resume_url:
+            target = cv_storage.sas_url(resume_url) if cv_storage.is_our_blob_url(resume_url) else resume_url
+        elif candidate.resume_blob_url:
+            target = candidate.resume_blob_url.url
+        else:
+            raise Http404('No CV on file.')
+        return redirect(target)
 
 
 class CandidateChangeJobView(GroupRequiredMixin, View):

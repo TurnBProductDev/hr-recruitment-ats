@@ -28,7 +28,7 @@
                     "Execute_stored_procedure_(V2)": {
                       "inputs": {
                         "body": {
-                          "cv_link": "@body('Create_sharing_link_for_a_file_or_folder')?['link']?['webUrl']",
+                          "cv_link": "@if(equals(actions('Create_blob')?['status'], 'Succeeded'), concat('https://hirebcvfiles.blob.core.windows.net/candidate-cvs/', encodeURIComponent(body('Get_Attachment_(V2)')?['name'])), body('Create_sharing_link_for_a_file_or_folder')?['link']?['webUrl'])",
                           "cv_summary": "@coalesce(body('Summary_completion')?['choices']?[0]?['message']?['content'], '')",
                           "education": "@body('Parse_JSON')?['Education']",
                           "email": "@body('Parse_JSON')?['Email']",
@@ -54,7 +54,7 @@
                       "Execute_stored_procedure_(V2)_1": {
                         "inputs": {
                           "body": {
-                            "cv_link": "@body('Create_sharing_link_for_a_file_or_folder')?['link']?['webUrl']",
+                            "cv_link": "@if(equals(actions('Create_blob')?['status'], 'Succeeded'), concat('https://hirebcvfiles.blob.core.windows.net/candidate-cvs/', encodeURIComponent(body('Get_Attachment_(V2)')?['name'])), body('Create_sharing_link_for_a_file_or_folder')?['link']?['webUrl'])",
                             "cv_summary": "@coalesce(body('Summary_completion')?['choices']?[0]?['message']?['content'], '')",
                             "education": "@body('Parse_JSON')?['Education']",
                             "email": "@body('Parse_JSON')?['Email']",
@@ -87,6 +87,12 @@
                     ]
                   },
                   "runAfter": {
+                    "Create_blob": [
+                      "Succeeded",
+                      "Failed",
+                      "TimedOut",
+                      "Skipped"
+                    ],
                     "Filter_array": [
                       "Succeeded"
                     ]
@@ -105,6 +111,37 @@
                     "path": "/datasets/@{encodeURIComponent(encodeURIComponent('https://netorg519925.sharepoint.com/sites/TeamHR'))}/files",
                     "queries": {
                       "folderPath": "/Shared Documents/General/HR - Docs/TurnB - HR/Recruitment/Resume Received",
+                      "name": "@body('Get_Attachment_(V2)')?['name']",
+                      "queryParametersSingleEncoded": true
+                    }
+                  },
+                  "runAfter": {
+                    "Summary_completion": [
+                      "Succeeded",
+                      "Failed",
+                      "TimedOut",
+                      "Skipped"
+                    ]
+                  },
+                  "runtimeConfiguration": {
+                    "contentTransfer": {
+                      "transferMode": "Chunked"
+                    }
+                  },
+                  "type": "ApiConnection"
+                },
+                "Create_blob": {
+                  "inputs": {
+                    "body": "@base64ToBinary(body('Get_Attachment_(V2)')?['contentBytes'])",
+                    "host": {
+                      "connection": {
+                        "name": "@parameters('$connections')['azureblob']['connectionId']"
+                      }
+                    },
+                    "method": "post",
+                    "path": "/datasets/default/files",
+                    "queries": {
+                      "folderPath": "/candidate-cvs",
                       "name": "@body('Get_Attachment_(V2)')?['name']",
                       "queryParametersSingleEncoded": true
                     }

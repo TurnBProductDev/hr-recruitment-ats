@@ -262,15 +262,10 @@ html { scroll-behavior: smooth; }
 
         <div class="card app-card p-4 mb-3">
           <div class="section-eyebrow">Attachments</div>
-          {% if candidate.resume_url %}
+          {% if candidate.resume_url or candidate.resume_blob_url %}
           <div class="mb-{% if attachments %}3{% else %}0{% endif %}">
             <div class="field-label">Resume (CV)</div>
-            <div class="field-value"><a href="{{ candidate.resume_url }}" target="_blank"><i class="bi bi-file-earmark-person"></i> Open CV</a></div>
-          </div>
-          {% elif candidate.resume_blob_url %}
-          <div class="mb-{% if attachments %}3{% else %}0{% endif %}">
-            <div class="field-label">Resume</div>
-            <div class="field-value"><a href="{{ candidate.resume_blob_url.url }}" target="_blank">Download / Preview</a></div>
+            <div class="field-value"><a href="{% url 'candidate_cv' candidate.pk %}" target="_blank"><i class="bi bi-file-earmark-person"></i> Open CV</a></div>
           </div>
           {% endif %}
           {% for a in attachments %}
