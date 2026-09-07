@@ -5,7 +5,9 @@ from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.decorators import method_decorator
 from django.views import View
+from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.generic import DetailView, ListView, UpdateView
 
 from interviews.models import Interview, InterviewReschedule
@@ -782,13 +784,22 @@ class CandidateUpdateView(GroupRequiredMixin, UpdateView):
         return reverse('candidate_timeline', args=[self.object.pk])
 
 
+@method_decorator(xframe_options_exempt, name='dispatch')
 class CandidateCvView(GroupRequiredMixin, View):
     """The one place any template links to view a candidate's CV. Resolves
     resume_url (signing it if it's one of our own blobs, redirecting as-is
     if it's an external link like a legacy SharePoint sharing URL) or falls
     back to resume_blob_url - same precedence CandidateUpdateView uses to
     decide has_cv/cv_is_previewable, so what's promised as previewable there
-    is exactly what this view can actually serve."""
+    is exactly what this view can actually serve.
+
+    xframe_options_exempt because this is exactly what the Edit Candidate
+    page's iframe preview loads: XFrameOptionsMiddleware puts X-Frame-Options:
+    DENY on every response by default (including a redirect), and a browser
+    enforces that on the very first hop - our own 302 - before it ever
+    reaches the blob's response. Without this, the frame silently renders
+    blank even though the signed blob URL is fine on its own (confirmed:
+    "Open in new tab" on the exact same link worked)."""
     allowed_groups = ANY_STAFF
 
     def get(self, request, pk):
