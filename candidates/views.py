@@ -98,6 +98,17 @@ HIRING_STAGES = [
      ]},
 ]
 
+# Stage Dates (SLA) tracker labels - named after the decision that produced
+# each status, not the status's own name, so the tracker reads as a story
+# ("Qualified" -> "Shortlisted" -> "Round 1 Cleared") rather than a bare
+# repeat of the Hiring block's stage names. See CandidateTimelineView.
+SLA_ARRIVAL_LABELS = {
+    STATUS.SHORTLISTED: 'Qualified',
+    STATUS.ROUND1: 'Shortlisted',
+    STATUS.INTERVIEW: 'Round 1 Cleared',
+    STATUS.FINAL_SELECTION: 'Final Decision',
+}
+
 
 def _build_hiring_stages(candidate, history):
     """Render data for the Hiring block's 5 stage cards: which stage is
@@ -683,21 +694,35 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
             ctx['final_status'] = {'label': f'In Progress · {HIRING_STAGES[active_stage_index]["label"]}',
                                    'color': '#17a2b8'}
 
-        # Stage Dates (SLA) tracker: Applied, plus every later stage actually
-        # reached so far (stages the candidate hasn't gotten to yet don't
-        # have a date and are left off rather than shown blank). "Open" is
-        # skipped as its own node - it's set at intake, the same moment as
-        # "Applied", so showing both is a redundant, same-day duplicate. A
-        # candidate who exited to a terminal outcome (Hired/Rejected/
-        # Blacklisted) gets that outcome appended too, so e.g. someone
-        # rejected at screening shows "Applied -> Rejected" instead of
-        # stopping at "Open" as if that were where they ended up.
+        # Stage Dates (SLA) tracker: Applied, plus every later checkpoint
+        # actually reached so far (checkpoints the candidate hasn't gotten to
+        # yet don't have a date and are left off rather than shown blank).
+        # "Open" is skipped as its own node - it's set at intake, the same
+        # moment as "Applied", so showing both is a redundant, same-day
+        # duplicate. Each later status contributes an "arrival" checkpoint,
+        # named after the decision that produced it (entering Shortlisted =
+        # "Qualified", entering Round1 = "Shortlisted", etc. - see
+        # SLA_ARRIVAL_LABELS); Round 1 and Round 2 additionally get a
+        # "Scheduled" checkpoint for when an interview of that round was
+        # first booked, if one ever was. A candidate who exited to a
+        # terminal outcome (Hired/Rejected/Blacklisted) gets that outcome
+        # appended too, so e.g. someone rejected at screening shows
+        # "Applied -> Rejected" instead of stopping at "Open" as if that
+        # were where they ended up.
         sla_stages = [{'label': 'Applied', 'date': candidate.created_at}]
         for stage in hiring_stages:
             if stage['status'] == STATUS.OPEN:
                 continue
             if stage['entered']:
-                sla_stages.append({'label': stage['short_label'], 'date': stage['entered'].changed_at})
+                sla_stages.append({'label': SLA_ARRIVAL_LABELS[stage['status']],
+                                   'date': stage['entered'].changed_at})
+            if stage['interview_rounds']:
+                first_interview = min(
+                    (i for i in ctx['interviews'] if i.round_type in stage['interview_rounds']),
+                    key=lambda i: i.created_at, default=None)
+                if first_interview:
+                    sla_stages.append({'label': f"{stage['decision_label']} Scheduled",
+                                       'date': first_interview.created_at})
         if active_stage_index is None and last and last.new_status == candidate.status:
             sla_stages.append({'label': ctx['final_status']['label'], 'date': last.changed_at,
                                'color': ctx['final_status']['color']})
