@@ -135,38 +135,38 @@ html { scroll-behavior: smooth; }
 
 {% block content %}
 <div class="d-flex justify-content-end align-items-center gap-3 mb-3">
-  <div class="text-end">
-    <div class="fw-bold" style="font-size:1.15rem; line-height:1.2;">{{ candidate.full_name }}</div>
-    <div class="pd-meta text-muted">{{ candidate.candidate_code }}</div>
-  </div>
-  <div>
-    <span class="{{ candidate.status|badge_class }}">{{ candidate.status_label }}</span>
-    {% if reapply %}<span class="badge-dup ms-2">Reapply</span>{% endif %}
-    {% if candidate.is_blacklisted and candidate.status != 'BLACKLISTED' %}<span class="badge-status badge-blacklisted ms-2">Blacklisted</span>{% endif %}
-    <a href="{% url 'candidate_edit' candidate.pk %}" class="btn btn-outline-app btn-sm ms-2">Edit</a>
-    {% if can_revert %}
-    <form method="post" action="{% url 'candidate_revert' candidate.pk %}" class="d-inline"
-          onsubmit="return confirm('Undo the last action? It will be removed from the history and the dashboard.');">
-      {% csrf_token %}
-      <input type="hidden" name="next" value="{{ request.get_full_path }}">
-      <button class="btn btn-outline-secondary btn-sm ms-1"><i class="bi bi-arrow-counterclockwise"></i> Undo last action</button>
-    </form>
-    {% endif %}
-    {% if is_hr_admin %}
-    <form method="post" action="{% url 'candidate_delete' candidate.pk %}" class="d-inline"
-          onsubmit="return confirm('Permanently delete {{ candidate.full_name|escapejs }} and ALL their records? This cannot be undone.');">
-      {% csrf_token %}
-      <button class="btn btn-danger btn-sm ms-1"><i class="bi bi-trash"></i> Delete</button>
-    </form>
-    {% endif %}
-  </div>
+  <span class="{{ candidate.status|badge_class }}">{{ candidate.status_label }}</span>
+  {% if reapply %}<span class="badge-dup ms-2">Reapply</span>{% endif %}
+  {% if candidate.is_blacklisted and candidate.status != 'BLACKLISTED' %}<span class="badge-status badge-blacklisted ms-2">Blacklisted</span>{% endif %}
+  <a href="{% url 'candidate_edit' candidate.pk %}" class="btn btn-outline-app btn-sm ms-2">Edit</a>
+  {% if can_revert %}
+  <form method="post" action="{% url 'candidate_revert' candidate.pk %}" class="d-inline"
+        onsubmit="return confirm('Undo the last action? It will be removed from the history and the dashboard.');">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <button class="btn btn-outline-secondary btn-sm ms-1"><i class="bi bi-arrow-counterclockwise"></i> Undo last action</button>
+  </form>
+  {% endif %}
+  {% if is_hr_admin %}
+  <form method="post" action="{% url 'candidate_delete' candidate.pk %}" class="d-inline"
+        onsubmit="return confirm('Permanently delete {{ candidate.full_name|escapejs }} and ALL their records? This cannot be undone.');">
+    {% csrf_token %}
+    <button class="btn btn-danger btn-sm ms-1"><i class="bi bi-trash"></i> Delete</button>
+  </form>
+  {% endif %}
 </div>
 
-<nav class="quick-nav">
-  <a href="#block-details" class="quick-nav-link" data-block="details"><i class="bi bi-person-vcard"></i> Candidate Details</a>
-  <a href="#block-ai" class="quick-nav-link" data-block="ai"><i class="bi bi-stars"></i> AI-Scan</a>
-  <a href="#block-hiring" class="quick-nav-link" data-block="hiring"><i class="bi bi-signpost-split"></i> Hiring</a>
-  <a href="#block-history" class="quick-nav-link" data-block="history"><i class="bi bi-clock-history"></i> History</a>
+<nav class="quick-nav d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div class="d-flex flex-wrap gap-2">
+    <a href="#block-details" class="quick-nav-link" data-block="details"><i class="bi bi-person-vcard"></i> Candidate Details</a>
+    <a href="#block-ai" class="quick-nav-link" data-block="ai"><i class="bi bi-stars"></i> AI-Scan</a>
+    <a href="#block-hiring" class="quick-nav-link" data-block="hiring"><i class="bi bi-signpost-split"></i> Hiring</a>
+    <a href="#block-history" class="quick-nav-link" data-block="history"><i class="bi bi-clock-history"></i> History</a>
+  </div>
+  <div class="text-end">
+    <div class="fw-bold" style="font-size:1.4rem; line-height:1.2;">{{ candidate.full_name }}</div>
+    <div class="pd-meta text-muted">{{ candidate.candidate_code }}</div>
+  </div>
 </nav>
 
 <div class="profile-sections">

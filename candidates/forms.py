@@ -25,6 +25,16 @@ class BootstrapFormMixin:
                 widget.attrs.setdefault('class', 'form-control')
 
 
+class BareClearableFileInput(forms.ClearableFileInput):
+    """A ClearableFileInput that renders as a plain <input type=file> - none
+    of the default widget's own "Currently: <link> / Clear / Change:" markup.
+    Clearing still works: the widget's value_from_datadict looks for a
+    checkbox named "<field>-clear" in POST data regardless of where in the
+    page that checkbox lives, so candidate_form.html renders its own,
+    placed next to the "View attached CV" link instead."""
+    template_name = 'django/forms/widgets/file.html'
+
+
 class CandidateApplicationForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:
         model = Candidate
@@ -44,6 +54,7 @@ class CandidateApplicationForm(BootstrapFormMixin, forms.ModelForm):
         widgets = {
             'dob': forms.DateInput(attrs={'type': 'date'}),
             'skills': forms.Textarea(attrs={'rows': 2, 'placeholder': 'e.g. Python, SQL, Excel'}),
+            'resume_blob_url': BareClearableFileInput,
         }
 
     def __init__(self, *args, **kwargs):
