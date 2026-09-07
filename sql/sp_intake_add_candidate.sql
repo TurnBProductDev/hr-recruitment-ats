@@ -74,14 +74,18 @@ BEGIN
     -- so the General Applications page can still group them by what they wanted.
     DECLARE @role nvarchar(255) = NULLIF(LTRIM(RTRIM(ISNULL(@role_applied, ''))), '');
 
+    -- match_state has no database-level default (Django's default='PENDING' on
+    -- the model is app-side only) - list it explicitly or a NOT NULL candidates_candidate
+    -- column omitted here fails the insert. Keep this in sync with any future
+    -- NOT NULL Candidate field that has only a Django-side default.
     INSERT INTO dbo.candidates_candidate
         (candidate_code, full_name, email, phone, qualification, resume_url,
          source, status, is_duplicate, is_blacklisted, is_on_hold, hold_from_status,
-         created_at, updated_at, job_id, cv_summary, role_applied)
+         created_at, updated_at, job_id, cv_summary, role_applied, match_state)
     VALUES
         (@code, @full_name, @email_norm, @phone, @education, @cv_link,
          @src, @status, @is_dup, @is_black, 0, '',
-         @created, @now, @job_id, @cv_summary, @role);
+         @created, @now, @job_id, @cv_summary, @role, 'PENDING');
     DECLARE @cid bigint = SCOPE_IDENTITY();
 
     IF @is_dup = 1
