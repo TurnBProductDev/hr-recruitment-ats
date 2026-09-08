@@ -596,7 +596,10 @@ html { scroll-behavior: smooth; }
           {% if not forloop.first %}<div class="sla-line" {% if s.color %}style="background:{{ s.color }};"{% endif %}></div>{% endif %}
           <span class="sla-dot" {% if s.color %}style="background:{{ s.color }};box-shadow:0 0 0 1px {{ s.color }};"{% endif %}></span>
           <div class="sla-label" {% if s.color %}style="color:{{ s.color }};"{% endif %}>{{ s.label }}</div>
-          <div class="sla-date">{{ s.date|date:"d M Y" }}{% if s.pending %} (upcoming){% endif %}</div>
+          <div class="sla-date">
+            {% if s.date %}{{ s.date|date:"d M Y" }}{% if s.pending %} (upcoming){% endif %}
+            {% else %}Not yet scheduled{% endif %}
+          </div>
         </div>
         {% endfor %}
       </div>

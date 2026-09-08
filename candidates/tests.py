@@ -1026,3 +1026,36 @@ class SlaTrackerInterviewDateTests(TestCase):
             scheduled_date=timezone.now() - timezone.timedelta(days=1))
         response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
         self.assertNotContains(response, 'sla-stage sla-pending')
+
+    def test_round1_scheduled_placeholder_shown_before_anything_is_booked(self):
+        """Reached Round 1 (Shortlisted -> Round 1) but nothing scheduled yet -
+        a dotted, not-yet-reached placeholder, not just a missing node."""
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertContains(response, 'Round 1 Scheduled')
+        self.assertContains(response, 'Not yet scheduled')
+        self.assertContains(response, 'sla-stage sla-pending')
+
+    def test_round1_scheduled_checkpoint_disappears_once_round1_is_cleared(self):
+        """Once Round 1 is actually cleared, "Round 1 Scheduled" is no longer
+        shown at all - "Round 1 Cleared" already tells that story."""
+        Interview.objects.create(
+            candidate=self.candidate, round_type=Interview.RoundType.ROUND1,
+            status=Interview.Status.COMPLETED, result=Interview.Result.PASS_,
+            scheduled_date=timezone.now() - timezone.timedelta(days=1))
+        services.change_status(self.candidate, Candidate.Status.INTERVIEW)
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertContains(response, 'Round 1 Cleared')
+        self.assertNotContains(response, 'Round 1 Scheduled')
+
+    def test_round2_scheduled_placeholder_shown_once_round1_is_cleared(self):
+        """Symmetric case one stage further: Round 1 cleared, nothing booked
+        for Round 2 yet - Round 2's own dotted placeholder, not Round 1's."""
+        Interview.objects.create(
+            candidate=self.candidate, round_type=Interview.RoundType.ROUND1,
+            status=Interview.Status.COMPLETED, result=Interview.Result.PASS_,
+            scheduled_date=timezone.now() - timezone.timedelta(days=1))
+        services.change_status(self.candidate, Candidate.Status.INTERVIEW)
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertContains(response, 'Round 2 Scheduled')
+        self.assertContains(response, 'Not yet scheduled')
+        self.assertNotContains(response, 'Round 1 Scheduled')

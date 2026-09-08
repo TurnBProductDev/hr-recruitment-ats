@@ -707,12 +707,18 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
         # named after the decision that produced it (entering Shortlisted =
         # "Qualified", entering Round1 = "Shortlisted", etc. - see
         # SLA_ARRIVAL_LABELS); Round 1 and Round 2 additionally get a
-        # "Scheduled" checkpoint for when an interview of that round was
-        # first booked, if one ever was. A candidate who exited to a
-        # terminal outcome (Hired/Rejected/Blacklisted) gets that outcome
-        # appended too, so e.g. someone rejected at screening shows
-        # "Applied -> Rejected" instead of stopping at "Open" as if that
-        # were where they ended up.
+        # "Scheduled" checkpoint - a real date once an interview of that round
+        # is booked, or a not-yet-reached placeholder (dotted, see
+        # .sla-pending) while the candidate is at that stage with nothing
+        # booked yet - dropped entirely once the round is actually cleared
+        # (that story is already told by "<Round> Cleared"/the next
+        # checkpoint, so repeating "Scheduled" past that point is just
+        # clutter). A candidate who exited to a terminal outcome
+        # (Hired/Rejected/Blacklisted) gets that outcome appended too, so
+        # e.g. someone rejected at screening shows "Applied -> Rejected"
+        # instead of stopping at "Open" as if that were where they ended up.
+        entered_by_status = {s['status']: s['entered'] for s in hiring_stages}
+        NEXT_ROUND_STATUS = {STATUS.ROUND1: STATUS.INTERVIEW, STATUS.INTERVIEW: STATUS.FINAL_SELECTION}
         sla_stages = [{'label': 'Applied', 'date': candidate.created_at}]
         for stage in hiring_stages:
             if stage['status'] == STATUS.OPEN:
@@ -720,7 +726,8 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
             if stage['entered']:
                 sla_stages.append({'label': SLA_ARRIVAL_LABELS[stage['status']],
                                    'date': stage['entered'].changed_at})
-            if stage['interview_rounds']:
+            cleared_this_round = bool(entered_by_status.get(NEXT_ROUND_STATUS.get(stage['status'])))
+            if stage['interview_rounds'] and stage['entered'] and not cleared_this_round:
                 first_interview = min(
                     (i for i in ctx['interviews'] if i.round_type in stage['interview_rounds']),
                     key=lambda i: i.created_at, default=None)
@@ -736,6 +743,12 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
                         'date': first_interview.scheduled_date,
                         'pending': (first_interview.status != Interview.Status.COMPLETED
                                    and first_interview.scheduled_date > timezone.now()),
+                    })
+                else:
+                    # Reached this round but nothing booked yet.
+                    sla_stages.append({
+                        'label': f"{stage['decision_label']} Scheduled",
+                        'date': None, 'pending': True,
                     })
         if active_stage_index is None and last and last.new_status == candidate.status:
             sla_stages.append({'label': ctx['final_status']['label'], 'date': last.changed_at,
