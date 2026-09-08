@@ -3,6 +3,7 @@ candidates app, built around the email_registry + blacklist tables.
 """
 import uuid
 
+from . import profile_extraction
 from .models import (
     PLACEHOLDER_EMAIL_DOMAIN,
     Blacklist,
@@ -150,6 +151,11 @@ def create_from_parsed_cv(fields, job, source, user=None, performed_by=None, rem
             candidate=candidate, qualification=qualification,
             institution=institution, year_completed=year,
         )
+
+    # The Logic App only extracts Name/Email/Mobile/Education (see
+    # logic_apps/README.md); pull last_role/last_company/experience/skills back
+    # out of the AI CV Summary it also produced, best-effort.
+    profile_extraction.apply_missing_fields(candidate)
 
     record_creation(candidate, user=user, remarks=remarks, performed_by=performed_by)
     return candidate

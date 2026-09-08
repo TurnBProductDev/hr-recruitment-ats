@@ -15,7 +15,7 @@ from django.conf import settings
 from django.db import connection
 from django.utils import timezone
 
-from . import match_scoring
+from . import match_scoring, profile_extraction
 from .match_scoring import ScoreError
 from .models import Candidate
 
@@ -80,6 +80,12 @@ def score_one(candidate):
     if not claimed:
         return None
     candidate.refresh_from_db()
+
+    # The careers-mailbox intake (sp_intake_add_candidate) never fills
+    # last_role/last_company/experience/skills - see candidates/profile_extraction.py.
+    # Backfill from the AI CV Summary before scoring so those blanks don't
+    # understate the match score.
+    profile_extraction.apply_missing_fields(candidate)
 
     try:
         result = match_scoring.score_candidate(candidate, candidate.job)
