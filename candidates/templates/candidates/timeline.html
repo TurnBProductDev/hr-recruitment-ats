@@ -347,10 +347,10 @@ html { scroll-behavior: smooth; }
             <div class="pd-meta text-muted mt-1">{{ candidate.job.title|default:"the mapped vacancy" }} &middot; {{ candidate.match_scored_at|date:"d M Y" }}</div>
 
             <div class="match-subscore-grid">
-              <div class="d-flex justify-content-between"><span class="text-muted">Skills</span><span class="fw-semibold font-monospace">{{ b.skills_score|default:"-" }}/{{ b.weights.skills|default:30 }}</span></div>
-              <div class="d-flex justify-content-between"><span class="text-muted">Experience</span><span class="fw-semibold font-monospace">{{ b.experience_score|default:"-" }}/{{ b.weights.experience|default:30 }}</span></div>
-              <div class="d-flex justify-content-between"><span class="text-muted">Education</span><span class="fw-semibold font-monospace">{{ b.education_score|default:"-" }}/{{ b.weights.education|default:30 }}</span></div>
-              <div class="d-flex justify-content-between"><span class="text-muted">Overall Fit</span><span class="fw-semibold font-monospace">{{ b.fit_score|default:"-" }}/{{ b.weights.fit|default:10 }}</span></div>
+              <div class="d-flex justify-content-between"><span class="text-muted">Skills</span><span class="fw-semibold font-monospace">{{ b.skills_score|default_if_none:"-" }}/{{ b.weights.skills|default:30 }}</span></div>
+              <div class="d-flex justify-content-between"><span class="text-muted">Experience</span><span class="fw-semibold font-monospace">{{ b.experience_score|default_if_none:"-" }}/{{ b.weights.experience|default:30 }}</span></div>
+              <div class="d-flex justify-content-between"><span class="text-muted">Education</span><span class="fw-semibold font-monospace">{{ b.education_score|default_if_none:"-" }}/{{ b.weights.education|default:30 }}</span></div>
+              <div class="d-flex justify-content-between"><span class="text-muted">Overall Fit</span><span class="fw-semibold font-monospace">{{ b.fit_score|default_if_none:"-" }}/{{ b.weights.fit|default:10 }}</span></div>
             </div>
 
             {% if b.disqualifiers %}
