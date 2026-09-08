@@ -725,8 +725,18 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
                     (i for i in ctx['interviews'] if i.round_type in stage['interview_rounds']),
                     key=lambda i: i.created_at, default=None)
                 if first_interview:
-                    sla_stages.append({'label': f"{stage['decision_label']} Scheduled",
-                                       'date': first_interview.created_at})
+                    # The date shown is when the interview actually happens
+                    # (or is due to), not when the Schedule action was taken -
+                    # rescheduling moves this checkpoint's date along with it,
+                    # since it rewrites the same row (see InterviewReschedule).
+                    # Still in the future = not reached yet, drawn dotted/hollow
+                    # below rather than as a completed step.
+                    sla_stages.append({
+                        'label': f"{stage['decision_label']} Scheduled",
+                        'date': first_interview.scheduled_date,
+                        'pending': (first_interview.status != Interview.Status.COMPLETED
+                                   and first_interview.scheduled_date > timezone.now()),
+                    })
         if active_stage_index is None and last and last.new_status == candidate.status:
             sla_stages.append({'label': ctx['final_status']['label'], 'date': last.changed_at,
                                'color': ctx['final_status']['color']})

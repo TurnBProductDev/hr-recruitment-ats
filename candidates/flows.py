@@ -7,7 +7,6 @@ both places guarantees the dashboard count and the drill-down list always match.
 having cleared a stage even if they were later rejected/hired (funnel view).
 """
 from django.db.models import OuterRef, Q, Subquery
-from django.utils import timezone
 
 from candidates.models import Candidate, CommunicationLog
 from interviews.models import Interview
@@ -33,19 +32,22 @@ def _reached(stage):
 
 
 def _decision_pending(round_types):
-    """Interviews of `round_types` whose outcome was never recorded: either marked
-    completed with no pass/fail, or the date has passed and it still sits as
-    scheduled. These are the 'we forgot to mark an action' cases."""
-    rt = {'interviews__round_type__in': round_types}
-    return (Q(**rt, interviews__status=COMPLETED, interviews__result=PENDING)
-            | Q(**rt, interviews__status__in=[SCHED, RESCHED], interviews__result=PENDING,
-                interviews__scheduled_date__lt=timezone.now()))
+    """Interviews of `round_types` marked Done with no pass/fail ever
+    recorded - the 'we forgot to close this out' case. Deliberately does not
+    also cover an overdue-but-still-open interview any more - see _still_open,
+    which now keeps that candidate under Scheduled instead of moving them
+    here, so nobody seems to vanish from Scheduled just because its date has
+    passed and nobody has acted on it yet."""
+    return Q(interviews__round_type__in=round_types, interviews__status=COMPLETED,
+             interviews__result=PENDING)
 
 
-def _upcoming(round_types):
-    """Still-to-happen interviews (scheduled and not yet past)."""
-    return Q(interviews__round_type__in=round_types, interviews__status__in=[SCHED, RESCHED],
-             interviews__scheduled_date__gte=timezone.now())
+def _still_open(round_types):
+    """Interviews of `round_types` that are booked and not yet marked Done -
+    whether or not the scheduled date has already passed. A candidate whose
+    interview is overdue still reads as "Scheduled" (not lost, not silently
+    reclassified) until someone actually marks it Done or reschedules it."""
+    return Q(interviews__round_type__in=round_types, interviews__status__in=[SCHED, RESCHED])
 
 
 def _with_latest_call_outcome(qs):
@@ -111,7 +113,7 @@ def flow_filter(qs, flow):
         'r1_yet': qs.filter(status=S.ROUND1).exclude(interviews__round_type=R1),
         # Cleared R1 = a R1 interview passed OR ever reached the Interview (R2) stage
         'r1_cleared': qs.filter(Q(interviews__round_type=R1, interviews__result=PASS) | _reached(S.INTERVIEW)),
-        'r1_scheduled': qs.filter(_upcoming([R1])),
+        'r1_scheduled': qs.filter(_still_open([R1])),
         'r1_no_show': qs.filter(interviews__round_type=R1, interviews__status=CANC),
         'r1_decision_pending': qs.filter(status=S.ROUND1).filter(_decision_pending([R1])),
         'rejected_after_round1': qs.filter(status__in=TERMINAL).filter(_reached(S.ROUND1)).exclude(_reached(S.INTERVIEW)),
@@ -122,7 +124,7 @@ def flow_filter(qs, flow):
         'r2_yet': qs.filter(status=S.INTERVIEW).exclude(interviews__round_type__in=NON_R1),
         'r2_cleared': qs.filter(Q(interviews__round_type__in=NON_R1, interviews__result=PASS)
                                 | _reached(S.FINAL_SELECTION) | _reached(S.HIRED)),
-        'r2_scheduled': qs.filter(_upcoming(NON_R1)),
+        'r2_scheduled': qs.filter(_still_open(NON_R1)),
         'r2_no_show': qs.filter(interviews__round_type__in=NON_R1, interviews__status=CANC),
         'r2_decision_pending': qs.filter(status=S.INTERVIEW).filter(_decision_pending(NON_R1)),
         'rejected_after_round2': qs.filter(status__in=TERMINAL).filter(_reached(S.INTERVIEW)).exclude(_reached(S.FINAL_SELECTION)),

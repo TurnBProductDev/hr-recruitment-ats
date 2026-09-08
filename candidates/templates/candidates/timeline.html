@@ -83,6 +83,12 @@
 .sla-dot { width:13px; height:13px; border-radius:50%; background:var(--primary-green); border:2px solid #fff; box-shadow:0 0 0 1px var(--primary-green); position:relative; z-index:1; }
 .sla-label { font-size:.8rem; font-weight:600; color:#1a2e35; margin-top:10px; text-align:center; }
 .sla-date { font-size:.72rem; color:#8a969b; }
+/* A checkpoint that's still in the future (e.g. an interview scheduled ahead)
+   isn't reached yet - dotted line in, hollow dot, so it reads as "coming up"
+   rather than "already happened" like every other (solid) checkpoint. */
+.sla-stage.sla-pending .sla-line { background:none; border-top:2px dashed var(--primary-green); height:0; }
+.sla-stage.sla-pending .sla-dot { background:#fff; }
+.sla-stage.sla-pending .sla-label { color:#5a6b73; }
 
 .activity-row { display:flex; gap:14px; padding-bottom:20px; }
 .activity-icon-col { display:flex; flex-direction:column; align-items:center; flex-shrink:0; }
@@ -586,11 +592,11 @@ html { scroll-behavior: smooth; }
       </div>
       <div class="sla-tracker">
         {% for s in sla_stages %}
-        <div class="sla-stage">
+        <div class="sla-stage {% if s.pending %}sla-pending{% endif %}">
           {% if not forloop.first %}<div class="sla-line" {% if s.color %}style="background:{{ s.color }};"{% endif %}></div>{% endif %}
           <span class="sla-dot" {% if s.color %}style="background:{{ s.color }};box-shadow:0 0 0 1px {{ s.color }};"{% endif %}></span>
           <div class="sla-label" {% if s.color %}style="color:{{ s.color }};"{% endif %}>{{ s.label }}</div>
-          <div class="sla-date">{{ s.date|date:"d M Y" }}</div>
+          <div class="sla-date">{{ s.date|date:"d M Y" }}{% if s.pending %} (upcoming){% endif %}</div>
         </div>
         {% endfor %}
       </div>

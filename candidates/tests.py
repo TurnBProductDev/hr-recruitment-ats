@@ -938,3 +938,91 @@ class HiringBlockStageLabelTests(TestCase):
         # No Blacklist action button at Round 1 (a JS comment on the page
         # mentions the word generically, so check for the actual action URL).
         self.assertNotContains(response, reverse('candidate_blacklist', args=[c.pk]))
+
+
+class ScheduledFlowTests(TestCase):
+    """An interview whose scheduled time has passed with no result recorded
+    must stay counted as "Scheduled" (candidates/flows.py's _still_open) -
+    not silently reclassified into a separate bucket a candidate could
+    appear to vanish from. "Decision Pending" is reserved for an interview
+    actually marked Done with no pass/fail ever recorded."""
+
+    def _candidate(self, status):
+        c = Candidate.objects.create(full_name='Rose E G', email='rose@example.com')
+        services.record_creation(c)
+        if status != Candidate.Status.OPEN:
+            services.change_status(c, status)
+        return c
+
+    def test_overdue_open_interview_still_counts_as_scheduled(self):
+        c = self._candidate(Candidate.Status.ROUND1)
+        Interview.objects.create(
+            candidate=c, round_type=Interview.RoundType.ROUND1,
+            status=Interview.Status.SCHEDULED, result=Interview.Result.PENDING,
+            scheduled_date=timezone.now() - timezone.timedelta(days=2))
+        from .flows import flow_filter
+        self.assertIn(c, flow_filter(Candidate.objects.all(), 'r1_scheduled'))
+        self.assertNotIn(c, flow_filter(Candidate.objects.all(), 'r1_decision_pending'))
+
+    def test_upcoming_open_interview_counts_as_scheduled_too(self):
+        c = self._candidate(Candidate.Status.ROUND1)
+        Interview.objects.create(
+            candidate=c, round_type=Interview.RoundType.ROUND1,
+            status=Interview.Status.SCHEDULED, result=Interview.Result.PENDING,
+            scheduled_date=timezone.now() + timezone.timedelta(days=2))
+        from .flows import flow_filter
+        self.assertIn(c, flow_filter(Candidate.objects.all(), 'r1_scheduled'))
+
+    def test_completed_with_no_result_is_decision_pending_not_scheduled(self):
+        c = self._candidate(Candidate.Status.ROUND1)
+        Interview.objects.create(
+            candidate=c, round_type=Interview.RoundType.ROUND1,
+            status=Interview.Status.COMPLETED, result=Interview.Result.PENDING,
+            scheduled_date=timezone.now() - timezone.timedelta(days=1))
+        from .flows import flow_filter
+        self.assertIn(c, flow_filter(Candidate.objects.all(), 'r1_decision_pending'))
+        self.assertNotIn(c, flow_filter(Candidate.objects.all(), 'r1_scheduled'))
+
+
+class SlaTrackerInterviewDateTests(TestCase):
+    """The Stage Dates (SLA) tracker's "Round 1/2 Scheduled" checkpoint shows
+    the interview's actual date (and moves with a reschedule, since that
+    rewrites the same row) rather than when the Schedule action was first
+    taken - and marks it as not-yet-reached while that date is still ahead."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('hr7', 'hr7@example.com', 'pw')
+        self.user.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.client.force_login(self.user)
+        self.candidate = Candidate.objects.create(full_name='Rose E G', email='rose@example.com')
+        services.record_creation(self.candidate)
+        services.change_status(self.candidate, Candidate.Status.ROUND1)
+
+    def test_shows_the_interview_date_not_the_booking_date(self):
+        Interview.objects.create(
+            candidate=self.candidate, round_type=Interview.RoundType.ROUND1,
+            status=Interview.Status.SCHEDULED, result=Interview.Result.PENDING,
+            scheduled_date=timezone.now() + timezone.timedelta(days=5))
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        due = (timezone.now() + timezone.timedelta(days=5))
+        self.assertContains(response, due.strftime('%d %b %Y'))
+
+    def test_future_interview_is_marked_not_yet_reached(self):
+        Interview.objects.create(
+            candidate=self.candidate, round_type=Interview.RoundType.ROUND1,
+            status=Interview.Status.SCHEDULED, result=Interview.Result.PENDING,
+            scheduled_date=timezone.now() + timezone.timedelta(days=5))
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        # 'sla-pending' alone would also match the page's <style> block (the
+        # CSS rule exists regardless of whether it's ever applied) - check
+        # for the class actually landing on an element instead.
+        self.assertContains(response, 'sla-stage sla-pending')
+        self.assertContains(response, '(upcoming)')
+
+    def test_overdue_interview_is_not_marked_pending(self):
+        Interview.objects.create(
+            candidate=self.candidate, round_type=Interview.RoundType.ROUND1,
+            status=Interview.Status.SCHEDULED, result=Interview.Result.PENDING,
+            scheduled_date=timezone.now() - timezone.timedelta(days=1))
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertNotContains(response, 'sla-stage sla-pending')
