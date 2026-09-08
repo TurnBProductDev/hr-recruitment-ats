@@ -1,0 +1,59 @@
+{% extends "hr_base.html" %}
+{% block title %}{% if object %}Edit{% else %}Add{% endif %} User{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-6">
+    <div class="card app-card p-4">
+      <h4 class="mb-3">{% if object %}Edit User{% else %}Add User{% endif %}</h4>
+      {% if form.non_field_errors %}
+      <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+      {% elif form.errors %}
+      <div class="alert alert-danger">Please fix the highlighted fields and save again.</div>
+      {% endif %}
+      <form method="post">
+        {% csrf_token %}
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label">First Name</label>{{ form.first_name }}{{ form.first_name.errors }}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Last Name</label>{{ form.last_name }}{{ form.last_name.errors }}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Login ID</label>{{ form.username }}{{ form.username.errors }}
+            <div class="form-text">What they type in to sign in - usually their work email.</div>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Email</label>{{ form.email }}{{ form.email.errors }}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Role</label>{{ form.role }}{{ form.role.errors }}
+          </div>
+          <div class="col-md-6">
+            <div class="form-check mt-4">
+              {{ form.is_active }}
+              <label class="form-check-label" for="{{ form.is_active.id_for_label }}">
+                {{ form.fields.is_active.label }}
+              </label>
+            </div>
+            {{ form.is_active.errors }}
+          </div>
+          <div class="col-12"><hr class="my-1"></div>
+          <div class="col-md-6">
+            <label class="form-label">{{ form.fields.password1.label }}</label>
+            {{ form.password1 }}{{ form.password1.errors }}
+            <div class="form-text">{{ form.fields.password1.help_text }}</div>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Confirm Password</label>{{ form.password2 }}{{ form.password2.errors }}
+          </div>
+        </div>
+        <div class="mt-4 d-flex gap-2">
+          <button type="submit" class="btn btn-fill-app">Save</button>
+          <a href="{% url 'user_list' %}" class="btn btn-outline-app">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

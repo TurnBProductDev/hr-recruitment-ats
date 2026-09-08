@@ -1,0 +1,95 @@
+{% extends "hr_base.html" %}
+{% block title %}Users{% endblock %}
+
+{% block extra_css %}
+<style>
+.usr-head { display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:16px; margin-bottom:18px; }
+.usr-title { font-size:1.5rem; font-weight:700; color:#1a2e35; margin:0; }
+.usr-subtitle { font-size:.8rem; color:#6b7a7a; margin-top:2px; }
+.usr-name a { font-weight:600; }
+.usr-meta { font-size:.72rem; color:#8a969b; }
+.badge-role { display:inline-block; padding:.28em .65em; border-radius:6px; font-size:.72rem; font-weight:600; }
+.badge-role-admin { background:rgba(111,66,193,.15); color:#5a3d99; }
+.badge-role-recruiter { background:rgba(14,111,107,.14); color:#0e6f6b; }
+.badge-role-interviewer { background:rgba(13,110,253,.14); color:#0a58ca; }
+.badge-role-hiringmanager { background:rgba(253,126,20,.16); color:#a35300; }
+.badge-role-none { background:rgba(220,53,69,.12); color:#b02a37; }
+.badge-pw-missing { background:rgba(220,53,69,.12); color:#b02a37; font-size:.7rem; padding:.2em .5em; border-radius:5px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="usr-head">
+  <div>
+    <h3 class="usr-title mb-0">Users</h3>
+    <div class="usr-subtitle">
+      {{ accounts|length }} account{{ accounts|length|pluralize }} &middot;
+      manage who can log into HireB and what they can do here - see "Roles" below for what each one means.
+    </div>
+  </div>
+  <a href="{% url 'user_add' %}" class="btn btn-fill-app btn-sm"><i class="bi bi-plus-lg"></i> Add User</a>
+</div>
+
+<div class="card app-card p-3 mb-3">
+  <div class="small text-muted">
+    <strong>Roles:</strong>
+    <span class="badge-role badge-role-admin">Admin</span> full access, including this Users page &middot;
+    <span class="badge-role badge-role-recruiter">Recruiter</span> runs the hiring pipeline (screen, shortlist, move candidates through stages) &middot;
+    <span class="badge-role badge-role-interviewer">Interviewer</span> records interview results only &middot;
+    <span class="badge-role badge-role-hiringmanager">Hiring Manager</span> same pipeline actions as Recruiter
+  </div>
+</div>
+
+<div class="app-card">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Login ID</th>
+          <th>Role</th>
+          <th>Status</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for account in accounts %}
+        <tr>
+          <td class="usr-name">
+            <a href="{% url 'user_edit' account.pk %}">{{ account.get_full_name|default:account.username }}</a>
+            <div class="usr-meta">{{ account.email|default:"No email on file" }}</div>
+          </td>
+          <td>{{ account.username }}</td>
+          <td>
+            {% if account.role_label %}
+              <span class="badge-role badge-role-{{ account.role_label|lower|cut:' ' }}">{{ account.role_label }}</span>
+            {% else %}
+              <span class="badge-role badge-role-none">No role assigned</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if account.is_active %}<span class="badge-status badge-shortlisted">Active</span>
+            {% else %}<span class="badge-status badge-rejected">Deactivated</span>{% endif %}
+            {% if not account.has_password %}<br><span class="badge-pw-missing">No password set</span>{% endif %}
+          </td>
+          <td class="text-nowrap text-end">
+            <a href="{% url 'user_edit' account.pk %}" class="btn btn-sm btn-outline-app">Edit</a>
+            {% if account.pk != user.pk %}
+            <form method="post" action="{% url 'user_toggle_active' account.pk %}" class="d-inline"
+                  onsubmit="return confirm('{% if account.is_active %}Deactivate{% else %}Activate{% endif %} {{ account.get_full_name|default:account.username }}?');">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-outline-app">
+                {% if account.is_active %}Deactivate{% else %}Activate{% endif %}
+              </button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-center text-muted py-4">No users yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

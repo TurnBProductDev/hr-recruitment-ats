@@ -90,6 +90,9 @@
         </a>
         <ul class="dropdown-menu dropdown-menu-end">
           <li><a class="dropdown-item" href="{% url 'vacancy_list' %}" target="_blank">View Careers Site</a></li>
+          {% if is_hr_admin %}
+          <li><a class="dropdown-item {% if '/hr/users/' in request.path %}active{% endif %}" href="{% url 'user_list' %}">Users</a></li>
+          {% endif %}
           <li><hr class="dropdown-divider"></li>
           <li>
             <form method="post" action="{% url 'logout' %}">

@@ -4,12 +4,14 @@ Run against sqlite so the live Azure DB is never touched:
     DB_ENGINE=sqlite python manage.py test dashboard
 """
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from candidates import services
 from candidates.models import Candidate
+from candidates.permissions import HR_ADMIN, INTERVIEWER, RECRUITER
 from jobs.models import Job
 
 from . import daily_view
@@ -181,3 +183,93 @@ class DailyViewScreenedColumnTests(TestCase):
         matches = [r for r in rows if r['candidate'].pk == c.pk]
         self.assertEqual(len(matches), 1)
         self.assertEqual(matches[0]['action'], 'Rejected at Screening')
+
+
+class UserManagementTests(TestCase):
+    """The in-app Manage Users page - add/edit accounts and their role,
+    restricted to Admin (HR_ADMIN)."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_user('admin', 'admin@turnb.com', 'pw')
+        self.admin.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.client.force_login(self.admin)
+
+    def _create(self, **overrides):
+        data = {
+            'username': 'new.hire', 'first_name': 'New', 'last_name': 'Hire',
+            'email': 'new.hire@turnb.com', 'is_active': 'on', 'role': RECRUITER,
+            'password1': 'a-strong-passw0rd', 'password2': 'a-strong-passw0rd',
+        }
+        data.update(overrides)
+        return self.client.post(reverse('user_add'), data)
+
+    def test_non_admin_cannot_reach_the_users_page(self):
+        recruiter = get_user_model().objects.create_user('rec', 'rec@turnb.com', 'pw')
+        recruiter.groups.add(Group.objects.get_or_create(name=RECRUITER)[0])
+        self.client.force_login(recruiter)
+        response = self.client.get(reverse('user_list'))
+        self.assertEqual(response.status_code, 403)
+
+    def test_admin_can_view_the_list(self):
+        response = self.client.get(reverse('user_list'))
+        self.assertEqual(response.status_code, 200)
+
+    def test_creating_a_user_assigns_the_chosen_role_and_password(self):
+        self._create()
+        new_user = get_user_model().objects.get(username='new.hire')
+        self.assertTrue(new_user.check_password('a-strong-passw0rd'))
+        self.assertEqual([g.name for g in new_user.groups.all()], [RECRUITER])
+
+    def test_password_can_be_skipped_on_creation(self):
+        self._create(password1='', password2='')
+        new_user = get_user_model().objects.get(username='new.hire')
+        self.assertFalse(new_user.has_usable_password())
+
+    def test_mismatched_passwords_are_rejected(self):
+        response = self._create(password1='a-strong-passw0rd', password2='does-not-match')
+        self.assertEqual(response.status_code, 200)  # redisplayed with the error
+        self.assertFalse(get_user_model().objects.filter(username='new.hire').exists())
+
+    def test_editing_a_user_changes_their_role(self):
+        self._create()
+        target = get_user_model().objects.get(username='new.hire')
+        self.client.post(reverse('user_edit', args=[target.pk]), {
+            'username': 'new.hire', 'first_name': 'New', 'last_name': 'Hire',
+            'email': 'new.hire@turnb.com', 'is_active': 'on', 'role': INTERVIEWER,
+            'password1': '', 'password2': '',
+        })
+        target.refresh_from_db()
+        self.assertEqual([g.name for g in target.groups.all()], [INTERVIEWER])
+
+    def test_admin_cannot_deactivate_their_own_account(self):
+        response = self.client.post(reverse('user_edit', args=[self.admin.pk]), {
+            'username': 'admin', 'first_name': '', 'last_name': '',
+            'email': 'admin@turnb.com', 'is_active': '', 'role': HR_ADMIN,
+            'password1': '', 'password2': '',
+        })
+        self.assertContains(response, "can&#x27;t deactivate your own account")
+        self.admin.refresh_from_db()
+        self.assertTrue(self.admin.is_active)
+
+    def test_admin_cannot_remove_their_own_admin_role(self):
+        response = self.client.post(reverse('user_edit', args=[self.admin.pk]), {
+            'username': 'admin', 'first_name': '', 'last_name': '',
+            'email': 'admin@turnb.com', 'is_active': 'on', 'role': RECRUITER,
+            'password1': '', 'password2': '',
+        })
+        self.assertContains(response, "can&#x27;t remove your own Admin role")
+        self.admin.refresh_from_db()
+        self.assertTrue(self.admin.groups.filter(name=HR_ADMIN).exists())
+
+    def test_toggle_active_flips_another_users_status(self):
+        self._create()
+        target = get_user_model().objects.get(username='new.hire')
+        self.client.post(reverse('user_toggle_active', args=[target.pk]))
+        target.refresh_from_db()
+        self.assertFalse(target.is_active)
+
+    def test_cannot_toggle_own_active_status(self):
+        self.client.post(reverse('user_toggle_active', args=[self.admin.pk]))
+        self.admin.refresh_from_db()
+        self.assertTrue(self.admin.is_active)
