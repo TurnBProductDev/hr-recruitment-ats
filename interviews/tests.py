@@ -4,10 +4,12 @@ Run against sqlite so the live Azure DB is never touched:
     DB_ENGINE=sqlite python manage.py test interviews
 """
 from datetime import datetime
+from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from django.test import TestCase
+from django.core.cache import cache
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -15,7 +17,85 @@ from candidates.models import Candidate
 from candidates.permissions import HR_ADMIN, INTERVIEWER
 from jobs.models import Job
 
-from .models import Interview, InterviewReschedule
+from . import graph_client
+from .graph_client import GraphError
+from .models import INTERVIEW_DURATION, Interview, InterviewReschedule
+
+
+@override_settings(
+    GRAPH_TENANT_ID='tenant-id', GRAPH_CLIENT_ID='client-id',
+    GRAPH_CLIENT_SECRET='client-secret', GRAPH_ORGANIZER_EMAIL='careers@turnb.com')
+class GraphClientTests(TestCase):
+    """Unit tests for the Graph HTTP mechanics themselves - token fetch/cache
+    and response parsing. GraphSchedulingIntegrationTests below covers how
+    the rest of the app reacts to what this module reports."""
+
+    def setUp(self):
+        # The token cache is process-wide (LocMemCache) - clear it so one
+        # test's cached token can't leak into the next.
+        cache.clear()
+
+    def _response(self, status_code=200, json_body=None, text=''):
+        response = mock.Mock(status_code=status_code, text=text, content=b'{}')
+        response.json.return_value = {} if json_body is None else json_body
+        return response
+
+    def test_is_configured_true_once_all_settings_are_set(self):
+        self.assertTrue(graph_client.is_configured())
+
+    @override_settings(GRAPH_CLIENT_SECRET='')
+    def test_is_configured_false_if_any_setting_is_missing(self):
+        self.assertFalse(graph_client.is_configured())
+
+    def test_token_is_cached_across_calls(self):
+        token_response = self._response(json_body={'access_token': 'abc123', 'expires_in': 3600})
+        busy_response = self._response(json_body={'value': [{'availabilityView': '00'}]})
+        start = timezone.now()
+        with mock.patch('interviews.graph_client.requests.post', return_value=token_response) as post, \
+             mock.patch('interviews.graph_client.requests.request', return_value=busy_response):
+            graph_client.is_interviewer_busy('a@turnb.com', start, start + INTERVIEW_DURATION)
+            graph_client.is_interviewer_busy('a@turnb.com', start, start + INTERVIEW_DURATION)
+        post.assert_called_once()  # second call reused the cached token, no new token request
+
+    def test_token_http_error_raises_graph_error(self):
+        with mock.patch('interviews.graph_client.requests.post',
+                        return_value=self._response(status_code=401, text='bad secret')):
+            with self.assertRaises(GraphError):
+                graph_client._get_token()
+
+    def test_is_interviewer_busy_true_when_any_slot_is_busy(self):
+        token_response = self._response(json_body={'access_token': 'abc123', 'expires_in': 3600})
+        busy_response = self._response(json_body={'value': [{'availabilityView': '0010'}]})
+        start = timezone.now()
+        with mock.patch('interviews.graph_client.requests.post', return_value=token_response), \
+             mock.patch('interviews.graph_client.requests.request', return_value=busy_response):
+            self.assertTrue(graph_client.is_interviewer_busy('a@turnb.com', start, start + INTERVIEW_DURATION))
+
+    def test_is_interviewer_busy_false_when_all_free(self):
+        token_response = self._response(json_body={'access_token': 'abc123', 'expires_in': 3600})
+        free_response = self._response(json_body={'value': [{'availabilityView': '0000'}]})
+        start = timezone.now()
+        with mock.patch('interviews.graph_client.requests.post', return_value=token_response), \
+             mock.patch('interviews.graph_client.requests.request', return_value=free_response):
+            self.assertFalse(graph_client.is_interviewer_busy('a@turnb.com', start, start + INTERVIEW_DURATION))
+
+    def test_create_online_meeting_returns_join_url(self):
+        token_response = self._response(json_body={'access_token': 'abc123', 'expires_in': 3600})
+        meeting_response = self._response(json_body={'joinWebUrl': 'https://teams.microsoft.com/l/meetup/abc'})
+        start = timezone.now()
+        with mock.patch('interviews.graph_client.requests.post', return_value=token_response), \
+             mock.patch('interviews.graph_client.requests.request', return_value=meeting_response):
+            url = graph_client.create_online_meeting('Interview', start, start + INTERVIEW_DURATION)
+        self.assertEqual(url, 'https://teams.microsoft.com/l/meetup/abc')
+
+    def test_create_online_meeting_without_join_url_raises_graph_error(self):
+        token_response = self._response(json_body={'access_token': 'abc123', 'expires_in': 3600})
+        empty_response = self._response(json_body={})
+        start = timezone.now()
+        with mock.patch('interviews.graph_client.requests.post', return_value=token_response), \
+             mock.patch('interviews.graph_client.requests.request', return_value=empty_response):
+            with self.assertRaises(GraphError):
+                graph_client.create_online_meeting('Interview', start, start + INTERVIEW_DURATION)
 
 
 class OneOpenInterviewTests(TestCase):
@@ -161,6 +241,96 @@ class InterviewerConflictTests(TestCase):
         self.assertEqual(
             timezone.localtime(self.existing.scheduled_date).strftime('%Y-%m-%d %H:%M'),
             '2026-09-01 10:30')
+
+
+@override_settings(
+    GRAPH_TENANT_ID='tenant-id', GRAPH_CLIENT_ID='client-id',
+    GRAPH_CLIENT_SECRET='client-secret', GRAPH_ORGANIZER_EMAIL='careers@turnb.com')
+class GraphSchedulingIntegrationTests(TestCase):
+    """How InterviewForm/the schedule views react to what graph_client
+    reports, with graph_client's own functions mocked directly - the HTTP
+    mechanics themselves are GraphClientTests' job."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('hr', 'hr@example.com', 'pw')
+        self.user.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.client.force_login(self.user)
+        self.job = Job.objects.create(job_code='J1', title='Program Manager')
+        self.interviewer = get_user_model().objects.create_user(
+            'panel', 'panel@turnb.com', 'pw', first_name='Sreejith', last_name='K R')
+        self.interviewer.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
+        self.candidate = Candidate.objects.create(
+            full_name='Rose E G', email='rose@example.com', job=self.job)
+
+    def _schedule(self, **overrides):
+        data = {
+            'round_type': Interview.RoundType.ROUND1,
+            'interviewer': self.interviewer.pk,
+            'scheduled_date': '2026-09-01T10:00',
+            'mode': Interview.Mode.VIDEO,
+            'meeting_link': '',
+        }
+        data.update(overrides)
+        return self.client.post(reverse('interview_schedule', args=[self.candidate.pk]), data)
+
+    def test_busy_outlook_calendar_blocks_scheduling(self):
+        with mock.patch('interviews.forms.graph_client.is_interviewer_busy', return_value=True):
+            response = self._schedule()
+        self.assertEqual(response.status_code, 200)  # redisplayed with the error
+        self.assertContains(response, 'Outlook calendar')
+        self.assertEqual(self.candidate.interviews.count(), 0)
+
+    def test_free_outlook_calendar_allows_scheduling(self):
+        with mock.patch('interviews.forms.graph_client.is_interviewer_busy', return_value=False), \
+             mock.patch('interviews.views.graph_client.create_online_meeting',
+                        return_value='https://teams.microsoft.com/l/meetup/xyz'):
+            self._schedule()
+        self.assertEqual(self.candidate.interviews.count(), 1)
+
+    def test_a_graph_outage_does_not_block_scheduling(self):
+        """A Graph failure must fail open - HR can still schedule using just
+        the Phase 1 same-app check, not be stuck because Graph is down."""
+        with mock.patch('interviews.forms.graph_client.is_interviewer_busy',
+                        side_effect=GraphError('timed out')), \
+             mock.patch('interviews.views.graph_client.create_online_meeting',
+                        side_effect=GraphError('timed out')):
+            self._schedule()
+        self.assertEqual(self.candidate.interviews.count(), 1)
+
+    def test_teams_link_is_auto_created_for_a_video_interview(self):
+        with mock.patch('interviews.forms.graph_client.is_interviewer_busy', return_value=False), \
+             mock.patch('interviews.views.graph_client.create_online_meeting',
+                        return_value='https://teams.microsoft.com/l/meetup/xyz') as create:
+            self._schedule()
+        interview = self.candidate.interviews.get()
+        self.assertEqual(interview.meeting_link, 'https://teams.microsoft.com/l/meetup/xyz')
+        create.assert_called_once()
+
+    def test_a_manually_entered_link_is_not_overwritten(self):
+        with mock.patch('interviews.forms.graph_client.is_interviewer_busy', return_value=False), \
+             mock.patch('interviews.views.graph_client.create_online_meeting') as create:
+            self._schedule(meeting_link='https://teams.microsoft.com/l/meetup/manual')
+        interview = self.candidate.interviews.get()
+        self.assertEqual(interview.meeting_link, 'https://teams.microsoft.com/l/meetup/manual')
+        create.assert_not_called()
+
+    def test_no_teams_link_is_created_for_a_phone_interview(self):
+        with mock.patch('interviews.forms.graph_client.is_interviewer_busy', return_value=False), \
+             mock.patch('interviews.views.graph_client.create_online_meeting') as create:
+            self._schedule(mode=Interview.Mode.PHONE)
+        interview = self.candidate.interviews.get()
+        self.assertFalse(interview.meeting_link)
+        create.assert_not_called()
+
+    def test_a_meeting_creation_failure_leaves_the_interview_scheduled(self):
+        """Best-effort: Graph failing to create the meeting must not undo the
+        interview that was already saved."""
+        with mock.patch('interviews.forms.graph_client.is_interviewer_busy', return_value=False), \
+             mock.patch('interviews.views.graph_client.create_online_meeting',
+                        side_effect=GraphError('boom')):
+            self._schedule()
+        interview = self.candidate.interviews.get()
+        self.assertFalse(interview.meeting_link)
 
 
 class RescheduleTests(TestCase):

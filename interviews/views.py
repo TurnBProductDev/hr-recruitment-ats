@@ -15,9 +15,9 @@ from candidates import services
 from candidates.models import Candidate, Note
 from candidates.permissions import ANY_STAFF, HR_ADMIN, INTERVIEWER, RECRUITER, GroupRequiredMixin
 
-from . import invites
+from . import graph_client, invites
 from .forms import InterviewForm, InterviewResultForm
-from .models import Interview, InterviewReschedule, open_interview_message
+from .models import INTERVIEW_DURATION, Interview, InterviewReschedule, open_interview_message
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +99,7 @@ class InterviewScheduleView(GroupRequiredMixin, CreateView):
         form.instance.candidate = self.candidate
         form.instance.created_by = self.request.user
         response = super().form_valid(form)
+        _maybe_create_teams_meeting(self.object)
         if _is_ajax(self.request):
             return _invite_draft_response(self.request, self.object, form.cleaned_data.get('candidate_email'))
         messages.success(self.request, f'Interview scheduled for {self.candidate.full_name}.')
@@ -112,6 +113,25 @@ class InterviewScheduleView(GroupRequiredMixin, CreateView):
 
     def get_success_url(self):
         return reverse('candidate_timeline', args=[self.candidate.pk])
+
+
+def _maybe_create_teams_meeting(interview):
+    """Phase 2: fill meeting_link with a real Teams join URL when Graph is
+    configured, HR hasn't already pasted one in, and this is a video
+    interview. Best-effort - a Graph outage just leaves meeting_link blank,
+    same as before Phase 2 existed."""
+    if (not graph_client.is_configured() or interview.meeting_link
+            or interview.mode != Interview.Mode.VIDEO):
+        return
+    try:
+        interview.meeting_link = graph_client.create_online_meeting(
+            subject=f'Interview - {interview.candidate.full_name}',
+            start=interview.scheduled_date, end=interview.scheduled_date + INTERVIEW_DURATION,
+        )
+    except graph_client.GraphError as exc:
+        logger.warning('Could not auto-create a Teams meeting for interview %s: %s', interview.pk, exc)
+        return
+    interview.save(update_fields=['meeting_link'])
 
 
 def _invite_draft_response(request, interview, to_email):
@@ -176,6 +196,7 @@ class InterviewRescheduleView(GroupRequiredMixin, UpdateView):
                 previous_interviewer_id=self.before['interviewer_id'],
                 new_interviewer_id=self.object.interviewer_id,
                 changed_by=self.request.user)
+        _maybe_create_teams_meeting(self.object)
         if _is_ajax(self.request):
             return _invite_draft_response(self.request, self.object, form.cleaned_data.get('candidate_email'))
         messages.success(self.request, 'Interview rescheduled.' if (moved or reassigned) else 'Interview updated.')

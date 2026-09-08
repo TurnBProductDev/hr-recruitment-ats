@@ -222,3 +222,15 @@ EMAIL_USE_SSL = os.environ.get("EMAIL_USE_SSL", "False") == "True"
 # integration in this app.
 INTERVIEW_INVITE_FROM_EMAIL = os.environ.get("INTERVIEW_INVITE_FROM_EMAIL", "careers@turnb.com")
 INTERVIEW_INVITE_CC_EMAIL = os.environ.get("INTERVIEW_INVITE_CC_EMAIL", "Amrita.Sunilkumar@turnb.com")
+
+# --- Microsoft Graph (Phase 2 of interview scheduling) -------------------
+# Auto-creates a real Teams meeting link and checks the interviewer's actual
+# Outlook calendar before scheduling - see interviews/graph_client.py and
+# graph_api/README.md for the Azure AD/Teams admin setup this depends on.
+# Blank (the default) = graph_client.is_configured() is False and every call
+# site falls back to today's manual meeting_link + same-app-only conflict
+# check, same as every other unconfigured integration in this app.
+GRAPH_TENANT_ID = os.environ.get("GRAPH_TENANT_ID", "")
+GRAPH_CLIENT_ID = os.environ.get("GRAPH_CLIENT_ID", "")
+GRAPH_CLIENT_SECRET = os.environ.get("GRAPH_CLIENT_SECRET", "")
+GRAPH_ORGANIZER_EMAIL = os.environ.get("GRAPH_ORGANIZER_EMAIL", "careers@turnb.com")

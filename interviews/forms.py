@@ -1,9 +1,14 @@
+import logging
+
 from django import forms
 from django.contrib.auth import get_user_model
 
 from candidates.permissions import INTERVIEWER
 
-from .models import Interview, interviewer_conflict_message, open_interview_message
+from . import graph_client
+from .models import INTERVIEW_DURATION, Interview, interviewer_conflict_message, open_interview_message
+
+logger = logging.getLogger(__name__)
 
 
 class BootstrapFormMixin:
@@ -66,6 +71,23 @@ class InterviewForm(BootstrapFormMixin, forms.ModelForm):
                 interviewer, scheduled_date, exclude_pk=self.instance.pk).first()
             if clash:
                 raise forms.ValidationError(interviewer_conflict_message(clash))
+
+            # Phase 2: also check the interviewer's real Outlook calendar, not
+            # just other interviews scheduled through this app. Best-effort -
+            # a Graph outage must never block scheduling, only skip this extra
+            # check (the Phase 1 same-app check above still applies either way).
+            if graph_client.is_configured() and interviewer.email:
+                try:
+                    busy = graph_client.is_interviewer_busy(
+                        interviewer.email, scheduled_date, scheduled_date + INTERVIEW_DURATION)
+                except graph_client.GraphError as exc:
+                    logger.warning('Skipping Outlook calendar check for %s: %s', interviewer.email, exc)
+                else:
+                    if busy:
+                        name = interviewer.get_full_name() or interviewer.get_username()
+                        raise forms.ValidationError(
+                            f'{name}\'s Outlook calendar shows them busy at that time. '
+                            f'Pick a different time or interviewer.')
         return cleaned
 
 
