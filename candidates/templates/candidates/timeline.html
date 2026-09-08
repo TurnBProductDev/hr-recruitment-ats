@@ -198,6 +198,12 @@ html { scroll-behavior: smooth; }
           <div class="section-eyebrow">Background</div>
           <div class="field-grid">
             <div class="field-full"><div class="field-label">Qualification</div><div class="field-value {% if not candidate.qualification %}text-muted{% endif %}">{{ candidate.qualification|default:"-" }}</div></div>
+            <div class="field-full">
+              <div class="field-label">Experience</div>
+              <div class="field-value {% if not candidate.total_experience_years %}text-muted{% endif %}">
+                {% if candidate.total_experience_years %}{{ candidate.total_experience_years }} yrs{% else %}-{% endif %}
+              </div>
+            </div>
             <div><div class="field-label">Notice Period</div><div class="field-value {% if not candidate.notice_period %}text-muted{% endif %}">{{ candidate.notice_period|default:"-" }}</div></div>
             <div><div class="field-label">Current / Expected Salary</div><div class="field-value">{{ candidate.current_salary|default:"-" }} / {{ candidate.expected_salary|default:"-" }}</div></div>
           </div>
@@ -257,7 +263,14 @@ html { scroll-behavior: smooth; }
               <strong>{{ e.designation|default:"-" }}</strong> @ {{ e.company_name }}<br>
               <span class="text-muted pd-meta">{{ e.start_date|default:"-" }} &rarr; {{ e.end_date|default:"Present" }} &middot; {{ e.skills|default:"" }}</span>
             </div>
-          {% empty %}<p class="text-muted mb-0">No experience records.</p>{% endfor %}
+          {% empty %}
+            {% if candidate.last_role or candidate.last_company %}
+              <div>
+                <strong>{{ candidate.last_role|default:"-" }}</strong><br>
+                {{ candidate.last_company|default:"" }}
+              </div>
+            {% else %}<p class="text-muted mb-0">No experience records.</p>{% endif %}
+          {% endfor %}
         </div>
 
         <div class="card app-card p-4 mb-3">
