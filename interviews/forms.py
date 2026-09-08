@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 
 from candidates.permissions import INTERVIEWER
 
-from .models import Interview, open_interview_message
+from .models import Interview, interviewer_conflict_message, open_interview_message
 
 
 class BootstrapFormMixin:
@@ -58,6 +58,14 @@ class InterviewForm(BootstrapFormMixin, forms.ModelForm):
             clash = clash.first()
             if clash:
                 raise forms.ValidationError(open_interview_message(clash))
+
+        interviewer = cleaned.get('interviewer')
+        scheduled_date = cleaned.get('scheduled_date')
+        if interviewer and scheduled_date:
+            clash = Interview.conflicts_for(
+                interviewer, scheduled_date, exclude_pk=self.instance.pk).first()
+            if clash:
+                raise forms.ValidationError(interviewer_conflict_message(clash))
         return cleaned
 
 

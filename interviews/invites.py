@@ -8,14 +8,14 @@ takes whatever text is actually submitted rather than recomputing it.
 Recipient/CC are always derived server-side (never trusted from the
 client), since who gets CC'd is a fixed business rule, not user input.
 """
-from datetime import timedelta
-
 from django.conf import settings
 from django.core.mail import EmailMessage
 from django.utils import timezone
 from django.utils.dateformat import format as django_date_format
 
 from icalendar import Calendar, Event, vCalAddress, vText
+
+from .models import INTERVIEW_DURATION
 
 MODE_WORDING = {
     'VIDEO': 'an online video interview',
@@ -91,7 +91,7 @@ def _build_ics(interview, *, organizer_email, attendee_emails, summary, descript
     event = Event()
     event.add('summary', summary)
     event.add('dtstart', interview.scheduled_date)
-    event.add('dtend', interview.scheduled_date + timedelta(minutes=45))
+    event.add('dtend', interview.scheduled_date + INTERVIEW_DURATION)
     event.add('dtstamp', timezone.now())
     event.add('uid', f'interview-{interview.pk}@turnb.com')
     description = description

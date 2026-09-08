@@ -3,6 +3,8 @@
 Run against sqlite so the live Azure DB is never touched:
     DB_ENGINE=sqlite python manage.py test interviews
 """
+from datetime import datetime
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.test import TestCase
@@ -88,6 +90,77 @@ class OneOpenInterviewTests(TestCase):
             'scheduled_date': '2026-09-01T10:00', 'mode': Interview.Mode.VIDEO,
             'meeting_link': ''})
         self.assertEqual(other.interviews.count(), 1)
+
+
+class InterviewerConflictTests(TestCase):
+    """The same interviewer cannot be double-booked into two overlapping
+    interview slots scheduled through the ATS (see Interview.conflicts_for)."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('hr', 'hr@example.com', 'pw')
+        self.user.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.client.force_login(self.user)
+        self.job = Job.objects.create(job_code='J1', title='Program Manager')
+        interviewer_group = Group.objects.get_or_create(name=INTERVIEWER)[0]
+        self.interviewer = get_user_model().objects.create_user(
+            'panel', 'panel@example.com', 'pw', first_name='Sreejith', last_name='K R')
+        self.interviewer.groups.add(interviewer_group)
+        self.other_interviewer = get_user_model().objects.create_user(
+            'panel2', 'panel2@example.com', 'pw', first_name='Amrita', last_name='S')
+        self.other_interviewer.groups.add(interviewer_group)
+        self.candidate = Candidate.objects.create(
+            full_name='Rose E G', email='rose@example.com', job=self.job)
+        # Occupies 10:00-10:45 local time - matching how the form interprets
+        # the naive datetime-local strings posted below.
+        self.existing = Interview.objects.create(
+            candidate=self.candidate, interviewer=self.interviewer,
+            round_type=Interview.RoundType.ROUND1,
+            scheduled_date=timezone.make_aware(datetime(2026, 9, 1, 10, 0)))
+        self.other = Candidate.objects.create(
+            full_name='Nikhil Shaji', email='nikhil@example.com', job=self.job)
+
+    def _schedule(self, candidate, **overrides):
+        data = {
+            'round_type': Interview.RoundType.ROUND1,
+            'interviewer': self.interviewer.pk,
+            'scheduled_date': '2026-09-01T10:20',  # overlaps the 10:00-10:45 slot above
+            'mode': Interview.Mode.VIDEO,
+            'meeting_link': '',
+        }
+        data.update(overrides)
+        return self.client.post(reverse('interview_schedule', args=[candidate.pk]), data)
+
+    def test_overlapping_slot_for_same_interviewer_is_rejected(self):
+        response = self._schedule(self.other)
+        self.assertEqual(response.status_code, 200)  # redisplayed with the error
+        self.assertContains(response, 'already interviewing')
+        self.assertEqual(self.other.interviews.count(), 0)
+
+    def test_non_overlapping_slot_is_accepted(self):
+        self._schedule(self.other, scheduled_date='2026-09-01T11:00')
+        self.assertEqual(self.other.interviews.count(), 1)
+
+    def test_different_interviewer_at_the_same_time_is_unaffected(self):
+        self._schedule(self.other, interviewer=self.other_interviewer.pk)
+        self.assertEqual(self.other.interviews.count(), 1)
+
+    def test_a_cancelled_interview_does_not_block(self):
+        self.existing.status = Interview.Status.CANCELLED
+        self.existing.save()
+        self._schedule(self.other)
+        self.assertEqual(self.other.interviews.count(), 1)
+
+    def test_rescheduling_the_same_interview_does_not_conflict_with_itself(self):
+        response = self.client.post(
+            reverse('interview_reschedule', args=[self.existing.pk]),
+            {'round_type': Interview.RoundType.ROUND1, 'interviewer': self.interviewer.pk,
+             'scheduled_date': '2026-09-01T10:30', 'mode': Interview.Mode.VIDEO, 'meeting_link': ''})
+        self.assertRedirects(
+            response, reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.existing.refresh_from_db()
+        self.assertEqual(
+            timezone.localtime(self.existing.scheduled_date).strftime('%Y-%m-%d %H:%M'),
+            '2026-09-01 10:30')
 
 
 class RescheduleTests(TestCase):

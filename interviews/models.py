@@ -1,9 +1,16 @@
+from datetime import timedelta
+
 from django.conf import settings
 from django.db import models
 from django.urls import reverse
 from django.utils import timezone
 
 from candidates.models import Candidate
+
+# How long a slot an interview occupies on the interviewer's calendar, for the
+# double-booking check below. Also the .ics event length in interviews/invites.py
+# - keep both in sync since they describe the same meeting.
+INTERVIEW_DURATION = timedelta(minutes=45)
 
 
 class Interview(models.Model):
@@ -71,6 +78,26 @@ class Interview(models.Model):
         return cls.objects.filter(candidate=candidate, status__in=cls.OPEN_STATUSES,
                                   result=cls.Result.PENDING)
 
+    @classmethod
+    def conflicts_for(cls, interviewer, scheduled_date, exclude_pk=None):
+        """Other open interviews for this interviewer whose slot (see
+        INTERVIEW_DURATION) overlaps scheduled_date - stops HR from double-
+        booking the same interviewer within this app. This can't see anything
+        on the interviewer's actual Outlook calendar (that needs the Graph API
+        integration); it only catches clashes between interviews scheduled
+        through the ATS itself.
+        """
+        if interviewer is None:
+            return cls.objects.none()
+        start, end = scheduled_date, scheduled_date + INTERVIEW_DURATION
+        qs = cls.objects.filter(
+            interviewer=interviewer, status__in=cls.OPEN_STATUSES,
+            scheduled_date__lt=end, scheduled_date__gt=start - INTERVIEW_DURATION,
+        )
+        if exclude_pk:
+            qs = qs.exclude(pk=exclude_pk)
+        return qs
+
 
 class InterviewReschedule(models.Model):
     """One row per reschedule.
@@ -122,3 +149,11 @@ def open_interview_message(interview):
             f'{interview.get_round_type_display()} interview on {when:%d %b %Y %H:%M}. '
             f'Update that interview’s status (mark the result) before scheduling '
             f'another one.')
+
+
+def interviewer_conflict_message(interview):
+    """Why a schedule/reschedule was refused for double-booking the interviewer."""
+    when = timezone.localtime(interview.scheduled_date)
+    name = interview.interviewer.get_full_name() or interview.interviewer.get_username()
+    return (f'{name} is already interviewing {interview.candidate.full_name} '
+            f'at {when:%d %b %Y %H:%M}. Pick a different time or interviewer.')
