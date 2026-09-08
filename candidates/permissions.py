@@ -8,8 +8,22 @@ HIRING_MANAGER = 'Hiring Manager'
 
 ALL_GROUPS = (HR_ADMIN, RECRUITER, INTERVIEWER, HIRING_MANAGER)
 
-# Any authenticated HR-side user (any of the four groups, or a superuser).
-ANY_STAFF = ALL_GROUPS
+# The main HR app (dashboard, candidate repository/lists, reports, job
+# management, the full interview scheduler). Interviewer is deliberately not
+# here - they get their own restricted portal instead (interviews/portal_views.py),
+# confined to their scheduled interviews, the candidates on them, and
+# recording results. A superuser always bypasses this via GroupRequiredMixin.
+ANY_STAFF = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
+
+
+def is_interviewer_only(user):
+    """True for an account whose only role is Interviewer - used to route it
+    to the restricted portal instead of the main HR app (login redirect, nav
+    visibility) rather than at every single view."""
+    if not user.is_authenticated or user.is_superuser:
+        return False
+    groups = set(user.groups.values_list('name', flat=True))
+    return INTERVIEWER in groups and not groups.intersection(ANY_STAFF)
 
 
 class GroupRequiredMixin(LoginRequiredMixin):

@@ -53,13 +53,16 @@
 <body>
 <nav class="app-nav navbar navbar-expand-lg">
   <div class="app-nav-inner">
-    <a class="app-nav-brand" href="{% url 'hr_dashboard' %}">
+    <a class="app-nav-brand" href="{% if is_interviewer_only %}{% url 'interviewer_home' %}{% else %}{% url 'hr_dashboard' %}{% endif %}">
       <span class="app-nav-mark">H</span>
       <span class="app-nav-title">HireB</span>
     </a>
 
     <div class="collapse navbar-collapse app-nav-collapse" id="appNavCollapse">
       <div class="app-nav-links">
+        {% if is_interviewer_only %}
+        <a class="app-nav-link {% if request.resolver_match.url_name == 'interviewer_home' %}active{% endif %}" href="{% url 'interviewer_home' %}">My Interviews</a>
+        {% else %}
         <a class="app-nav-link {% if request.resolver_match.url_name == 'hr_dashboard' %}active{% endif %}" href="{% url 'hr_dashboard' %}">Home</a>
         <div class="dropdown app-nav-drop">
           <a href="#" class="app-nav-link dropdown-toggle {% if '/hr/candidates/' in request.path and '/bulk-upload/' not in request.path and '/candidates/score/' not in request.path %}active{% endif %}" data-bs-toggle="dropdown" aria-expanded="false">Candidates</a>
@@ -79,6 +82,7 @@
           </ul>
         </div>
         <a class="app-nav-link {% if '/hr/reports/' in request.path %}active{% endif %}" href="{% url 'hr_reports' %}">Reports</a>
+        {% endif %}
       </div>
     </div>
 
@@ -89,11 +93,13 @@
           <span class="app-nav-username">{{ user.get_username }}</span>
         </a>
         <ul class="dropdown-menu dropdown-menu-end">
+          {% if not is_interviewer_only %}
           <li><a class="dropdown-item" href="{% url 'vacancy_list' %}" target="_blank">View Careers Site</a></li>
           {% if is_hr_admin %}
           <li><a class="dropdown-item {% if '/hr/users/' in request.path %}active{% endif %}" href="{% url 'user_list' %}">Users</a></li>
           {% endif %}
           <li><hr class="dropdown-divider"></li>
+          {% endif %}
           <li>
             <form method="post" action="{% url 'logout' %}">
               {% csrf_token %}
@@ -127,7 +133,7 @@
   // Back presses walk back the exact path you took.
   function goBack() {
     if (window.history.length > 1) { window.history.back(); }
-    else { window.location.href = '/hr/dashboard/'; }
+    else { window.location.href = '{% if is_interviewer_only %}{% url "interviewer_home" %}{% else %}/hr/dashboard/{% endif %}'; }
   }
   // Hide Back only when there is genuinely nowhere to go back to.
   (function () {

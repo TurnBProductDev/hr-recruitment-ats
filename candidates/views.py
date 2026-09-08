@@ -33,7 +33,9 @@ from .models import (
     Note,
     hold_label,
 )
-from .permissions import ANY_STAFF, HIRING_MANAGER, HR_ADMIN, RECRUITER, GroupRequiredMixin
+from .permissions import (
+    ALL_GROUPS, ANY_STAFF, HIRING_MANAGER, HR_ADMIN, RECRUITER, GroupRequiredMixin, is_interviewer_only,
+)
 
 
 def _performed_by(request):
@@ -799,11 +801,17 @@ class CandidateCvView(GroupRequiredMixin, View):
     enforces that on the very first hop - our own 302 - before it ever
     reaches the blob's response. Without this, the frame silently renders
     blank even though the signed blob URL is fine on its own (confirmed:
-    "Open in new tab" on the exact same link worked)."""
-    allowed_groups = ANY_STAFF
+    "Open in new tab" on the exact same link worked).
+
+    Also reachable by an Interviewer (outside ANY_STAFF) so they can open a
+    CV from their portal ahead of an interview - but only for a candidate
+    they actually have an interview with, not the whole repository by ID."""
+    allowed_groups = ALL_GROUPS
 
     def get(self, request, pk):
         candidate = get_object_or_404(Candidate, pk=pk)
+        if is_interviewer_only(request.user) and not candidate.interviews.filter(interviewer=request.user).exists():
+            raise Http404('No CV on file.')
         resume_url = (candidate.resume_url or '').strip()
         if resume_url:
             target = cv_storage.sas_url(resume_url) if cv_storage.is_our_blob_url(resume_url) else resume_url

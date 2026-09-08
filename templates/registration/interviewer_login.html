@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Login - HireB</title>
+<title>Interviewer Login - HireB</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link href="{% static 'css/theme.css' %}?v=2" rel="stylesheet">
@@ -97,20 +97,6 @@
     color: #3d4f57;
     margin-bottom: 8px;
   }
-  .login-field-row {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    margin-bottom: 8px;
-  }
-  .login-field-row label { margin-bottom: 0; }
-  .login-field-row a {
-    font-weight: 500;
-    font-size: 12px;
-    color: var(--primary-green, #008C8C);
-    text-decoration: none;
-  }
-  .login-field-row a:hover { text-decoration: underline; }
   .login-input {
     width: 100%;
     padding: 13px 14px;
@@ -177,18 +163,20 @@
       <span class="brand-name">HireB</span>
     </div>
     <div class="login-brand-tagline">
-      <h1>Your own HR partner.</h1>
-      <p>Screening to final offer &mdash; your recruitment journey, made easier.</p>
+      <h1>Interview, made simple.</h1>
+      <p>Sign in to see who you're interviewing, review their profile, and record your feedback.</p>
     </div>
   </div>
 
   <div class="login-panel">
     <div class="login-form-wrap">
-      <h2>HR sign in</h2>
-      <p class="subtitle">Use your recruiter account.</p>
+      <h2>Interviewer sign in</h2>
+      <p class="subtitle">Use your interviewer account.</p>
 
       {% if form.errors %}
-        <div class="login-error">Invalid username or password.</div>
+        <div class="login-error">
+          {% if form.non_field_errors %}{{ form.non_field_errors.0 }}{% else %}Invalid username or password.{% endif %}
+        </div>
       {% endif %}
 
       <form method="post">
@@ -198,9 +186,7 @@
           <input type="text" id="id_username" name="username" class="login-input" required autofocus>
         </div>
         <div class="login-field">
-          <div class="login-field-row">
-            <label for="id_password">Password</label>
-          </div>
+          <label for="id_password">Password</label>
           <input type="password" id="id_password" name="password" class="login-input" required>
         </div>
         <input type="hidden" name="next" value="{{ next }}">
@@ -208,10 +194,7 @@
       </form>
 
       <div class="login-back">
-        <a href="{% url 'interviewer_login' %}">Interviewer? Sign in here &rarr;</a>
-      </div>
-      <div class="login-back">
-        <a href="{% url 'landing' %}">&larr; Back to home</a>
+        <a href="{% url 'login' %}">HR staff? Sign in here &rarr;</a>
       </div>
     </div>
   </div>

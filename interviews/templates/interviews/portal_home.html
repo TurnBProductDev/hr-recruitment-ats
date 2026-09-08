@@ -1,0 +1,80 @@
+{% extends "hr_base.html" %}
+{% block title %}My Interviews{% endblock %}
+
+{% block extra_css %}
+<style>
+.pv-head { margin-bottom:18px; }
+.pv-title { font-size:1.5rem; font-weight:700; color:#1a2e35; margin:0; }
+.pv-subtitle { font-size:.8rem; color:#6b7a7a; margin-top:2px; }
+.pv-section-title { font-size:.95rem; font-weight:700; color:#1a2e35; margin:0 0 12px; }
+.pv-name a { font-weight:600; }
+.pv-meta { font-size:.72rem; color:#8a969b; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="pv-head">
+  <h3 class="pv-title">My Interviews</h3>
+  <div class="pv-subtitle">Interviews assigned to you &middot; {{ user.get_full_name|default:user.get_username }}</div>
+</div>
+
+<div class="card app-card p-4 mb-4">
+  <div class="pv-section-title">Needs a Result ({{ pending|length }})</div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr><th>Candidate</th><th>Round</th><th>Date</th><th>Mode</th><th class="text-end">Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for iv in pending %}
+        <tr>
+          <td class="pv-name">
+            <a href="{% url 'interviewer_candidate' iv.candidate.pk %}">{{ iv.candidate.full_name }}</a>
+            <div class="pv-meta">{{ iv.candidate.job.title|default:"-" }}</div>
+          </td>
+          <td>{{ iv.get_round_type_display }}</td>
+          <td>{{ iv.scheduled_date|date:"d M Y H:i" }}</td>
+          <td>{{ iv.get_mode_display }}</td>
+          <td class="text-nowrap text-end">
+            <a href="{% url 'interviewer_candidate' iv.candidate.pk %}" class="btn btn-sm btn-outline-app">View Candidate</a>
+            <a href="{% url 'interview_result' iv.pk %}" class="btn btn-sm btn-fill-app">Record Result</a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-center text-muted py-4">Nothing scheduled right now.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card app-card p-4">
+  <div class="pv-section-title">Completed ({{ completed|length }})</div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr><th>Candidate</th><th>Round</th><th>Date</th><th>Status</th><th>Result</th><th class="text-end">Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for iv in completed %}
+        <tr>
+          <td class="pv-name">
+            <a href="{% url 'interviewer_candidate' iv.candidate.pk %}">{{ iv.candidate.full_name }}</a>
+            <div class="pv-meta">{{ iv.candidate.job.title|default:"-" }}</div>
+          </td>
+          <td>{{ iv.get_round_type_display }}</td>
+          <td>{{ iv.scheduled_date|date:"d M Y H:i" }}</td>
+          <td>{{ iv.get_status_display }}</td>
+          <td>{{ iv.get_result_display }}</td>
+          <td class="text-nowrap text-end">
+            <a href="{% url 'interviewer_candidate' iv.candidate.pk %}" class="btn btn-sm btn-outline-app">View Candidate</a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-center text-muted py-4">No completed interviews yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

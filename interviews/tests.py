@@ -14,7 +14,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from candidates.models import Candidate
-from candidates.permissions import HR_ADMIN, INTERVIEWER
+from candidates.permissions import HR_ADMIN, INTERVIEWER, RECRUITER
 from jobs.models import Job
 
 from . import graph_client
@@ -501,3 +501,121 @@ class InterviewDoneCancelTests(TestCase):
                            .replace(second=0, microsecond=0))
         response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
         self.assertNotContains(response, 'Interview cancelled')
+
+
+class InterviewerPortalTests(TestCase):
+    """The restricted Interviewer portal: their own login, their own
+    interviews list, a candidate view scoped to only candidates they're
+    actually interviewing, and that the main HR app stays off-limits."""
+
+    def setUp(self):
+        self.interviewer = get_user_model().objects.create_user(
+            'panel', 'panel@turnb.com', 'pw', first_name='Sreejith', last_name='K R')
+        self.interviewer.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
+        self.job = Job.objects.create(job_code='J1', title='Program Manager')
+        self.candidate = Candidate.objects.create(
+            full_name='Rose E G', email='rose@example.com', job=self.job)
+        self.other_candidate = Candidate.objects.create(
+            full_name='Nikhil Shaji', email='nikhil@example.com', job=self.job)
+        self.interview = Interview.objects.create(
+            candidate=self.candidate, interviewer=self.interviewer,
+            round_type=Interview.RoundType.ROUND1,
+            scheduled_date=(timezone.now() + timezone.timedelta(days=1))
+                           .replace(second=0, microsecond=0))
+
+    # ---- Interviewer login (separate from the HR sign-in) ----
+
+    def test_interviewer_login_signs_them_in_and_lands_on_the_portal(self):
+        response = self.client.post(reverse('interviewer_login'), {'username': 'panel', 'password': 'pw'})
+        self.assertRedirects(response, reverse('interviewer_home'))
+
+    def test_interviewer_login_refuses_a_non_interviewer_account(self):
+        hr = get_user_model().objects.create_user('hr', 'hr@turnb.com', 'pw')
+        hr.groups.add(Group.objects.get_or_create(name=RECRUITER)[0])
+        response = self.client.post(reverse('interviewer_login'), {'username': 'hr', 'password': 'pw'})
+        self.assertEqual(response.status_code, 200)  # redisplayed with the error
+        self.assertContains(response, 'for interviewers only')
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_main_hr_login_still_works_for_interviewers_but_lands_on_the_portal(self):
+        """Whichever door they used, an interviewer never lands on hr_dashboard
+        (they have no access to it - see ANY_STAFF)."""
+        response = self.client.post(reverse('login'), {'username': 'panel', 'password': 'pw'})
+        self.assertRedirects(response, reverse('interviewer_home'))
+
+    # ---- Portal home: only their own interviews ----
+
+    def test_home_lists_only_their_own_interviews(self):
+        other_interviewer = get_user_model().objects.create_user('other', 'other@turnb.com', 'pw')
+        other_interviewer.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
+        Interview.objects.create(
+            candidate=self.other_candidate, interviewer=other_interviewer,
+            round_type=Interview.RoundType.ROUND1,
+            scheduled_date=timezone.now() + timezone.timedelta(days=1))
+        self.client.force_login(self.interviewer)
+        response = self.client.get(reverse('interviewer_home'))
+        self.assertContains(response, 'Rose E G')
+        self.assertNotContains(response, 'Nikhil Shaji')
+
+    def test_completed_interviews_are_split_from_pending(self):
+        self.interview.status = Interview.Status.COMPLETED
+        self.interview.result = Interview.Result.PASS_
+        self.interview.save()
+        self.client.force_login(self.interviewer)
+        response = self.client.get(reverse('interviewer_home'))
+        self.assertEqual(list(response.context['pending']), [])
+        self.assertEqual(list(response.context['completed']), [self.interview])
+
+    # ---- Candidate view: scoped to candidates they actually interview ----
+
+    def test_can_view_a_candidate_they_are_interviewing(self):
+        self.client.force_login(self.interviewer)
+        response = self.client.get(reverse('interviewer_candidate', args=[self.candidate.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Rose E G')
+
+    def test_cannot_view_an_unrelated_candidate(self):
+        self.client.force_login(self.interviewer)
+        response = self.client.get(reverse('interviewer_candidate', args=[self.other_candidate.pk]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_cannot_open_the_cv_of_an_unrelated_candidate(self):
+        self.other_candidate.resume_url = 'https://example.com/cv.pdf'
+        self.other_candidate.save()
+        self.client.force_login(self.interviewer)
+        response = self.client.get(reverse('candidate_cv', args=[self.other_candidate.pk]))
+        self.assertEqual(response.status_code, 404)
+
+    # ---- The main HR app is off-limits ----
+
+    def test_cannot_reach_the_hr_dashboard(self):
+        self.client.force_login(self.interviewer)
+        response = self.client.get(reverse('hr_dashboard'))
+        self.assertEqual(response.status_code, 403)
+
+    def test_cannot_reach_the_full_interview_scheduler(self):
+        self.client.force_login(self.interviewer)
+        response = self.client.get(reverse('interview_scheduler'))
+        self.assertEqual(response.status_code, 403)
+
+    def test_cannot_reach_the_candidate_repository(self):
+        self.client.force_login(self.interviewer)
+        response = self.client.get(reverse('candidate_repository'))
+        self.assertEqual(response.status_code, 403)
+
+    def test_cannot_reach_the_main_hr_candidate_timeline(self):
+        self.client.force_login(self.interviewer)
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertEqual(response.status_code, 403)
+
+    # ---- Recording a result routes back into the portal, not the HR app ----
+
+    def test_recording_a_result_redirects_to_the_portal(self):
+        self.client.force_login(self.interviewer)
+        response = self.client.post(reverse('interview_result', args=[self.interview.pk]), {
+            'status': Interview.Status.COMPLETED, 'result': Interview.Result.PASS_,
+            'score': '8', 'feedback': 'Strong candidate.',
+        })
+        self.assertRedirects(response, reverse('interviewer_home'))
+        self.interview.refresh_from_db()
+        self.assertEqual(self.interview.result, Interview.Result.PASS_)

@@ -48,11 +48,17 @@ def breadcrumbs(context):
     url_name = match.url_name if match else None
     back_url = context.get('back_url')
     back_label = context.get('back_label')
+    # An interviewer has no hr_dashboard to go Home to - their landing page is
+    # the portal instead (see candidates/permissions.py's ANY_STAFF, which
+    # excludes them from the main HR app).
+    is_interviewer_only = context.get('is_interviewer_only')
+    home_name = 'interviewer_home' if is_interviewer_only else 'hr_dashboard'
+    home_label = 'My Interviews' if is_interviewer_only else 'Home'
 
-    if not url_name or url_name == 'hr_dashboard' or url_name not in BREADCRUMB_REGISTRY:
+    if not url_name or url_name in ('hr_dashboard', 'interviewer_home') or url_name not in BREADCRUMB_REGISTRY:
         return {'crumbs': None, 'back_url': back_url, 'back_label': back_label}
 
-    trail = [{'label': 'Home', 'url': reverse('hr_dashboard')}]
+    trail = [{'label': home_label, 'url': reverse(home_name)}]
     label, parent_name = BREADCRUMB_REGISTRY[url_name]
 
     if back_url:

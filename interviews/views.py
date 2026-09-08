@@ -13,7 +13,7 @@ from django.views.generic import CreateView, ListView, UpdateView
 
 from candidates import services
 from candidates.models import Candidate, Note
-from candidates.permissions import ANY_STAFF, HR_ADMIN, INTERVIEWER, RECRUITER, GroupRequiredMixin
+from candidates.permissions import ANY_STAFF, HR_ADMIN, INTERVIEWER, RECRUITER, GroupRequiredMixin, is_interviewer_only
 
 from . import graph_client, invites
 from .forms import InterviewForm, InterviewResultForm
@@ -259,6 +259,15 @@ class InterviewResultView(GroupRequiredMixin, UpdateView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx['breadcrumb_current'] = f'{self.object.candidate.full_name} — {self.object.get_round_type_display()}'
+        # Reached from the interviewer portal too (allowed_groups above) -
+        # Cancel/breadcrumbs need to point back there instead of the main HR
+        # candidate page, which that role can't open.
+        if is_interviewer_only(self.request.user):
+            ctx['cancel_url'] = reverse('interviewer_candidate', args=[self.object.candidate_id])
+            ctx['back_url'] = ctx['cancel_url']
+            ctx['back_label'] = self.object.candidate.full_name
+        else:
+            ctx['cancel_url'] = reverse('candidate_timeline', args=[self.object.candidate_id])
         return ctx
 
     def form_valid(self, form):
@@ -284,6 +293,8 @@ class InterviewResultView(GroupRequiredMixin, UpdateView):
         return response
 
     def get_success_url(self):
+        if is_interviewer_only(self.request.user):
+            return reverse('interviewer_home')
         return reverse('interview_scheduler')
 
 

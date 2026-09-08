@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import portal_views, views
 
 urlpatterns = [
     path('hr/interviews/', views.InterviewSchedulerListView.as_view(), name='interview_scheduler'),
@@ -10,4 +10,8 @@ urlpatterns = [
     path('hr/interviews/<int:pk>/cancel/', views.InterviewCancelView.as_view(), name='interview_cancel'),
     path('hr/interviews/<int:pk>/result/', views.InterviewResultView.as_view(), name='interview_result'),
     path('hr/interviews/<int:pk>/send-invite/', views.InterviewSendInviteView.as_view(), name='interview_send_invite'),
+
+    path('interviewer/login/', portal_views.InterviewerLoginView.as_view(), name='interviewer_login'),
+    path('interviewer/', portal_views.InterviewerHomeView.as_view(), name='interviewer_home'),
+    path('interviewer/candidates/<int:pk>/', portal_views.InterviewerCandidateView.as_view(), name='interviewer_candidate'),
 ]
