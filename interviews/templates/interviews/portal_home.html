@@ -6,7 +6,6 @@
 .pv-head { margin-bottom:18px; }
 .pv-title { font-size:1.5rem; font-weight:700; color:#1a2e35; margin:0; }
 .pv-subtitle { font-size:.8rem; color:#6b7a7a; margin-top:2px; }
-.pv-section-title { font-size:.95rem; font-weight:700; color:#1a2e35; margin:0 0 12px; }
 .pv-name a { font-weight:600; }
 .pv-meta { font-size:.72rem; color:#8a969b; }
 </style>
@@ -21,99 +20,112 @@
   </div>
 </div>
 
-<div class="card app-card p-4 mb-4">
-  <div class="pv-section-title">Next Prospects ({{ next_prospects|length }})</div>
-  <div class="table-responsive">
-    <table class="table table-hover align-middle mb-0">
-      <thead>
-        <tr><th>Candidate</th>{% if is_admin_view %}<th>Interviewer</th>{% endif %}<th>Round</th><th>Status</th><th class="text-end">Actions</th></tr>
-      </thead>
-      <tbody>
-        {% for r in next_prospects %}
-        <tr>
-          <td class="pv-name">
-            <a href="{% url 'interviewer_candidate' r.candidate.pk %}">{{ r.candidate.full_name }}</a>
-            <div class="pv-meta">{{ r.candidate.job.title|default:"-" }}</div>
-          </td>
-          {% if is_admin_view %}<td>{{ r.interviewer.get_full_name|default:r.interviewer.username }}</td>{% endif %}
-          <td>{{ r.get_round_type_display }}</td>
-          <td>
-            {% if r.status == 'AWAITING_SLOTS' %}<span class="text-muted">Awaiting your slots</span>
-            {% else %}<span class="text-muted">Waiting on HR to pick a slot</span>{% endif %}
-          </td>
-          <td class="text-nowrap text-end">
-            {% if r.status == 'AWAITING_SLOTS' %}
-            <a href="{% url 'interviewer_propose_slots' r.pk %}" class="btn btn-sm btn-fill-app">Propose Slots</a>
-            {% endif %}
-          </td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="{% if is_admin_view %}5{% else %}4{% endif %}" class="text-center text-muted py-4">No candidates waiting on you right now.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
+<ul class="nav nav-tabs mb-3" id="portalTabs">
+  <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#prospectsPane">Prospects ({{ next_prospects|length }})</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#scheduledPane">Scheduled ({{ scheduled|length }})</button></li>
+  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#resultPendingPane">Result Pending ({{ result_pending|length }})</button></li>
+</ul>
 
-<div class="card app-card p-4 mb-4">
-  <div class="pv-section-title">Needs a Result ({{ pending|length }})</div>
-  <div class="table-responsive">
-    <table class="table table-hover align-middle mb-0">
-      <thead>
-        <tr><th>Candidate</th>{% if is_admin_view %}<th>Interviewer</th>{% endif %}<th>Round</th><th>Date</th><th>Mode</th><th class="text-end">Actions</th></tr>
-      </thead>
-      <tbody>
-        {% for iv in pending %}
-        <tr>
-          <td class="pv-name">
-            <a href="{% url 'interviewer_candidate' iv.candidate.pk %}">{{ iv.candidate.full_name }}</a>
-            <div class="pv-meta">{{ iv.candidate.job.title|default:"-" }}</div>
-          </td>
-          {% if is_admin_view %}<td>{% if iv.interviewer %}{{ iv.interviewer.get_full_name|default:iv.interviewer.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</td>{% endif %}
-          <td>{{ iv.get_round_type_display }}</td>
-          <td>{{ iv.scheduled_date|date:"d M Y H:i" }}</td>
-          <td>{{ iv.get_mode_display }}</td>
-          <td class="text-nowrap text-end">
-            <a href="{% url 'interviewer_candidate' iv.candidate.pk %}" class="btn btn-sm btn-outline-app">View Candidate</a>
-            <a href="{% url 'interview_result' iv.pk %}" class="btn btn-sm btn-fill-app">Record Result</a>
-          </td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="{% if is_admin_view %}6{% else %}5{% endif %}" class="text-center text-muted py-4">Nothing scheduled right now.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+<div class="tab-content">
+  <!-- ===================== PROSPECTS ===================== -->
+  <div class="tab-pane fade show active" id="prospectsPane">
+    <div class="card app-card p-4">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr><th>Candidate</th>{% if is_admin_view %}<th>Interviewer</th>{% endif %}<th>Round</th><th>Status</th><th class="text-end">Actions</th></tr>
+          </thead>
+          <tbody>
+            {% for r in next_prospects %}
+            <tr>
+              <td class="pv-name">
+                <a href="{% url 'interviewer_candidate' r.candidate.pk %}">{{ r.candidate.full_name }}</a>
+                <div class="pv-meta">{{ r.candidate.job.title|default:"-" }}</div>
+              </td>
+              {% if is_admin_view %}<td>{{ r.interviewer.get_full_name|default:r.interviewer.username }}</td>{% endif %}
+              <td>{{ r.get_round_type_display }}</td>
+              <td>
+                {% if r.status == 'AWAITING_SLOTS' %}<span class="text-muted">Awaiting your slots</span>
+                {% else %}<span class="text-muted">Waiting on HR to pick a slot</span>{% endif %}
+              </td>
+              <td class="text-nowrap text-end">
+                {% if r.status == 'AWAITING_SLOTS' %}
+                <a href="{% url 'interviewer_propose_slots' r.pk %}" class="btn btn-sm btn-fill-app">Propose Slots</a>
+                {% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="{% if is_admin_view %}5{% else %}4{% endif %}" class="text-center text-muted py-4">No candidates waiting on you right now.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
-</div>
 
-<div class="card app-card p-4">
-  <div class="pv-section-title">Completed ({{ completed|length }})</div>
-  <div class="table-responsive">
-    <table class="table table-hover align-middle mb-0">
-      <thead>
-        <tr><th>Candidate</th>{% if is_admin_view %}<th>Interviewer</th>{% endif %}<th>Round</th><th>Date</th><th>Status</th><th>Result</th><th class="text-end">Actions</th></tr>
-      </thead>
-      <tbody>
-        {% for iv in completed %}
-        <tr>
-          <td class="pv-name">
-            <a href="{% url 'interviewer_candidate' iv.candidate.pk %}">{{ iv.candidate.full_name }}</a>
-            <div class="pv-meta">{{ iv.candidate.job.title|default:"-" }}</div>
-          </td>
-          {% if is_admin_view %}<td>{% if iv.interviewer %}{{ iv.interviewer.get_full_name|default:iv.interviewer.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</td>{% endif %}
-          <td>{{ iv.get_round_type_display }}</td>
-          <td>{{ iv.scheduled_date|date:"d M Y H:i" }}</td>
-          <td>{{ iv.get_status_display }}</td>
-          <td>{{ iv.get_result_display }}</td>
-          <td class="text-nowrap text-end">
-            <a href="{% url 'interviewer_candidate' iv.candidate.pk %}" class="btn btn-sm btn-outline-app">View Candidate</a>
-          </td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="{% if is_admin_view %}7{% else %}6{% endif %}" class="text-center text-muted py-4">No completed interviews yet.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+  <!-- ===================== SCHEDULED ===================== -->
+  <div class="tab-pane fade" id="scheduledPane">
+    <div class="card app-card p-4">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr><th>Candidate</th>{% if is_admin_view %}<th>Interviewer</th>{% endif %}<th>Round</th><th>Date</th><th>Mode</th><th class="text-end">Actions</th></tr>
+          </thead>
+          <tbody>
+            {% for iv in scheduled %}
+            <tr>
+              <td class="pv-name">
+                <a href="{% url 'interviewer_candidate' iv.candidate.pk %}">{{ iv.candidate.full_name }}</a>
+                <div class="pv-meta">{{ iv.candidate.job.title|default:"-" }}</div>
+              </td>
+              {% if is_admin_view %}<td>{% if iv.interviewer %}{{ iv.interviewer.get_full_name|default:iv.interviewer.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</td>{% endif %}
+              <td>{{ iv.get_round_type_display }}</td>
+              <td>{{ iv.scheduled_date|date:"d M Y H:i" }}</td>
+              <td>{{ iv.get_mode_display }}</td>
+              <td class="text-nowrap text-end">
+                <a href="{% url 'interviewer_candidate' iv.candidate.pk %}" class="btn btn-sm btn-outline-app">View Candidate</a>
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="{% if is_admin_view %}6{% else %}5{% endif %}" class="text-center text-muted py-4">Nothing coming up.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== RESULT PENDING ===================== -->
+  <div class="tab-pane fade" id="resultPendingPane">
+    <div class="card app-card p-4">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr><th>Candidate</th>{% if is_admin_view %}<th>Interviewer</th>{% endif %}<th>Round</th><th>Date</th><th>Mode</th><th class="text-end">Actions</th></tr>
+          </thead>
+          <tbody>
+            {% for iv in result_pending %}
+            <tr>
+              <td class="pv-name">
+                <a href="{% url 'interviewer_candidate' iv.candidate.pk %}">{{ iv.candidate.full_name }}</a>
+                <div class="pv-meta">{{ iv.candidate.job.title|default:"-" }}</div>
+              </td>
+              {% if is_admin_view %}<td>{% if iv.interviewer %}{{ iv.interviewer.get_full_name|default:iv.interviewer.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</td>{% endif %}
+              <td>{{ iv.get_round_type_display }}</td>
+              <td>{{ iv.scheduled_date|date:"d M Y H:i" }}</td>
+              <td>{{ iv.get_mode_display }}</td>
+              <td class="text-nowrap text-end">
+                <a href="{% url 'interviewer_candidate' iv.candidate.pk %}" class="btn btn-sm btn-outline-app">View Candidate</a>
+                <a href="{% url 'interview_result' iv.pk %}" class="btn btn-sm btn-fill-app">Record Result</a>
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="{% if is_admin_view %}6{% else %}5{% endif %}" class="text-center text-muted py-4">Nothing waiting on a result.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </div>
 {% endblock %}

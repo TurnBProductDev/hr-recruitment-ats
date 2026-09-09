@@ -190,7 +190,7 @@ class InterviewerConflictTests(TestCase):
         self.other_interviewer.groups.add(interviewer_group)
         self.candidate = Candidate.objects.create(
             full_name='Rose E G', email='rose@example.com', job=self.job)
-        # Occupies 10:00-10:45 local time - matching how the form interprets
+        # Occupies 10:00-11:00 local time - matching how the form interprets
         # the naive datetime-local strings posted below.
         self.existing = Interview.objects.create(
             candidate=self.candidate, interviewer=self.interviewer,
@@ -421,7 +421,7 @@ class RescheduleTests(TestCase):
         response = self.client.get(
             reverse('candidate_timeline', args=[self.candidate.pk]))
         self.assertContains(
-            response, reverse('interview_schedule', args=[self.candidate.pk]))
+            response, reverse('interview_allocate', args=[self.candidate.pk]))
         self.assertNotContains(
             response, reverse('interview_reschedule', args=[self.interview.pk]))
 
@@ -618,8 +618,8 @@ class InterviewDoneCancelTests(TestCase):
         self.assertEqual(self.interview.status, Interview.Status.CANCELLED)
         response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
         self.assertContains(response, 'Interview cancelled')
-        # Still in the Schedule phase - a fresh interview can be scheduled instead.
-        self.assertContains(response, reverse('interview_schedule', args=[self.candidate.pk]))
+        # Still in the Schedule phase - a fresh interviewer can be allocated instead.
+        self.assertContains(response, reverse('interview_allocate', args=[self.candidate.pk]))
 
     def test_scheduling_a_new_interview_clears_the_cancelled_prompt(self):
         self.client.post(reverse('interview_cancel', args=[self.interview.pk]))
@@ -685,14 +685,22 @@ class InterviewerPortalTests(TestCase):
         self.assertContains(response, 'Rose E G')
         self.assertNotContains(response, 'Nikhil Shaji')
 
-    def test_completed_interviews_are_split_from_pending(self):
+    def test_completed_interviews_drop_off_the_portal_home(self):
         self.interview.status = Interview.Status.COMPLETED
         self.interview.result = Interview.Result.PASS_
         self.interview.save()
         self.client.force_login(self.interviewer)
         response = self.client.get(reverse('interviewer_home'))
-        self.assertEqual(list(response.context['pending']), [])
-        self.assertEqual(list(response.context['completed']), [self.interview])
+        self.assertEqual(list(response.context['scheduled']), [])
+        self.assertEqual(list(response.context['result_pending']), [])
+
+    def test_scheduled_moves_to_result_pending_once_its_time_passes(self):
+        self.interview.scheduled_date = timezone.now() - timezone.timedelta(hours=1)
+        self.interview.save()
+        self.client.force_login(self.interviewer)
+        response = self.client.get(reverse('interviewer_home'))
+        self.assertEqual(list(response.context['scheduled']), [])
+        self.assertEqual(list(response.context['result_pending']), [self.interview])
 
     # ---- Candidate view: scoped to candidates they actually interview ----
 

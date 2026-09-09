@@ -9,6 +9,7 @@ from django.contrib import messages
 from django.contrib.auth import views as auth_views
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.views import View
 from django.views.generic import DetailView, ListView
 
@@ -56,27 +57,37 @@ class InterviewerLoginView(auth_views.LoginView):
 
 
 class InterviewerHomeView(GroupRequiredMixin, ListView):
-    """Landing page after an interviewer signs in: every interview assigned
-    to them, split into what still needs a result and what's done. An Admin
-    sees every interview, for every interviewer, instead of just their own."""
+    """Landing page after an interviewer signs in, as 3 tabs: Prospects
+    (interviewer-proposes-slots requests still in progress), Scheduled
+    (upcoming interviews) and Result Pending (the slot has passed but no
+    result recorded yet). An Admin sees every interviewer's, instead of
+    just their own."""
     model = Interview
     template_name = 'interviews/portal_home.html'
     context_object_name = 'interviews'
     allowed_groups = (INTERVIEWER, HR_ADMIN)
 
     def get_queryset(self):
-        qs = Interview.objects.select_related('candidate', 'candidate__job', 'interviewer')
+        # Only interviews still awaiting their result belong on this landing
+        # page - once a result is recorded (or the interview is cancelled)
+        # it drops off entirely; that history lives on the candidate's own
+        # timeline instead.
+        qs = Interview.objects.filter(status__in=Interview.OPEN_STATUSES) \
+            .select_related('candidate', 'candidate__job', 'interviewer')
         if not _is_admin(self.request.user):
             qs = qs.filter(interviewer=self.request.user)
-        return qs.order_by('-scheduled_date')
+        return qs.order_by('scheduled_date')
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         is_admin = _is_admin(self.request.user)
         ctx['is_admin_view'] = is_admin
+        # Scheduled: still ahead of us. Result Pending: the slot has passed
+        # but nothing's been recorded yet - the interviewer needs to act.
+        now = timezone.now()
         interviews = list(ctx['interviews'])
-        ctx['pending'] = [i for i in interviews if i.status in Interview.OPEN_STATUSES]
-        ctx['completed'] = [i for i in interviews if i.status not in Interview.OPEN_STATUSES]
+        ctx['scheduled'] = [i for i in interviews if i.scheduled_date > now]
+        ctx['result_pending'] = [i for i in interviews if i.scheduled_date <= now]
 
         requests_qs = InterviewRequest.objects.filter(status__in=InterviewRequest.OPEN_STATUSES) \
             .select_related('candidate', 'candidate__job', 'interviewer')
