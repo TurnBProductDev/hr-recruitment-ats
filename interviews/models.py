@@ -8,9 +8,10 @@ from django.utils import timezone
 from candidates.models import Candidate
 
 # How long a slot an interview occupies on the interviewer's calendar, for the
-# double-booking check below. Also the .ics event length in interviews/invites.py
-# - keep both in sync since they describe the same meeting.
-INTERVIEW_DURATION = timedelta(minutes=45)
+# double-booking check below. Also the .ics event length in interviews/invites.py,
+# and the length of a slot an interviewer proposes in InterviewSlot below - keep
+# all three in sync since they describe the same one-hour meeting block.
+INTERVIEW_DURATION = timedelta(hours=1)
 
 
 class Interview(models.Model):
@@ -149,6 +150,64 @@ class InterviewReschedule(models.Model):
         return ' '.join(parts)
 
 
+class InterviewRequest(models.Model):
+    """The interviewer-proposes-slots scheduling flow: HR allocates an
+    interviewer to a candidate (no date yet), the interviewer proposes 2-3
+    one-hour slots, and HR picks one - at which point a real Interview row
+    (above) is created with that date. This row tracks that in-between state;
+    once a slot is picked it just sits there as SCHEDULED, linked to the
+    Interview it produced, for history."""
+    class Status(models.TextChoices):
+        AWAITING_SLOTS = 'AWAITING_SLOTS', 'Awaiting Slots'
+        AWAITING_SELECTION = 'AWAITING_SELECTION', 'Awaiting HR Selection'
+        SCHEDULED = 'SCHEDULED', 'Scheduled'
+        CANCELLED = 'CANCELLED', 'Cancelled'
+
+    # Only these two count as "still in progress" - see open_for().
+    OPEN_STATUSES = (Status.AWAITING_SLOTS, Status.AWAITING_SELECTION)
+
+    candidate = models.ForeignKey(Candidate, on_delete=models.CASCADE, related_name='interview_requests')
+    round_type = models.CharField(max_length=20, choices=Interview.RoundType.choices, default=Interview.RoundType.ROUND1)
+    interviewer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='interview_requests')
+    mode = models.CharField(max_length=20, choices=Interview.Mode.choices, default=Interview.Mode.VIDEO)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.AWAITING_SLOTS)
+    interview = models.ForeignKey(
+        Interview, on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+'
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.candidate.full_name} - {self.get_round_type_display()} ({self.get_status_display()})"
+
+    @classmethod
+    def open_for(cls, candidate):
+        """This candidate's requests still in progress (awaiting slots or
+        awaiting HR's pick) - mirrors Interview.open_for so a candidate can't
+        have both an open request and an open interview at once."""
+        return cls.objects.filter(candidate=candidate, status__in=cls.OPEN_STATUSES)
+
+
+class InterviewSlot(models.Model):
+    """One of the 2-3 one-hour times an interviewer proposed for an
+    InterviewRequest. Picking one (InterviewSelectSlotView) turns it into the
+    actual Interview's scheduled_date; the rest are left behind, unpicked."""
+    request = models.ForeignKey(InterviewRequest, on_delete=models.CASCADE, related_name='slots')
+    start_datetime = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['start_datetime']
+
+    def __str__(self):
+        return f"{self.request_id}: {self.start_datetime:%Y-%m-%d %H:%M}"
+
+
 def open_interview_message(interview):
     """Why a new interview was refused, phrased for the HR user."""
     when = timezone.localtime(interview.scheduled_date)
@@ -156,6 +215,15 @@ def open_interview_message(interview):
             f'{interview.get_round_type_display()} interview on {when:%d %b %Y %H:%M}. '
             f'Update that interview’s status (mark the result) before scheduling '
             f'another one.')
+
+
+def open_interview_request_message(request):
+    """Why a new allocation was refused, phrased for the HR user."""
+    waiting_on = ('the interviewer to propose slots' if request.status == InterviewRequest.Status.AWAITING_SLOTS
+                  else 'you to pick a slot')
+    return (f'{request.candidate.full_name} already has an interviewer allocated '
+            f'({request.interviewer.get_full_name() or request.interviewer.get_username()}) for '
+            f'{request.get_round_type_display()}, awaiting {waiting_on}.')
 
 
 def interviewer_conflict_message(interview):

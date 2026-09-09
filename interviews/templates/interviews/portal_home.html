@@ -22,6 +22,40 @@
 </div>
 
 <div class="card app-card p-4 mb-4">
+  <div class="pv-section-title">Next Prospects ({{ next_prospects|length }})</div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr><th>Candidate</th>{% if is_admin_view %}<th>Interviewer</th>{% endif %}<th>Round</th><th>Status</th><th class="text-end">Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for r in next_prospects %}
+        <tr>
+          <td class="pv-name">
+            <a href="{% url 'interviewer_candidate' r.candidate.pk %}">{{ r.candidate.full_name }}</a>
+            <div class="pv-meta">{{ r.candidate.job.title|default:"-" }}</div>
+          </td>
+          {% if is_admin_view %}<td>{{ r.interviewer.get_full_name|default:r.interviewer.username }}</td>{% endif %}
+          <td>{{ r.get_round_type_display }}</td>
+          <td>
+            {% if r.status == 'AWAITING_SLOTS' %}<span class="text-muted">Awaiting your slots</span>
+            {% else %}<span class="text-muted">Waiting on HR to pick a slot</span>{% endif %}
+          </td>
+          <td class="text-nowrap text-end">
+            {% if r.status == 'AWAITING_SLOTS' %}
+            <a href="{% url 'interviewer_propose_slots' r.pk %}" class="btn btn-sm btn-fill-app">Propose Slots</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="{% if is_admin_view %}5{% else %}4{% endif %}" class="text-center text-muted py-4">No candidates waiting on you right now.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card app-card p-4 mb-4">
   <div class="pv-section-title">Needs a Result ({{ pending|length }})</div>
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">

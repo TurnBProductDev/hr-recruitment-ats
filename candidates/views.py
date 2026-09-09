@@ -12,7 +12,7 @@ from django.views import View
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.generic import DetailView, ListView, UpdateView
 
-from interviews.models import Interview, InterviewReschedule
+from interviews.models import Interview, InterviewReschedule, InterviewRequest
 from jobs.models import Job
 
 from . import bulk, cv_parser, cv_storage, match_scoring, rejection_emails, screening_questions, scoring, services
@@ -622,6 +622,9 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
         ctx['attachments'] = candidate.attachments.all()
         ctx['offers'] = candidate.offers.all()
         ctx['interviews'] = candidate.interviews.select_related('interviewer').all()
+        ctx['interview_requests'] = (
+            candidate.interview_requests.filter(status__in=InterviewRequest.OPEN_STATUSES)
+            .select_related('interviewer').prefetch_related('slots'))
         ctx['note_form'] = CandidateNoteForm()
 
         # Unified activity feed: every action (status changes, notes, calls,
@@ -700,6 +703,11 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
             if not rounds:
                 continue
             relevant = [i for i in ctx['interviews'] if i.round_type in rounds]
+            # The interviewer-proposes-slots flow's in-progress request for this
+            # stage, if any - takes over the Schedule subsection instead of the
+            # plain Allocate button while it's awaiting slots/HR's pick.
+            stage['interview_request'] = next(
+                (r for r in ctx['interview_requests'] if r.round_type in rounds), None)
             stage['open_interview'] = next(
                 (i for i in relevant if i.status in Interview.OPEN_STATUSES
                  and i.result == Interview.Result.PENDING), None)

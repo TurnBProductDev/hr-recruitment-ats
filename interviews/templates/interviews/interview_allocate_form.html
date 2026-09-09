@@ -1,0 +1,25 @@
+{% extends "hr_base.html" %}
+{% block title %}Allocate Interviewer{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-6">
+    <div class="card app-card p-4">
+      <h4 class="mb-3">Allocate Interviewer - {{ candidate.full_name }}</h4>
+      <p class="text-muted small">The interviewer will be asked to propose 2-3 one-hour slots; you'll then pick one to confirm the interview.</p>
+      <form method="post">
+        {% csrf_token %}
+        {% for e in form.non_field_errors %}<div class="alert alert-danger py-2">{{ e }}</div>{% endfor %}
+        <div class="row g-3">
+          <div class="col-md-6"><label class="form-label">Round Type</label>{{ form.round_type }}</div>
+          <div class="col-md-6"><label class="form-label">Interviewer</label>{{ form.interviewer }}</div>
+          <div class="col-md-6"><label class="form-label">Mode</label>{{ form.mode }}</div>
+        </div>
+        <div class="mt-4 d-flex gap-2">
+          <button type="submit" class="btn btn-fill-app">Allocate Interviewer</button>
+          <a href="{% url 'candidate_timeline' candidate.pk %}" class="btn btn-outline-app">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

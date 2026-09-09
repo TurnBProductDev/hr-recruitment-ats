@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'candidates',
     'interviews',
     'dashboard',
+    'notifications',
 ]
 
 MIDDLEWARE = [
@@ -70,6 +71,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'dashboard.context_processors.role_flags',
+                'notifications.context_processors.unread_notifications',
             ],
         },
     },

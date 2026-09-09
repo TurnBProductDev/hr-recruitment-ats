@@ -2,11 +2,15 @@ import logging
 
 from django import forms
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 
 from candidates.permissions import INTERVIEWER
 
 from . import graph_client
-from .models import INTERVIEW_DURATION, Interview, interviewer_conflict_message, open_interview_message
+from .models import (
+    INTERVIEW_DURATION, Interview, InterviewRequest, interviewer_conflict_message,
+    open_interview_message, open_interview_request_message,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +67,9 @@ class InterviewForm(BootstrapFormMixin, forms.ModelForm):
             clash = clash.first()
             if clash:
                 raise forms.ValidationError(open_interview_message(clash))
+            request_clash = InterviewRequest.open_for(self.candidate).first()
+            if request_clash:
+                raise forms.ValidationError(open_interview_request_message(request_clash))
 
         interviewer = cleaned.get('interviewer')
         scheduled_date = cleaned.get('scheduled_date')
@@ -111,4 +118,101 @@ class InterviewResultForm(BootstrapFormMixin, forms.ModelForm):
         if self.instance.result == Interview.Result.PENDING:
             self.initial['result'] = ''
         self.fields['feedback'].required = True
+        self._add_bootstrap_classes()
+
+
+class InterviewAllocationForm(BootstrapFormMixin, forms.ModelForm):
+    """Step 1 of the new flow: HR only picks who interviews the candidate -
+    no date yet, that comes from the interviewer's own proposed slots (see
+    InterviewSlotProposalForm)."""
+    class Meta:
+        model = InterviewRequest
+        fields = ['round_type', 'interviewer', 'mode']
+
+    def __init__(self, *args, candidate=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.candidate = candidate
+        User = get_user_model()
+        self.fields['interviewer'].queryset = (
+            User.objects.filter(groups__name=INTERVIEWER).order_by('first_name', 'last_name'))
+        self.fields['interviewer'].label_from_instance = (
+            lambda u: u.get_full_name() or u.username)
+        self._add_bootstrap_classes()
+
+    def clean(self):
+        cleaned = super().clean()
+        if self.candidate:
+            clash = Interview.open_for(self.candidate).first()
+            if clash:
+                raise forms.ValidationError(open_interview_message(clash))
+            request_clash = InterviewRequest.open_for(self.candidate).first()
+            if request_clash:
+                raise forms.ValidationError(open_interview_request_message(request_clash))
+        return cleaned
+
+
+class InterviewSlotProposalForm(BootstrapFormMixin, forms.Form):
+    """Step 2: the interviewer proposes 2-3 one-hour slots for an
+    InterviewRequest. Not a ModelForm - it fans out into several InterviewSlot
+    rows rather than editing one model instance."""
+    slot_1 = forms.DateTimeField(label='Slot 1', widget=forms.DateTimeInput(attrs={'type': 'datetime-local'}))
+    slot_2 = forms.DateTimeField(label='Slot 2', required=False, widget=forms.DateTimeInput(attrs={'type': 'datetime-local'}))
+    slot_3 = forms.DateTimeField(label='Slot 3', required=False, widget=forms.DateTimeInput(attrs={'type': 'datetime-local'}))
+
+    def __init__(self, *args, interviewer=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.interviewer = interviewer
+        self._add_bootstrap_classes()
+
+    def clean(self):
+        cleaned = super().clean()
+        slots = [cleaned[f] for f in ('slot_1', 'slot_2', 'slot_3') if cleaned.get(f)]
+        if len(slots) < 2:
+            raise forms.ValidationError('Propose at least 2 slots so HR has a choice.')
+        if len(set(slots)) != len(slots):
+            raise forms.ValidationError('Each proposed slot must be a different time.')
+        now = timezone.now()
+        for i, slot in enumerate(slots):
+            if slot <= now:
+                raise forms.ValidationError('Proposed slots must be in the future.')
+            for other in slots[i + 1:]:
+                if abs((slot - other)) < INTERVIEW_DURATION:
+                    raise forms.ValidationError('Proposed slots must not overlap each other.')
+        if self.interviewer:
+            for slot in slots:
+                clash = Interview.conflicts_for(self.interviewer, slot).first()
+                if clash:
+                    raise forms.ValidationError(interviewer_conflict_message(clash))
+                if graph_client.is_configured() and self.interviewer.email:
+                    try:
+                        busy = graph_client.is_interviewer_busy(
+                            self.interviewer.email, slot, slot + INTERVIEW_DURATION)
+                    except graph_client.GraphError as exc:
+                        logger.warning('Skipping Outlook calendar check for %s: %s', self.interviewer.email, exc)
+                    else:
+                        if busy:
+                            raise forms.ValidationError(
+                                f'Your Outlook calendar shows you busy at {slot:%d %b %Y %H:%M}. '
+                                f'Pick a different time.')
+        cleaned['slots'] = sorted(slots)
+        return cleaned
+
+
+class InterviewSelectSlotForm(BootstrapFormMixin, forms.Form):
+    """Step 3: HR picks one of the interviewer's proposed slots, finalizing
+    the interview. candidate_email/meeting_link mirror InterviewForm's own
+    fields - deferred to here since only now is there an actual date to build
+    the invite/meeting around."""
+    slot = forms.ModelChoiceField(queryset=None, widget=forms.RadioSelect, empty_label=None)
+    candidate_email = forms.EmailField(label='Candidate Email', required=False)
+    meeting_link = forms.URLField(label='Meeting Link', required=False)
+
+    def __init__(self, *args, request=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.request_obj = request
+        self.fields['slot'].queryset = request.slots.all()
+        self.fields['slot'].label_from_instance = (
+            lambda s: timezone.localtime(s.start_datetime).strftime('%d %b %Y, %H:%M'))
+        if not self.is_bound:
+            self.fields['candidate_email'].initial = request.candidate.email
         self._add_bootstrap_classes()

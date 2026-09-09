@@ -18,6 +18,7 @@ urlpatterns = [
     path('', include('candidates.urls')),
     path('', include('interviews.urls')),
     path('', include('dashboard.urls')),
+    path('', include('notifications.urls')),
 ]
 
 if settings.DEBUG:

@@ -87,6 +87,32 @@
     </div>
 
     <div class="app-nav-right">
+      <div class="dropdown app-nav-notifications">
+        <a href="#" class="app-nav-link dropdown-toggle position-relative" data-bs-toggle="dropdown" aria-expanded="false" style="padding:7px 10px;">
+          <i class="bi bi-bell-fill"></i>
+          {% if unread_notification_count %}
+          <span class="badge rounded-pill bg-danger" style="position:absolute; top:0; right:0; font-size:.6rem;">{{ unread_notification_count }}</span>
+          {% endif %}
+        </a>
+        <ul class="dropdown-menu dropdown-menu-end" style="width:320px; max-width:90vw;">
+          <li><h6 class="dropdown-header">Notifications</h6></li>
+          {% for n in recent_notifications %}
+          <li>
+            <form method="post" action="{% url 'notification_mark_read' n.pk %}">
+              {% csrf_token %}
+              <button type="submit" class="dropdown-item text-wrap">
+                <div class="fw-semibold small">{{ n.title }}</div>
+                <div class="text-muted" style="font-size:.72rem;">{{ n.created_at|date:"d M Y H:i" }}</div>
+              </button>
+            </form>
+          </li>
+          {% empty %}
+          <li><span class="dropdown-item-text text-muted small">Nothing new.</span></li>
+          {% endfor %}
+          <li><hr class="dropdown-divider"></li>
+          <li><a class="dropdown-item text-center small" href="{% url 'notification_list' %}">View all</a></li>
+        </ul>
+      </div>
       <div class="dropdown app-nav-account">
         <a href="#" class="app-nav-account-toggle dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
           <span class="app-nav-avatar">{{ user.get_username|slice:":2"|upper }}</span>

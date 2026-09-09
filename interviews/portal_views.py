@@ -5,14 +5,21 @@ as-is). Everything else in the app (dashboard, candidate repository, job
 management, the full interview scheduler, ...) is off-limits to this role -
 see candidates.permissions.ANY_STAFF, which deliberately excludes Interviewer.
 """
+from django.contrib import messages
 from django.contrib.auth import views as auth_views
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.views import View
 from django.views.generic import DetailView, ListView
+
+from notifications import services as notifications
 
 from candidates.models import Candidate
 from candidates.permissions import HR_ADMIN, INTERVIEWER, PORTAL_SESSION_KEY, GroupRequiredMixin
 
-from .models import Interview
+from . import slot_emails
+from .forms import InterviewSlotProposalForm
+from .models import Interview, InterviewRequest, InterviewSlot
 
 
 def _is_admin(user):
@@ -65,10 +72,17 @@ class InterviewerHomeView(GroupRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        ctx['is_admin_view'] = _is_admin(self.request.user)
+        is_admin = _is_admin(self.request.user)
+        ctx['is_admin_view'] = is_admin
         interviews = list(ctx['interviews'])
         ctx['pending'] = [i for i in interviews if i.status in Interview.OPEN_STATUSES]
         ctx['completed'] = [i for i in interviews if i.status not in Interview.OPEN_STATUSES]
+
+        requests_qs = InterviewRequest.objects.filter(status__in=InterviewRequest.OPEN_STATUSES) \
+            .select_related('candidate', 'candidate__job', 'interviewer')
+        if not is_admin:
+            requests_qs = requests_qs.filter(interviewer=self.request.user)
+        ctx['next_prospects'] = requests_qs.order_by('-created_at')
         return ctx
 
 
@@ -101,3 +115,50 @@ class InterviewerCandidateView(GroupRequiredMixin, DetailView):
         ctx['back_url'] = reverse('interviewer_home')
         ctx['back_label'] = 'My Interviews'
         return ctx
+
+
+class InterviewProposeSlotsView(GroupRequiredMixin, View):
+    """Step 2 of the interviewer-proposes-slots flow: the interviewer offers
+    2-3 one-hour times for a candidate HR allocated to them. Scoped to their
+    own requests only (an Admin using the portal can see every request via
+    InterviewerHomeView.next_prospects, but proposing slots on someone else's
+    behalf isn't offered here)."""
+    allowed_groups = (INTERVIEWER, HR_ADMIN)
+    template_name = 'interviews/portal_propose_slots.html'
+
+    def _request_or_404(self, pk, user):
+        qs = InterviewRequest.objects.filter(status=InterviewRequest.Status.AWAITING_SLOTS)
+        if not _is_admin(user):
+            qs = qs.filter(interviewer=user)
+        return get_object_or_404(qs, pk=pk)
+
+    def get(self, request, pk):
+        request_obj = self._request_or_404(pk, request.user)
+        form = InterviewSlotProposalForm(interviewer=request_obj.interviewer)
+        return self._render(request, request_obj, form)
+
+    def post(self, request, pk):
+        request_obj = self._request_or_404(pk, request.user)
+        form = InterviewSlotProposalForm(request.POST, interviewer=request_obj.interviewer)
+        if not form.is_valid():
+            return self._render(request, request_obj, form, status=400)
+
+        InterviewSlot.objects.bulk_create(
+            InterviewSlot(request=request_obj, start_datetime=slot) for slot in form.cleaned_data['slots'])
+        request_obj.status = InterviewRequest.Status.AWAITING_SELECTION
+        request_obj.save(update_fields=['status'])
+        if request_obj.created_by:
+            notifications.notify(
+                request_obj.created_by, title=f'Slots proposed - {request_obj.candidate.full_name}',
+                message=f'{request_obj.interviewer.get_full_name() or request_obj.interviewer.get_username()} '
+                        f'proposed slots for {request_obj.get_round_type_display()} - pick one to confirm.',
+                url=reverse('candidate_timeline', args=[request_obj.candidate_id]))
+        slot_emails.notify_hr_slots_proposed(request_obj)
+        messages.success(request, 'Slots submitted - HR will pick one and confirm the interview.')
+        return redirect('interviewer_home')
+
+    def _render(self, request, request_obj, form, status=200):
+        return render(request, self.template_name, {
+            'interview_request': request_obj, 'form': form,
+            'back_url': reverse('interviewer_home'), 'back_label': 'My Interviews',
+        }, status=status)

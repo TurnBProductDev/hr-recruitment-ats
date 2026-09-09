@@ -486,7 +486,7 @@ html { scroll-behavior: smooth; }
           <div class="pd-body mb-2">
             {% if stage.open_interview %}
             <span class="text-muted">Scheduled:</span> <strong>{{ stage.open_interview.scheduled_date|date:"d M Y, H:i" }}</strong>
-            {% elif not stage.cancelled_interview %}
+            {% elif not stage.interview_request and not stage.cancelled_interview %}
             <span class="text-muted fst-italic">Interview schedule pending</span>
             {% endif %}
           </div>
@@ -506,11 +506,35 @@ html { scroll-behavior: smooth; }
               <button type="submit" class="btn btn-sm btn-outline-danger">Cancelled</button>
             </form>
           </div>
+          {% elif stage.interview_request %}
+            {% if stage.interview_request.status == 'AWAITING_SLOTS' %}
+            <div class="alert alert-info py-2 px-3 mb-0 small">
+              <i class="bi bi-hourglass-split"></i> Waiting on
+              {{ stage.interview_request.interviewer.get_full_name|default:stage.interview_request.interviewer.username }}
+              to propose available slots.
+            </div>
+            {% else %}
+            <div class="alert alert-info py-2 px-3 mb-2 small">
+              <i class="bi bi-calendar-check"></i>
+              {{ stage.interview_request.slots.all|length }} slot(s) proposed - pick one to confirm.
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+              <button type="button" class="btn btn-sm btn-fill-app"
+                      data-bs-toggle="modal" data-bs-target="#interviewModal"
+                      data-load-url="{% url 'interview_request_select_slot' stage.interview_request.pk %}" data-modal-title="Select Interview Slot">
+                <i class="bi bi-calendar-check"></i> Select Slot
+              </button>
+              <form method="post" action="{% url 'interview_request_new_slots' stage.interview_request.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-app">Request Different Slots</button>
+              </form>
+            </div>
+            {% endif %}
           {% else %}
           <button type="button" class="btn btn-sm btn-outline-app"
-                  data-bs-toggle="modal" data-bs-target="#interviewModal"
-                  data-load-url="{% url 'interview_schedule' candidate.pk %}" data-modal-title="Schedule Interview">
-            <i class="bi bi-calendar-event"></i> Schedule Interview
+                  data-bs-toggle="modal" data-bs-target="#allocateModal"
+                  data-load-url="{% url 'interview_allocate' candidate.pk %}" data-modal-title="Allocate Interviewer">
+            <i class="bi bi-person-check"></i> Allocate Interviewer
           </button>
           {% endif %}
         </div>
@@ -738,6 +762,20 @@ html { scroll-behavior: smooth; }
   </div>
 </div>
 
+<div class="modal fade" id="allocateModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Allocate Interviewer</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="allocateModalBody">
+        <div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm"></span> Loading…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal fade" id="screeningQuestionsModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
@@ -898,6 +936,49 @@ pollCandidateAction("{% url 'candidate_rescore_status' candidate.pk %}");
           if (submitBtn) { submitBtn.disabled = false; }
         });
     }
+  });
+})();
+
+// Allocate Interviewer popup: a single step (no invite draft after it - that
+// only happens once HR later picks a slot, via the interviewModal's Select
+// Slot flow above), so it just shows the result and closes on success.
+(function () {
+  var modalEl = document.getElementById('allocateModal');
+  if (!modalEl) return;
+  var modal = new bootstrap.Modal(modalEl);
+  var body = document.getElementById('allocateModalBody');
+  var didSave = false;
+
+  modalEl.addEventListener('show.bs.modal', function (event) {
+    didSave = false;
+    var btn = event.relatedTarget;
+    body.innerHTML = '<div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm"></span> Loading…</div>';
+    fetch(btn.dataset.loadUrl, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+      .then(function (r) { return r.text(); })
+      .then(function (html) { body.innerHTML = html; })
+      .catch(function () { body.innerHTML = '<div class="alert alert-danger">Could not load the form. Please try again.</div>'; });
+  });
+
+  modalEl.addEventListener('hidden.bs.modal', function () {
+    if (didSave) { window.location.reload(); }
+  });
+
+  body.addEventListener('submit', function (event) {
+    var form = event.target;
+    if (!(form instanceof HTMLFormElement)) return;
+    event.preventDefault();
+    var submitBtn = form.querySelector('button[type="submit"]');
+    if (submitBtn) { submitBtn.disabled = true; }
+    fetch(form.action, {
+      method: 'POST', headers: {'X-Requested-With': 'XMLHttpRequest'}, body: new FormData(form),
+    })
+      .then(function (r) { return r.text().then(function (html) { return {html: html, ok: r.ok}; }); })
+      .then(function (result) {
+        body.innerHTML = result.html;
+        if (result.ok) { didSave = true; setTimeout(function () { modal.hide(); }, 1200); }
+        else if (submitBtn) { submitBtn.disabled = false; }
+      })
+      .catch(function () { if (submitBtn) { submitBtn.disabled = false; } });
   });
 })();
 
