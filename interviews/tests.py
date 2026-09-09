@@ -19,7 +19,7 @@ from jobs.models import Job
 
 from . import graph_client
 from .graph_client import GraphError
-from .models import INTERVIEW_DURATION, Interview, InterviewReschedule
+from .models import INTERVIEW_DURATION, Interview, InterviewReschedule, InterviewRequest
 
 
 @override_settings(
@@ -773,6 +773,44 @@ class InterviewerPortalTests(TestCase):
         self.assertEqual(self.interview.feedback, 'Recommended: Pass. Strong candidate.')
         self.candidate.refresh_from_db()
         self.assertEqual(self.candidate.status, Candidate.Status.OPEN)
+
+
+class ProposeSlotsSplitDateTimeTests(TestCase):
+    """Each proposed slot is now a separate date input + time input
+    (SplitDateTimeField/SplitDateTimeWidget) rather than one combined
+    datetime-local field - posts as slot_N_0/slot_N_1, not a single slot_N."""
+
+    def setUp(self):
+        self.interviewer = get_user_model().objects.create_user(
+            'panel', 'panel@turnb.com', 'pw', first_name='Sreejith', last_name='K R')
+        self.interviewer.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
+        self.client.force_login(self.interviewer)
+        self.job = Job.objects.create(job_code='J1', title='Program Manager')
+        self.candidate = Candidate.objects.create(
+            full_name='Rose E G', email='rose@example.com', job=self.job)
+        self.request_obj = InterviewRequest.objects.create(
+            candidate=self.candidate, round_type=Interview.RoundType.ROUND1,
+            interviewer=self.interviewer)
+
+    def test_submitting_two_split_slots_creates_them_and_awaits_selection(self):
+        response = self.client.post(
+            reverse('interviewer_propose_slots', args=[self.request_obj.pk]), {
+                'slot_1_0': '2026-09-20', 'slot_1_1': '10:00',
+                'slot_2_0': '2026-09-20', 'slot_2_1': '14:00',
+            })
+        self.assertRedirects(response, reverse('interviewer_home'))
+        self.request_obj.refresh_from_db()
+        self.assertEqual(self.request_obj.status, InterviewRequest.Status.AWAITING_SELECTION)
+        self.assertEqual(self.request_obj.slots.count(), 2)
+
+    def test_an_incomplete_slot_is_rejected(self):
+        response = self.client.post(
+            reverse('interviewer_propose_slots', args=[self.request_obj.pk]), {
+                'slot_1_0': '2026-09-20', 'slot_1_1': '',
+                'slot_2_0': '2026-09-20', 'slot_2_1': '14:00',
+            })
+        self.assertEqual(response.status_code, 400)  # redisplayed with the error
+        self.assertEqual(self.request_obj.slots.count(), 0)
 
 
 class InterviewerPortalAdminTests(TestCase):

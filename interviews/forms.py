@@ -155,9 +155,15 @@ class InterviewSlotProposalForm(BootstrapFormMixin, forms.Form):
     """Step 2: the interviewer proposes 2-3 one-hour slots for an
     InterviewRequest. Not a ModelForm - it fans out into several InterviewSlot
     rows rather than editing one model instance."""
-    slot_1 = forms.DateTimeField(label='Slot 1', widget=forms.DateTimeInput(attrs={'type': 'datetime-local'}))
-    slot_2 = forms.DateTimeField(label='Slot 2', required=False, widget=forms.DateTimeInput(attrs={'type': 'datetime-local'}))
-    slot_3 = forms.DateTimeField(label='Slot 3', required=False, widget=forms.DateTimeInput(attrs={'type': 'datetime-local'}))
+    # A separate date input + time input (rather than one combined
+    # datetime-local field) - easier to pick a day on, and the time input
+    # can be typed directly instead of fought with a combined stepper.
+    slot_1 = forms.SplitDateTimeField(label='Slot 1', widget=forms.SplitDateTimeWidget(
+        date_attrs={'type': 'date', 'class': 'form-control'}, time_attrs={'type': 'time', 'class': 'form-control'}))
+    slot_2 = forms.SplitDateTimeField(label='Slot 2', required=False, widget=forms.SplitDateTimeWidget(
+        date_attrs={'type': 'date', 'class': 'form-control'}, time_attrs={'type': 'time', 'class': 'form-control'}))
+    slot_3 = forms.SplitDateTimeField(label='Slot 3', required=False, widget=forms.SplitDateTimeWidget(
+        date_attrs={'type': 'date', 'class': 'form-control'}, time_attrs={'type': 'time', 'class': 'form-control'}))
 
     def __init__(self, *args, interviewer=None, **kwargs):
         super().__init__(*args, **kwargs)

@@ -1,29 +1,53 @@
 {% extends "hr_base.html" %}
 {% block title %}Propose Interview Slots{% endblock %}
+
+{% block extra_css %}
+<style>
+.split-datetime-row { display:flex; align-items:flex-end; gap:28px; }
+.split-dt-col { display:flex; flex-direction:column; gap:5px; }
+.split-dt-col.split-dt-date { flex:1 1 60%; }
+.split-dt-col.split-dt-time { flex:1 1 40%; }
+.split-dt-label { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#8b9998; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="row justify-content-center">
-  <div class="col-lg-6">
+  <div class="col-lg-7">
     <div class="card app-card p-4">
       <h4 class="mb-1">Propose Slots - {{ interview_request.candidate.full_name }}</h4>
       <p class="text-muted small mb-3">{{ interview_request.get_round_type_display }} interview. Offer 2 or 3 one-hour times you're available - HR will pick one to confirm.</p>
       <form method="post">
         {% csrf_token %}
         {% for e in form.non_field_errors %}<div class="alert alert-danger py-2">{{ e }}</div>{% endfor %}
-        <div class="mb-3">
+
+        <div class="mb-4">
           <label class="form-label">Slot 1</label>
-          {{ form.slot_1 }}
+          <div class="split-datetime-row">
+            <div class="split-dt-col split-dt-date"><span class="split-dt-label">Date</span>{{ form.slot_1.subwidgets.0 }}</div>
+            <div class="split-dt-col split-dt-time"><span class="split-dt-label">Time</span>{{ form.slot_1.subwidgets.1 }}</div>
+          </div>
           {% for e in form.slot_1.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
         </div>
-        <div class="mb-3">
+
+        <div class="mb-4">
           <label class="form-label">Slot 2</label>
-          {{ form.slot_2 }}
+          <div class="split-datetime-row">
+            <div class="split-dt-col split-dt-date"><span class="split-dt-label">Date</span>{{ form.slot_2.subwidgets.0 }}</div>
+            <div class="split-dt-col split-dt-time"><span class="split-dt-label">Time</span>{{ form.slot_2.subwidgets.1 }}</div>
+          </div>
           {% for e in form.slot_2.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
         </div>
-        <div class="mb-3">
+
+        <div class="mb-4">
           <label class="form-label">Slot 3 <span class="text-muted small">(optional)</span></label>
-          {{ form.slot_3 }}
+          <div class="split-datetime-row">
+            <div class="split-dt-col split-dt-date"><span class="split-dt-label">Date</span>{{ form.slot_3.subwidgets.0 }}</div>
+            <div class="split-dt-col split-dt-time"><span class="split-dt-label">Time</span>{{ form.slot_3.subwidgets.1 }}</div>
+          </div>
           {% for e in form.slot_3.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
         </div>
+
         <div class="mt-4 d-flex gap-2">
           <button type="submit" class="btn btn-fill-app">Submit Slots</button>
           <a href="{{ back_url }}" class="btn btn-outline-app">Cancel</a>

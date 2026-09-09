@@ -1,3 +1,17 @@
+<style>
+.slot-option-list { display:flex; flex-direction:column; gap:10px; }
+.slot-option {
+  display:flex; align-items:center; justify-content:space-between; gap:16px;
+  border:1.5px solid var(--border-color); border-radius:10px; padding:14px 18px;
+  cursor:pointer; transition:border-color .15s ease, background-color .15s ease;
+}
+.slot-option:hover { border-color: var(--primary-green); }
+.slot-option:has(input:checked) { border-color: var(--primary-green); background:#f0f9f8; }
+.slot-option-time { font-size:.95rem; font-weight:600; color:#1a2e35; }
+.slot-option input[type="radio"] {
+  width:20px; height:20px; margin:0; flex-shrink:0; cursor:pointer; accent-color: var(--primary-green);
+}
+</style>
 <form method="post" action="{% url 'interview_request_select_slot' interview_request.pk %}" data-step="select-slot">
   {% csrf_token %}
   {% for e in form.non_field_errors %}<div class="alert alert-danger py-2 small">{{ e }}</div>{% endfor %}
@@ -5,9 +19,12 @@
     {{ interview_request.interviewer.get_full_name|default:interview_request.interviewer.username }} proposed the following times for
     {{ interview_request.candidate.full_name }}'s {{ interview_request.get_round_type_display }} interview.
   </p>
-  <div class="mb-3">
+  <div class="slot-option-list mb-3">
     {% for radio in form.slot %}
-    <label class="d-block border rounded p-2 mb-2">{{ radio.tag }} {{ radio.choice_label }}</label>
+    <label class="slot-option">
+      <span class="slot-option-time">{{ radio.choice_label }}</span>
+      {{ radio.tag }}
+    </label>
     {% endfor %}
     {% for e in form.slot.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
   </div>
