@@ -692,6 +692,21 @@ class HoldNamingTests(TestCase):
         self.assertEqual(self.candidate.status, Candidate.Status.SCREENING_HOLD)
         self.assertEqual(self.candidate.status_label, 'Round 2 Hold')
 
+    def test_undo_cancels_the_interview_scheduled_at_the_undone_stage(self):
+        """Advancing to Round 1 and scheduling an interview there, then
+        undoing the advance, must not leave that interview dangling open -
+        it was only ever justified by the status change being undone."""
+        services.change_status(self.candidate, Candidate.Status.SHORTLISTED)
+        services.change_status(self.candidate, Candidate.Status.ROUND1)
+        interview = Interview.objects.create(
+            candidate=self.candidate, round_type=Interview.RoundType.ROUND1,
+            scheduled_date=timezone.now() + timezone.timedelta(days=1))
+        self.client.post(reverse('candidate_revert', args=[self.candidate.pk]))
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.status, Candidate.Status.SHORTLISTED)
+        interview.refresh_from_db()
+        self.assertEqual(interview.status, Interview.Status.CANCELLED)
+
 
 class HoldResumeActionTests(TestCase):
     """Taking a candidate off hold puts them back in the pipeline at the stage

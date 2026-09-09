@@ -1194,6 +1194,18 @@ class CandidateRevertLastActionView(GroupRequiredMixin, View):
             bl = candidate.blacklist_entries.order_by('-blacklisted_at').first()
             if bl:
                 bl.delete()
+        # The status being undone may have had an interview allocated/scheduled
+        # for it (e.g. Round 1 -> an interview, then Undo back to Tele Screening)
+        # - that interview was only ever justified by the status change that no
+        # longer holds, so it shouldn't keep sitting open for the interviewer.
+        round_types = ROUND_INTERVIEW_TYPES.get(undone)
+        if round_types:
+            candidate.interviews.filter(
+                round_type__in=round_types, status__in=Interview.OPEN_STATUSES,
+            ).update(status=Interview.Status.CANCELLED)
+            candidate.interview_requests.filter(
+                round_type__in=round_types, status__in=InterviewRequest.OPEN_STATUSES,
+            ).update(status=InterviewRequest.Status.CANCELLED)
         candidate.status = prev_status
         candidate.hold_from_status = services.hold_source_from_history(candidate)
         candidate.save(update_fields=['status', 'hold_from_status', 'is_blacklisted', 'updated_at'])
