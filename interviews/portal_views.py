@@ -10,15 +10,23 @@ from django.urls import reverse
 from django.views.generic import DetailView, ListView
 
 from candidates.models import Candidate
-from candidates.permissions import INTERVIEWER, GroupRequiredMixin
+from candidates.permissions import HR_ADMIN, INTERVIEWER, GroupRequiredMixin
 
 from .models import Interview
+
+
+def _is_admin(user):
+    """Admin (HR_ADMIN) or superuser - sees every interview/candidate in the
+    portal instead of only their own, e.g. to check what an interviewer sees
+    or to browse every scheduled interview from this simpler view instead of
+    the full HR Interview Scheduler."""
+    return user.is_superuser or user.groups.filter(name=HR_ADMIN).exists()
 
 
 class InterviewerLoginView(auth_views.LoginView):
     """A separate front door from the main HR sign-in (registration/login.html),
     for the link shared specifically with interviewers. Authenticates the
-    same way, but refuses anyone who isn't actually in the Interviewer group
+    same way, but refuses anyone who isn't actually an Interviewer or Admin
     (or a superuser) - they're pointed at the HR sign-in instead."""
     template_name = 'registration/interviewer_login.html'
 
@@ -27,7 +35,7 @@ class InterviewerLoginView(auth_views.LoginView):
 
     def form_valid(self, form):
         user = form.get_user()
-        if not (user.is_superuser or user.groups.filter(name=INTERVIEWER).exists()):
+        if not (_is_admin(user) or user.groups.filter(name=INTERVIEWER).exists()):
             form.add_error(None, 'This sign-in is for interviewers only. Use the HR sign-in instead.')
             return self.form_invalid(form)
         return super().form_valid(form)
@@ -35,18 +43,22 @@ class InterviewerLoginView(auth_views.LoginView):
 
 class InterviewerHomeView(GroupRequiredMixin, ListView):
     """Landing page after an interviewer signs in: every interview assigned
-    to them, split into what still needs a result and what's done."""
+    to them, split into what still needs a result and what's done. An Admin
+    sees every interview, for every interviewer, instead of just their own."""
     model = Interview
     template_name = 'interviews/portal_home.html'
     context_object_name = 'interviews'
-    allowed_groups = (INTERVIEWER,)
+    allowed_groups = (INTERVIEWER, HR_ADMIN)
 
     def get_queryset(self):
-        return (Interview.objects.filter(interviewer=self.request.user)
-                .select_related('candidate', 'candidate__job').order_by('-scheduled_date'))
+        qs = Interview.objects.select_related('candidate', 'candidate__job', 'interviewer')
+        if not _is_admin(self.request.user):
+            qs = qs.filter(interviewer=self.request.user)
+        return qs.order_by('-scheduled_date')
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
+        ctx['is_admin_view'] = _is_admin(self.request.user)
         interviews = list(ctx['interviews'])
         ctx['pending'] = [i for i in interviews if i.status in Interview.OPEN_STATUSES]
         ctx['completed'] = [i for i in interviews if i.status not in Interview.OPEN_STATUSES]
@@ -59,19 +71,25 @@ class InterviewerCandidateView(GroupRequiredMixin, DetailView):
     summary - with none of the HR-only actions (edit/delete, status changes,
     hiring-stage progression, vacancy/source mapping). Restricted to
     candidates this interviewer actually has an interview with, not the whole
-    repository by ID - a 404, not just a group check, for anyone else."""
+    repository by ID - a 404, not just a group check, for anyone else. An
+    Admin can open any candidate that has an interview at all."""
     model = Candidate
     template_name = 'interviews/portal_candidate.html'
     context_object_name = 'candidate'
-    allowed_groups = (INTERVIEWER,)
+    allowed_groups = (INTERVIEWER, HR_ADMIN)
 
     def get_queryset(self):
+        if _is_admin(self.request.user):
+            return Candidate.objects.filter(interviews__isnull=False).distinct()
         return Candidate.objects.filter(interviews__interviewer=self.request.user).distinct()
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        ctx['my_interviews'] = (self.object.interviews.filter(interviewer=self.request.user)
-                                .order_by('-scheduled_date'))
+        is_admin = _is_admin(self.request.user)
+        interviews_qs = self.object.interviews.all() if is_admin else (
+            self.object.interviews.filter(interviewer=self.request.user))
+        ctx['my_interviews'] = interviews_qs.select_related('interviewer').order_by('-scheduled_date')
+        ctx['is_admin_view'] = is_admin
         ctx['open_statuses'] = Interview.OPEN_STATUSES
         ctx['back_url'] = reverse('interviewer_home')
         ctx['back_label'] = 'My Interviews'

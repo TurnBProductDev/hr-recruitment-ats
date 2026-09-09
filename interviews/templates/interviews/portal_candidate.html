@@ -113,11 +113,12 @@
 </div>
 
 <div class="card app-card p-4 mt-3">
-  <div class="section-eyebrow">Your Interviews With This Candidate</div>
+  <div class="section-eyebrow">{% if is_admin_view %}All Interviews With This Candidate{% else %}Your Interviews With This Candidate{% endif %}</div>
   {% for i in my_interviews %}
     <div class="d-flex justify-content-between align-items-center mb-2 pb-2 {% if not forloop.last %}border-bottom{% endif %}">
       <div>
         <strong>{{ i.get_round_type_display }}</strong> &middot; {{ i.scheduled_date|date:"d M Y H:i" }} &middot; {{ i.get_mode_display }}
+        {% if is_admin_view %}&middot; Interviewer: {% if i.interviewer %}{{ i.interviewer.get_full_name|default:i.interviewer.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}{% endif %}
         <div class="text-muted pd-meta">Status: {{ i.get_status_display }} &middot; Result: {{ i.get_result_display }}</div>
         {% if i.feedback %}<div class="pd-body mt-1">{{ i.feedback }}</div>{% endif %}
       </div>

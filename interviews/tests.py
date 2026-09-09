@@ -619,3 +619,60 @@ class InterviewerPortalTests(TestCase):
         self.assertRedirects(response, reverse('interviewer_home'))
         self.interview.refresh_from_db()
         self.assertEqual(self.interview.result, Interview.Result.PASS_)
+
+
+class InterviewerPortalAdminTests(TestCase):
+    """Admin sees every interview/candidate in the portal, not just their
+    own - unlike a plain Interviewer, who stays scoped to themselves."""
+
+    def setUp(self):
+        self.admin = get_user_model().objects.create_user('admin', 'admin@turnb.com', 'pw')
+        self.admin.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.interviewer_a = get_user_model().objects.create_user(
+            'panel_a', 'panel_a@turnb.com', 'pw', first_name='Sreejith', last_name='K R')
+        self.interviewer_a.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
+        self.interviewer_b = get_user_model().objects.create_user(
+            'panel_b', 'panel_b@turnb.com', 'pw', first_name='Amrita', last_name='S')
+        self.interviewer_b.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
+        self.job = Job.objects.create(job_code='J1', title='Program Manager')
+        self.candidate_a = Candidate.objects.create(
+            full_name='Rose E G', email='rose@example.com', job=self.job)
+        self.candidate_b = Candidate.objects.create(
+            full_name='Nikhil Shaji', email='nikhil@example.com', job=self.job)
+        self.interview_a = Interview.objects.create(
+            candidate=self.candidate_a, interviewer=self.interviewer_a,
+            round_type=Interview.RoundType.ROUND1,
+            scheduled_date=timezone.now() + timezone.timedelta(days=1))
+        self.interview_b = Interview.objects.create(
+            candidate=self.candidate_b, interviewer=self.interviewer_b,
+            round_type=Interview.RoundType.ROUND1,
+            scheduled_date=timezone.now() + timezone.timedelta(days=2))
+
+    def test_admin_can_sign_in_through_the_interviewer_login(self):
+        response = self.client.post(reverse('interviewer_login'), {'username': 'admin', 'password': 'pw'})
+        self.assertRedirects(response, reverse('interviewer_home'))
+
+    def test_admin_sees_every_interviewers_interviews(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse('interviewer_home'))
+        self.assertContains(response, 'Rose E G')
+        self.assertContains(response, 'Nikhil Shaji')
+
+    def test_plain_interviewer_still_only_sees_their_own(self):
+        self.client.force_login(self.interviewer_a)
+        response = self.client.get(reverse('interviewer_home'))
+        self.assertContains(response, 'Rose E G')
+        self.assertNotContains(response, 'Nikhil Shaji')
+
+    def test_admin_can_view_any_candidate_with_an_interview(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse('interviewer_candidate', args=[self.candidate_b.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Nikhil Shaji')
+
+    def test_a_recruiter_still_cannot_reach_the_portal(self):
+        recruiter = get_user_model().objects.create_user('rec', 'rec@turnb.com', 'pw')
+        recruiter.groups.add(Group.objects.get_or_create(name=RECRUITER)[0])
+        self.client.force_login(recruiter)
+        response = self.client.get(reverse('interviewer_home'))
+        self.assertEqual(response.status_code, 403)

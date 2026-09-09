@@ -1,5 +1,5 @@
 {% extends "hr_base.html" %}
-{% block title %}My Interviews{% endblock %}
+{% block title %}{% if is_admin_view %}All Interviews{% else %}My Interviews{% endif %}{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -14,8 +14,11 @@
 
 {% block content %}
 <div class="pv-head">
-  <h3 class="pv-title">My Interviews</h3>
-  <div class="pv-subtitle">Interviews assigned to you &middot; {{ user.get_full_name|default:user.get_username }}</div>
+  <h3 class="pv-title">{% if is_admin_view %}All Interviews{% else %}My Interviews{% endif %}</h3>
+  <div class="pv-subtitle">
+    {% if is_admin_view %}Every interview, every interviewer
+    {% else %}Interviews assigned to you &middot; {{ user.get_full_name|default:user.get_username }}{% endif %}
+  </div>
 </div>
 
 <div class="card app-card p-4 mb-4">
@@ -23,7 +26,7 @@
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
       <thead>
-        <tr><th>Candidate</th><th>Round</th><th>Date</th><th>Mode</th><th class="text-end">Actions</th></tr>
+        <tr><th>Candidate</th>{% if is_admin_view %}<th>Interviewer</th>{% endif %}<th>Round</th><th>Date</th><th>Mode</th><th class="text-end">Actions</th></tr>
       </thead>
       <tbody>
         {% for iv in pending %}
@@ -32,6 +35,7 @@
             <a href="{% url 'interviewer_candidate' iv.candidate.pk %}">{{ iv.candidate.full_name }}</a>
             <div class="pv-meta">{{ iv.candidate.job.title|default:"-" }}</div>
           </td>
+          {% if is_admin_view %}<td>{% if iv.interviewer %}{{ iv.interviewer.get_full_name|default:iv.interviewer.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</td>{% endif %}
           <td>{{ iv.get_round_type_display }}</td>
           <td>{{ iv.scheduled_date|date:"d M Y H:i" }}</td>
           <td>{{ iv.get_mode_display }}</td>
@@ -41,7 +45,7 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="5" class="text-center text-muted py-4">Nothing scheduled right now.</td></tr>
+        <tr><td colspan="{% if is_admin_view %}6{% else %}5{% endif %}" class="text-center text-muted py-4">Nothing scheduled right now.</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -53,7 +57,7 @@
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
       <thead>
-        <tr><th>Candidate</th><th>Round</th><th>Date</th><th>Status</th><th>Result</th><th class="text-end">Actions</th></tr>
+        <tr><th>Candidate</th>{% if is_admin_view %}<th>Interviewer</th>{% endif %}<th>Round</th><th>Date</th><th>Status</th><th>Result</th><th class="text-end">Actions</th></tr>
       </thead>
       <tbody>
         {% for iv in completed %}
@@ -62,6 +66,7 @@
             <a href="{% url 'interviewer_candidate' iv.candidate.pk %}">{{ iv.candidate.full_name }}</a>
             <div class="pv-meta">{{ iv.candidate.job.title|default:"-" }}</div>
           </td>
+          {% if is_admin_view %}<td>{% if iv.interviewer %}{{ iv.interviewer.get_full_name|default:iv.interviewer.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</td>{% endif %}
           <td>{{ iv.get_round_type_display }}</td>
           <td>{{ iv.scheduled_date|date:"d M Y H:i" }}</td>
           <td>{{ iv.get_status_display }}</td>
@@ -71,7 +76,7 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="6" class="text-center text-muted py-4">No completed interviews yet.</td></tr>
+        <tr><td colspan="{% if is_admin_view %}7{% else %}6{% endif %}" class="text-center text-muted py-4">No completed interviews yet.</td></tr>
         {% endfor %}
       </tbody>
     </table>
