@@ -475,7 +475,9 @@ html { scroll-behavior: smooth; }
               <input type="hidden" name="performed_by" value="{{ user.get_full_name|default:user.get_username }}">
               <textarea name="reason" class="form-control form-control-sm mb-2 js-stage-reason" rows="2" placeholder="Remarks / reason…"></textarea>
               <div class="stage-action-row">
-                <button type="submit" formaction="{% url 'candidate_reject' candidate.pk %}" class="stage-action-btn stage-tone-reject">Reject</button>
+                <button type="button" class="stage-action-btn stage-tone-reject"
+                        data-bs-toggle="modal" data-bs-target="#rejectionModal"
+                        data-load-url="{% url 'candidate_rejection_draft' candidate.pk %}">Reject</button>
                 <button type="submit" formaction="{% url 'candidate_screening_hold' candidate.pk %}" class="stage-action-btn stage-tone-hold">Hold</button>
               </div>
             </form>
@@ -597,14 +599,37 @@ html { scroll-behavior: smooth; }
             {% csrf_token %}
             <input type="hidden" name="next" value="{{ request.get_full_path }}">
             <input type="hidden" name="performed_by" value="{{ user.get_full_name|default:user.get_username }}">
-            <textarea name="reason" class="form-control form-control-sm mb-2 js-stage-reason" rows="2" placeholder="Remarks / reason…"></textarea>
+            {% comment %}
+              stage.done_interview.feedback: an Interviewer's Pass/Fail submission
+              (interviews.views.InterviewResultView) folds their recommendation +
+              feedback in here rather than deciding the stage itself - pre-filled
+              so HR/Recruiter sees it right where they make the actual call.
+            {% endcomment %}
+            <textarea name="reason" class="form-control form-control-sm mb-2 js-stage-reason" rows="2"
+                      placeholder="Remarks / reason…">{{ stage.done_interview.feedback|default:"" }}</textarea>
             <div class="stage-action-row">
               {% for action in stage.actions %}
+              {% if action.tone == 'reject' and stage.key != 'open' %}
+              {% comment %}
+                Round 1/Round 2/Final Decision: Reject opens the rejection
+                email popup instead of submitting immediately - see
+                CandidateRejectionDraftView / CandidateSendRejectionView and
+                the rejectionModal JS below. CV Screening keeps the plain
+                immediate Reject (below, action.url branch) since the
+                candidate was never interviewed.
+              {% endcomment %}
+              <button type="button" class="stage-action-btn stage-tone-reject"
+                      data-bs-toggle="modal" data-bs-target="#rejectionModal"
+                      data-load-url="{% url 'candidate_rejection_draft' candidate.pk %}">
+                {{ action.label }}
+              </button>
+              {% else %}
               <button type="submit" formaction="{% url action.url candidate.pk %}"
                       class="stage-action-btn stage-tone-{{ action.tone }}"
                       {% if action.require_reason %}data-require-reason="1" disabled{% endif %}>
                 {{ action.label }}
               </button>
+              {% endif %}
               {% endfor %}
             </div>
           </form>
@@ -726,6 +751,20 @@ html { scroll-behavior: smooth; }
     </div>
   </div>
 </div>
+
+<div class="modal fade" id="rejectionModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Rejection Email</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="rejectionModalBody">
+        <div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm"></span> Loading…</div>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -766,6 +805,10 @@ document.querySelectorAll('.js-stage-form').forEach(function (form) {
     gated.forEach(function (btn) { btn.disabled = !filled; });
   };
   reason.addEventListener('input', sync);
+  // The box can already be pre-filled on load (an Interviewer's feedback -
+  // see stage.done_interview.feedback above), so sync once immediately
+  // rather than waiting for the first edit.
+  sync();
 });
 
 // Re-score runs in the background (it calls an external AI service and can
@@ -871,6 +914,70 @@ pollCandidateAction("{% url 'candidate_rescore_status' candidate.pk %}");
       .then(function (r) { return r.text(); })
       .then(function (html) { body.innerHTML = html; })
       .catch(function () { body.innerHTML = '<div class="alert alert-danger">Could not load questions. Please try again.</div>'; });
+  });
+})();
+
+// Round 1/Round 2/Final Decision Reject popup: an editable "thank you for
+// interviewing" email (see CandidateRejectionDraftView) shown before the
+// candidate is actually rejected. Send (CandidateSendRejectionView) rejects
+// the candidate and sends the email in one step, reloading the page after so
+// the updated stage/history show up. The reason box and next/performed_by
+// that the stage's own form already carries are copied into the draft's
+// hidden fields once it loads, so the internal remarks and redirect target
+// aren't lost just because the decision now goes through a popup.
+(function () {
+  var modalEl = document.getElementById('rejectionModal');
+  if (!modalEl) return;
+  var modal = new bootstrap.Modal(modalEl);
+  var body = document.getElementById('rejectionModalBody');
+
+  modalEl.addEventListener('show.bs.modal', function (event) {
+    var btn = event.relatedTarget;
+    var stageForm = btn ? btn.closest('form') : null;
+    var next = (stageForm && stageForm.elements['next'] && stageForm.elements['next'].value) || '';
+    var performedBy = (stageForm && stageForm.elements['performed_by'] && stageForm.elements['performed_by'].value) || '';
+    var reasonEl = stageForm && stageForm.querySelector('.js-stage-reason');
+    var reason = (reasonEl && reasonEl.value) || '';
+    body.innerHTML = '<div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm"></span> Loading…</div>';
+    fetch(btn.dataset.loadUrl, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+      .then(function (r) { return r.text(); })
+      .then(function (html) {
+        body.innerHTML = html;
+        var f = body.querySelector('form');
+        if (!f) return;
+        if (f.elements['next']) { f.elements['next'].value = next; }
+        if (f.elements['performed_by']) { f.elements['performed_by'].value = performedBy; }
+        if (f.elements['reason']) { f.elements['reason'].value = reason; }
+      })
+      .catch(function () { body.innerHTML = '<div class="alert alert-danger">Could not load the email draft. Please try again.</div>'; });
+  });
+
+  body.addEventListener('submit', function (event) {
+    var form = event.target;
+    if (!(form instanceof HTMLFormElement) || form.dataset.step !== 'send-rejection') return;
+    event.preventDefault();
+    var submitBtn = form.querySelector('button[type="submit"]');
+    if (submitBtn) { submitBtn.disabled = true; }
+    fetch(form.action, {
+      method: 'POST', headers: {'X-Requested-With': 'XMLHttpRequest'}, body: new FormData(form),
+    })
+      .then(function (r) { return r.json().then(function (data) { return {data: data, ok: r.ok}; }); })
+      .then(function (result) {
+        if (result.data.ok) { modal.hide(); window.location.reload(); return; }
+        if (submitBtn) { submitBtn.disabled = false; }
+        var box = form.querySelector('#rejectionSendError');
+        if (box) { box.hidden = false; box.textContent = result.data.error || 'Could not complete the rejection.'; }
+        if (result.data.error && result.data.error.indexOf('but the email could not be sent') !== -1) {
+          // The candidate was already rejected server-side even though the
+          // email failed - reload so the page reflects that either way.
+          window.location.reload();
+        }
+      })
+      .catch(function () {
+        if (submitBtn) { submitBtn.disabled = false; }
+        var box = form.querySelector('#rejectionSendError');
+        if (box) { box.hidden = false; box.textContent = 'Network error - please try again.'; }
+      });
   });
 })();
 

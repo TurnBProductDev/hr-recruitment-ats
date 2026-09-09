@@ -431,6 +431,85 @@ class RescheduleTests(TestCase):
             response, reverse('interview_reschedule', args=[self.interview.pk]))
 
 
+class InterviewerRecommendationTests(TestCase):
+    """An Interviewer's Pass/Fail (InterviewResultView) marks the interview
+    Done but is only a recommendation - the candidate's stage only moves once
+    HR/Recruiter/Hiring Manager decides, via the Hiring block's Cleared/Hold/
+    Reject. HR/Recruiter/Hiring Manager submitting the same form directly
+    still decides on the spot, as before."""
+
+    def setUp(self):
+        self.job = Job.objects.create(job_code='J1', title='Program Manager')
+        self.candidate = Candidate.objects.create(
+            full_name='Rose E G', email='rose@example.com', job=self.job,
+            status=Candidate.Status.ROUND1)
+        self.interview = Interview.objects.create(
+            candidate=self.candidate, round_type=Interview.RoundType.ROUND1,
+            scheduled_date=timezone.now() + timezone.timedelta(days=1))
+
+    def _submit(self, user, **overrides):
+        self.client.force_login(user)
+        data = {'status': Interview.Status.COMPLETED, 'result': Interview.Result.PASS_,
+                'score': '8', 'feedback': 'Strong candidate.'}
+        data.update(overrides)
+        return self.client.post(reverse('interview_result', args=[self.interview.pk]), data)
+
+    def test_interviewer_pass_does_not_advance_the_candidate(self):
+        interviewer = get_user_model().objects.create_user('panel', 'panel@turnb.com', 'pw')
+        interviewer.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
+        self._submit(interviewer)
+        self.interview.refresh_from_db()
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.interview.status, Interview.Status.COMPLETED)
+        self.assertEqual(self.interview.result, Interview.Result.PENDING)
+        self.assertEqual(self.candidate.status, Candidate.Status.ROUND1)
+
+    def test_interviewer_fail_does_not_reject_the_candidate(self):
+        interviewer = get_user_model().objects.create_user('panel2', 'panel2@turnb.com', 'pw')
+        interviewer.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
+        self._submit(interviewer, result=Interview.Result.FAIL)
+        self.interview.refresh_from_db()
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.interview.result, Interview.Result.PENDING)
+        self.assertEqual(self.interview.feedback, 'Recommended: Fail. Strong candidate.')
+        self.assertEqual(self.candidate.status, Candidate.Status.ROUND1)
+
+    def test_interviewer_feedback_is_prefilled_on_the_candidate_page(self):
+        interviewer = get_user_model().objects.create_user('panel3', 'panel3@turnb.com', 'pw')
+        interviewer.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
+        self._submit(interviewer, feedback='Great communication skills.')
+        # _submit force_logs-in as the interviewer, who can't reach
+        # candidate_timeline (ANY_STAFF only) - switch to an HR viewer, who
+        # is the one actually meant to see this pre-fill.
+        hr = get_user_model().objects.create_user('hr4', 'hr4@turnb.com', 'pw')
+        hr.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.client.force_login(hr)
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertContains(response, 'Recommended: Pass. Great communication skills.')
+
+    def test_hr_admin_pass_still_advances_the_candidate_immediately(self):
+        hr = get_user_model().objects.create_user('hr3', 'hr3@turnb.com', 'pw')
+        hr.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self._submit(hr)
+        self.interview.refresh_from_db()
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.interview.result, Interview.Result.PASS_)
+        self.assertEqual(self.candidate.status, Candidate.Status.INTERVIEW)
+
+    def test_recruiter_can_now_reach_this_view_and_decide(self):
+        """Pre-existing gap: InterviewSchedulerListView (ANY_STAFF, includes
+        Recruiter) links every row to this same "Update Status" URL, but
+        InterviewResultView only allowed HR_ADMIN/INTERVIEWER - a Recruiter
+        clicking that link got a 403. Now included, and decides on the spot
+        same as HR."""
+        recruiter = get_user_model().objects.create_user('rec2', 'rec2@turnb.com', 'pw')
+        recruiter.groups.add(Group.objects.get_or_create(name=RECRUITER)[0])
+        response = self._submit(recruiter, result=Interview.Result.FAIL)
+        self.assertEqual(response.status_code, 302)
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.status, Candidate.Status.REJECTED)
+
+
 class InterviewDoneCancelTests(TestCase):
     """Marking an interview "Done" only completes it - it doesn't decide
     pass/fail. That happens separately, when the Hiring block's Round 1/
@@ -618,7 +697,16 @@ class InterviewerPortalTests(TestCase):
         })
         self.assertRedirects(response, reverse('interviewer_home'))
         self.interview.refresh_from_db()
-        self.assertEqual(self.interview.result, Interview.Result.PASS_)
+        # An Interviewer's Pass/Fail is a recommendation, not the final call
+        # (see InterviewResultView._can_decide_pipeline) - the interview is
+        # marked Done, but its result stays Pending until HR/Recruiter
+        # decides via the Hiring block; their pick and feedback are folded
+        # together so HR sees both in one place.
+        self.assertEqual(self.interview.status, Interview.Status.COMPLETED)
+        self.assertEqual(self.interview.result, Interview.Result.PENDING)
+        self.assertEqual(self.interview.feedback, 'Recommended: Pass. Strong candidate.')
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.status, Candidate.Status.OPEN)
 
 
 class InterviewerPortalAdminTests(TestCase):

@@ -9,6 +9,7 @@ from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -17,7 +18,7 @@ from django.utils import timezone
 from interviews.models import Interview
 from jobs.models import Job
 
-from . import bulk, cv_parser, screening_questions, services
+from . import bulk, cv_parser, rejection_emails, screening_questions, services
 from .cv_parser import CVParseError
 from .models import BulkUploadBatch, BulkUploadItem, Candidate, CommunicationLog, EmailRegistry
 from .permissions import HIRING_MANAGER, HR_ADMIN, INTERVIEWER, RECRUITER
@@ -1291,3 +1292,119 @@ class TeleScreeningMergedRemarksTests(TestCase):
         services.change_status(self.candidate, Candidate.Status.ROUND1)
         response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
         self.assertNotContains(response, 'class="call-status-badge"')
+
+
+class RejectionEmailPopupTests(TestCase):
+    """Round 1/Round 2/Final Decision's Reject button opens an editable
+    "thank you for interviewing" email draft (CandidateRejectionDraftView)
+    that Send both rejects the candidate and emails on
+    (CandidateSendRejectionView) - see rejection_emails.py. CV Screening/Tele
+    Screening's Reject stays the plain immediate action, since the candidate
+    was never interviewed."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('hr10', 'hr10@example.com', 'pw')
+        self.user.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.client.force_login(self.user)
+        self.candidate = Candidate.objects.create(full_name='Rose E G', email='rose@example.com')
+        services.record_creation(self.candidate)
+        services.change_status(self.candidate, Candidate.Status.SHORTLISTED)
+        services.change_status(self.candidate, Candidate.Status.ROUND1)
+
+    def test_draft_view_prefills_the_email_from_defaults(self):
+        response = self.client.get(reverse('candidate_rejection_draft', args=[self.candidate.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'value="rose@example.com"')
+        self.assertContains(response, rejection_emails.default_subject(self.candidate))
+        self.assertContains(response, 'Rose E G')
+        self.assertContains(response, 'careers@turnb.com')
+        self.assertContains(response, 'Amrita.Sunilkumar@turnb.com')
+
+    def test_send_rejects_the_candidate_and_emails_them(self):
+        response = self.client.post(reverse('candidate_send_rejection', args=[self.candidate.pk]), {
+            'to_email': 'rose@example.com', 'subject': 'Custom subject', 'body': 'Custom body.',
+            'reason': 'Did not meet the bar.', 'next': reverse('candidate_timeline', args=[self.candidate.pk]),
+        })
+        self.assertRedirects(response, reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.status, Candidate.Status.REJECTED)
+        self.assertEqual(self.candidate.history.latest('changed_at').remarks, 'Did not meet the bar.')
+
+        self.assertEqual(len(mail.outbox), 1)
+        sent = mail.outbox[0]
+        self.assertEqual(sent.to, ['rose@example.com'])
+        self.assertEqual(sent.subject, 'Custom subject')
+        self.assertEqual(sent.body, 'Custom body.')
+        self.assertIn('careers@turnb.com', sent.cc)
+        self.assertIn('Amrita.Sunilkumar@turnb.com', sent.cc)
+
+    def test_send_settles_a_pending_interview_result_as_fail(self):
+        interview = Interview.objects.create(
+            candidate=self.candidate, round_type=Interview.RoundType.ROUND1,
+            status=Interview.Status.COMPLETED, result=Interview.Result.PENDING,
+            scheduled_date=timezone.now() - timezone.timedelta(days=1))
+        self.client.post(reverse('candidate_send_rejection', args=[self.candidate.pk]), {
+            'to_email': 'rose@example.com', 'subject': 'S', 'body': 'B',
+        })
+        interview.refresh_from_db()
+        self.assertEqual(interview.result, Interview.Result.FAIL)
+
+    def test_missing_recipient_email_does_not_reject_the_candidate(self):
+        response = self.client.post(reverse('candidate_send_rejection', args=[self.candidate.pk]), {
+            'to_email': '', 'subject': 'S', 'body': 'B',
+        })
+        self.assertRedirects(response, reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.status, Candidate.Status.ROUND1)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_email_failure_still_rejects_the_candidate(self):
+        """The pipeline decision is the part HR can't easily redo - it should
+        stick even if the email send itself blows up."""
+        with mock.patch('candidates.views.rejection_emails.send_rejection_email', side_effect=ValueError('boom')):
+            response = self.client.post(reverse('candidate_send_rejection', args=[self.candidate.pk]), {
+                'to_email': 'rose@example.com', 'subject': 'S', 'body': 'B',
+            })
+        self.assertRedirects(response, reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.status, Candidate.Status.REJECTED)
+
+    def test_ajax_send_returns_json(self):
+        response = self.client.post(
+            reverse('candidate_send_rejection', args=[self.candidate.pk]),
+            {'to_email': 'rose@example.com', 'subject': 'S', 'body': 'B'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {'ok': True})
+
+    def test_interviewer_cannot_reach_either_view(self):
+        interviewer = get_user_model().objects.create_user('panel10', 'panel10@example.com', 'pw')
+        interviewer.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
+        self.client.force_login(interviewer)
+        get_response = self.client.get(reverse('candidate_rejection_draft', args=[self.candidate.pk]))
+        self.assertEqual(get_response.status_code, 403)
+        post_response = self.client.post(reverse('candidate_send_rejection', args=[self.candidate.pk]), {
+            'to_email': 'rose@example.com', 'subject': 'S', 'body': 'B',
+        })
+        self.assertEqual(post_response.status_code, 403)
+
+    def test_round1_reject_button_opens_the_modal(self):
+        # The decision actions (incl. Reject) only render once the round's
+        # interview is Done - see round_phase in CandidateTimelineView.
+        Interview.objects.create(
+            candidate=self.candidate, round_type=Interview.RoundType.ROUND1,
+            status=Interview.Status.COMPLETED, result=Interview.Result.PENDING,
+            scheduled_date=timezone.now() - timezone.timedelta(days=1))
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertContains(response, 'data-bs-target="#rejectionModal"')
+        self.assertContains(response, reverse('candidate_rejection_draft', args=[self.candidate.pk]))
+
+    def test_tele_screening_reject_button_stays_plain(self):
+        """CV Screening/Tele Screening's Reject must not pop the interview
+        rejection email - the candidate hasn't been interviewed yet."""
+        c2 = Candidate.objects.create(full_name='Ann K', email='ann@example.com')
+        services.record_creation(c2)
+        services.change_status(c2, Candidate.Status.SHORTLISTED)
+        response = self.client.get(reverse('candidate_timeline', args=[c2.pk]))
+        self.assertContains(response, reverse('candidate_reject', args=[c2.pk]))
+        self.assertNotContains(response, 'data-bs-target="#rejectionModal"')

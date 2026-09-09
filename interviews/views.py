@@ -14,7 +14,7 @@ from django.views.generic import CreateView, ListView, UpdateView
 from candidates import services
 from candidates.models import Candidate, Note
 from candidates.permissions import (
-    ANY_STAFF, HR_ADMIN, INTERVIEWER, RECRUITER, GroupRequiredMixin, in_interviewer_portal,
+    ANY_STAFF, HIRING_MANAGER, HR_ADMIN, INTERVIEWER, RECRUITER, GroupRequiredMixin, in_interviewer_portal,
 )
 
 from . import graph_client, invites
@@ -243,10 +243,15 @@ class InterviewCancelView(GroupRequiredMixin, View):
 
 
 class InterviewResultView(GroupRequiredMixin, UpdateView):
+    """Reachable by whoever can act on this interview: HR/Recruiter/Hiring
+    Manager (same as the Interview Scheduler's own "Update Status" link,
+    which every ANY_STAFF role can see - RECRUITER/HIRING_MANAGER were
+    missing here before, a pre-existing gap that made that link 403 for
+    them) and Interviewer, via the Interviewer portal."""
     model = Interview
     form_class = InterviewResultForm
     template_name = 'interviews/interview_result_form.html'
-    allowed_groups = (HR_ADMIN, INTERVIEWER)
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER, INTERVIEWER)
 
     # On Pass, advance the candidate one stage down the pipeline rather than
     # hiring outright: Round 1 -> Interview (Round 2) -> Final Selection, where HR
@@ -273,11 +278,41 @@ class InterviewResultView(GroupRequiredMixin, UpdateView):
             ctx['cancel_url'] = reverse('candidate_timeline', args=[self.object.candidate_id])
         return ctx
 
+    def _can_decide_pipeline(self):
+        """Whether this submitter's Pass/Fail is the final word (HR/Recruiter/
+        Hiring Manager) or just a recommendation for HR to confirm
+        (Interviewer) - see form_valid."""
+        user = self.request.user
+        return user.is_superuser or user.groups.filter(name__in=(HR_ADMIN, RECRUITER, HIRING_MANAGER)).exists()
+
     def form_valid(self, form):
-        # Marking a result completes the interview and drives the candidate's
-        # pipeline: Pass -> next stage, Fail -> Rejected.
+        # Marking a result always completes the interview ("Round status
+        # automatically updates as Done").
         form.instance.status = Interview.Status.COMPLETED
+        can_decide_pipeline = self._can_decide_pipeline()
+        if not can_decide_pipeline:
+            # An Interviewer's Pass/Fail is a recommendation, not the final
+            # call - the candidate's stage only moves once HR/Recruiter
+            # decides via the Hiring block's Cleared/Hold/Reject. Keep the
+            # interview's own result Pending (exactly like the ordinary
+            # "Mark Done" flow - see InterviewMarkDoneView) so that block's
+            # decision phase picks this interview up correctly and folds
+            # their pick into the feedback HR will see pre-filled there
+            # (candidates/templates/candidates/timeline.html's Round 1/2
+            # remarks box), instead of it silently deciding the outcome.
+            picked = form.cleaned_data.get('result')
+            recommendation = {
+                Interview.Result.PASS_: 'Recommended: Pass.',
+                Interview.Result.FAIL: 'Recommended: Fail.',
+            }.get(picked)
+            if recommendation:
+                feedback = (form.cleaned_data.get('feedback') or '').strip()
+                form.instance.feedback = f'{recommendation} {feedback}'.strip()
+            form.instance.result = Interview.Result.PENDING
         response = super().form_valid(form)
+        if not can_decide_pipeline:
+            messages.success(self.request, 'Result recorded - HR/Recruiter will confirm the next step.')
+            return response
         interview = self.object
         candidate = interview.candidate
         performed_by = self.request.user.get_full_name() or self.request.user.get_username()

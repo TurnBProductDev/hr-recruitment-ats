@@ -1,3 +1,5 @@
+import logging
+
 from django.conf import settings
 from django.contrib import messages
 from django.db.models import Count, Exists, F, Max, OuterRef, Q, Subquery
@@ -13,7 +15,7 @@ from django.views.generic import DetailView, ListView, UpdateView
 from interviews.models import Interview, InterviewReschedule
 from jobs.models import Job
 
-from . import bulk, cv_parser, cv_storage, match_scoring, screening_questions, scoring, services
+from . import bulk, cv_parser, cv_storage, match_scoring, rejection_emails, screening_questions, scoring, services
 from .forms import (
     BulkUploadForm,
     CandidateApplicationForm,
@@ -36,6 +38,13 @@ from .models import (
 from .permissions import (
     ALL_GROUPS, ANY_STAFF, HIRING_MANAGER, HR_ADMIN, RECRUITER, GroupRequiredMixin, is_interviewer_only,
 )
+
+
+logger = logging.getLogger(__name__)
+
+
+def _is_ajax(request):
+    return request.headers.get('X-Requested-With') == 'XMLHttpRequest'
 
 
 def _performed_by(request):
@@ -180,6 +189,26 @@ def _build_hiring_stages(candidate, history):
                 }
         stages.append(entry)
     return stages, active_index
+
+
+def _settle_round_interview(candidate, target_status):
+    """The Round 1/Round 2 stage card's Cleared/Hold/Reject/Blacklist
+    decides the candidate, but the interview that got them there was marked
+    merely "Done" (completed, no result yet - see
+    interviews.views.InterviewMarkDoneView) rather than decided in the same
+    step. Settle it to match now, so it doesn't sit "Pending" forever. Hold
+    doesn't decide anything, so it's left alone. Shared by
+    CandidateStatusActionView and CandidateSendRejectionView."""
+    round_types = ROUND_INTERVIEW_TYPES.get(candidate.status)
+    if not round_types or target_status == STATUS.SCREENING_HOLD:
+        return
+    interview = candidate.interviews.filter(
+        round_type__in=round_types, status=Interview.Status.COMPLETED,
+        result=Interview.Result.PENDING).order_by('-scheduled_date').first()
+    if not interview:
+        return
+    interview.result = Interview.Result.PASS_ if target_status in ADVANCE_STATUSES else Interview.Result.FAIL
+    interview.save(update_fields=['result'])
 
 REPOSITORY_TABS = [
     ('open', 'Open Applications', STATUS.OPEN),
@@ -1037,7 +1066,7 @@ class CandidateStatusActionView(GroupRequiredMixin, View):
             messages.error(request, 'A reason is required.')
             return redirect(request.POST.get('next') or reverse('candidate_timeline', args=[pk]))
 
-        self._settle_round_interview(candidate)
+        _settle_round_interview(candidate, self.target_status)
 
         if self.target_status == STATUS.BLACKLISTED:
             services.blacklist_candidate(candidate, reason, user=request.user, performed_by=performed_by)
@@ -1048,23 +1077,73 @@ class CandidateStatusActionView(GroupRequiredMixin, View):
         next_url = request.POST.get('next')
         return redirect(next_url or reverse('candidate_timeline', args=[pk]))
 
-    def _settle_round_interview(self, candidate):
-        """The Round 1/Round 2 stage card's Cleared/Hold/Reject/Blacklist
-        decides the candidate, but the interview that got them there was
-        marked merely "Done" (completed, no result yet - see
-        interviews.views.InterviewMarkDoneView) rather than decided in the
-        same step. Settle it to match now, so it doesn't sit "Pending"
-        forever. Hold doesn't decide anything, so it's left alone."""
-        round_types = ROUND_INTERVIEW_TYPES.get(candidate.status)
-        if not round_types or self.target_status == STATUS.SCREENING_HOLD:
-            return
-        interview = candidate.interviews.filter(
-            round_type__in=round_types, status=Interview.Status.COMPLETED,
-            result=Interview.Result.PENDING).order_by('-scheduled_date').first()
-        if not interview:
-            return
-        interview.result = Interview.Result.PASS_ if self.target_status in ADVANCE_STATUSES else Interview.Result.FAIL
-        interview.save(update_fields=['result'])
+
+class CandidateRejectionDraftView(GroupRequiredMixin, View):
+    """Editable draft of the 'thank you for interviewing' rejection email -
+    shown when Reject is clicked on the Round 1/Round 2/Final Decision stage
+    cards (see rejection_emails.py). CV Screening/Tele Screening's Reject
+    stays the plain immediate CandidateStatusActionView action, since the
+    candidate was never actually interviewed."""
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
+
+    def get(self, request, pk):
+        candidate = get_object_or_404(Candidate, pk=pk)
+        return render(request, 'candidates/_rejection_draft.html', {
+            'candidate': candidate,
+            'to_email': candidate.email,
+            'cc_emails': rejection_emails.default_cc_list(),
+            'subject': rejection_emails.default_subject(candidate),
+            'body': rejection_emails.default_body(candidate),
+        })
+
+
+class CandidateSendRejectionView(GroupRequiredMixin, View):
+    """Rejects the candidate (same transition as CandidateStatusActionView
+    with target_status=REJECTED) and emails them the reviewed draft in one
+    step. The internal reason/remarks field is separate from the email body -
+    it's carried over from the stage card's own remarks box by JS so it still
+    lands in CandidateStatusHistory.remarks as usual."""
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
+
+    def post(self, request, pk):
+        candidate = get_object_or_404(Candidate, pk=pk)
+        is_ajax = _is_ajax(request)
+        to_email = request.POST.get('to_email', '').strip()
+        subject = request.POST.get('subject', '').strip()
+        body = request.POST.get('body', '')
+        reason = request.POST.get('reason', '').strip()
+        performed_by = _performed_by(request)
+        next_url = request.POST.get('next') or reverse('candidate_timeline', args=[pk])
+
+        if not to_email:
+            error = 'A recipient email is required.'
+            if is_ajax:
+                return JsonResponse({'ok': False, 'error': error}, status=400)
+            messages.error(request, error)
+            return redirect(next_url)
+
+        # The candidate is rejected first, then the email is attempted - a
+        # failed send shouldn't leave the pipeline decision half-made, since
+        # the decision itself (not the email) is the part HR can't easily redo.
+        _settle_round_interview(candidate, STATUS.REJECTED)
+        services.change_status(candidate, STATUS.REJECTED, user=request.user,
+                               remarks=reason or None, performed_by=performed_by)
+        try:
+            rejection_emails.send_rejection_email(
+                to_email=to_email, cc_emails=rejection_emails.default_cc_list(),
+                subject=subject, body=body)
+        except Exception as exc:  # noqa: BLE001 - surfaced to the HR user, not swallowed
+            logger.exception('Failed to send rejection email for candidate %s', pk)
+            error = f'{candidate.full_name} moved to "Rejected", but the email could not be sent: {exc}'
+            if is_ajax:
+                return JsonResponse({'ok': False, 'error': error}, status=502)
+            messages.warning(request, error)
+            return redirect(next_url)
+
+        if is_ajax:
+            return JsonResponse({'ok': True})
+        messages.success(request, f'{candidate.full_name} moved to "Rejected" and notified by email.')
+        return redirect(next_url)
 
 
 class CandidateMoveToFutureView(GroupRequiredMixin, View):
