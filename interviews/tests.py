@@ -612,6 +612,15 @@ class InterviewDoneCancelTests(TestCase):
         self.interview.refresh_from_db()
         self.assertEqual(self.interview.result, Interview.Result.PENDING)
 
+    def test_reject_settles_a_still_scheduled_interview_without_mark_done_first(self):
+        """HR deciding straight off the Hiring block, without ever clicking
+        Done/Cancelled on the interview itself, must not leave it dangling
+        Scheduled forever (see the interviewer portal's Result Pending tab)."""
+        self.client.post(reverse('candidate_reject', args=[self.candidate.pk]))
+        self.interview.refresh_from_db()
+        self.assertEqual(self.interview.status, Interview.Status.COMPLETED)
+        self.assertEqual(self.interview.result, Interview.Result.FAIL)
+
     def test_cancelling_prompts_reject_or_hold(self):
         self.client.post(reverse('interview_cancel', args=[self.interview.pk]))
         self.interview.refresh_from_db()

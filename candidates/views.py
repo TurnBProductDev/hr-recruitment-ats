@@ -193,22 +193,26 @@ def _build_hiring_stages(candidate, history):
 
 def _settle_round_interview(candidate, target_status):
     """The Round 1/Round 2 stage card's Cleared/Hold/Reject/Blacklist
-    decides the candidate, but the interview that got them there was marked
-    merely "Done" (completed, no result yet - see
-    interviews.views.InterviewMarkDoneView) rather than decided in the same
-    step. Settle it to match now, so it doesn't sit "Pending" forever. Hold
-    doesn't decide anything, so it's left alone. Shared by
-    CandidateStatusActionView and CandidateSendRejectionView."""
+    decides the candidate, but the interview that got them there might still
+    be sitting unmarked - either "Done" (completed, no result yet - see
+    interviews.views.InterviewMarkDoneView) or, if HR decided straight off
+    the stage card without ever touching the interview itself, still
+    Scheduled/Rescheduled. Either way, settle it to match now so it doesn't
+    sit "Pending" (and, for the still-open case, cluttering the interviewer's
+    Result Pending list) forever. Hold doesn't decide anything, so it's left
+    alone. Shared by CandidateStatusActionView and CandidateSendRejectionView."""
     round_types = ROUND_INTERVIEW_TYPES.get(candidate.status)
     if not round_types or target_status == STATUS.SCREENING_HOLD:
         return
     interview = candidate.interviews.filter(
-        round_type__in=round_types, status=Interview.Status.COMPLETED,
-        result=Interview.Result.PENDING).order_by('-scheduled_date').first()
+        round_type__in=round_types, result=Interview.Result.PENDING,
+        status__in=(Interview.Status.COMPLETED, *Interview.OPEN_STATUSES),
+    ).order_by('-scheduled_date').first()
     if not interview:
         return
     interview.result = Interview.Result.PASS_ if target_status in ADVANCE_STATUSES else Interview.Result.FAIL
-    interview.save(update_fields=['result'])
+    interview.status = Interview.Status.COMPLETED
+    interview.save(update_fields=['result', 'status'])
 
 REPOSITORY_TABS = [
     ('open', 'Open Applications', STATUS.OPEN),
