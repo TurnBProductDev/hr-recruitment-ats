@@ -242,23 +242,24 @@ class UserManagementTests(TestCase):
         target.refresh_from_db()
         self.assertEqual([g.name for g in target.groups.all()], [INTERVIEWER])
 
-    def test_admin_cannot_deactivate_their_own_account(self):
-        response = self.client.post(reverse('user_edit', args=[self.admin.pk]), {
+    def _edit_admin(self, pk, **overrides):
+        data = {
             'username': 'admin', 'first_name': '', 'last_name': '',
-            'email': 'admin@turnb.com', 'is_active': '', 'role': HR_ADMIN,
+            'email': 'admin@turnb.com', 'is_active': 'on', 'role': HR_ADMIN,
             'password1': '', 'password2': '',
-        })
-        self.assertContains(response, "can&#x27;t deactivate your own account")
+        }
+        data.update(overrides)
+        return self.client.post(reverse('user_edit', args=[pk]), data)
+
+    def test_sole_admin_cannot_deactivate_their_own_account(self):
+        response = self._edit_admin(self.admin.pk, is_active='')
+        self.assertContains(response, 'only active Admin account')
         self.admin.refresh_from_db()
         self.assertTrue(self.admin.is_active)
 
-    def test_admin_cannot_remove_their_own_admin_role(self):
-        response = self.client.post(reverse('user_edit', args=[self.admin.pk]), {
-            'username': 'admin', 'first_name': '', 'last_name': '',
-            'email': 'admin@turnb.com', 'is_active': 'on', 'role': RECRUITER,
-            'password1': '', 'password2': '',
-        })
-        self.assertContains(response, "can&#x27;t remove your own Admin role")
+    def test_sole_admin_cannot_remove_their_own_admin_role(self):
+        response = self._edit_admin(self.admin.pk, role=RECRUITER)
+        self.assertContains(response, 'only active Admin account')
         self.admin.refresh_from_db()
         self.assertTrue(self.admin.groups.filter(name=HR_ADMIN).exists())
 
@@ -269,7 +270,57 @@ class UserManagementTests(TestCase):
         target.refresh_from_db()
         self.assertFalse(target.is_active)
 
-    def test_cannot_toggle_own_active_status(self):
+    def test_cannot_toggle_off_the_sole_admin(self):
         self.client.post(reverse('user_toggle_active', args=[self.admin.pk]))
         self.admin.refresh_from_db()
         self.assertTrue(self.admin.is_active)
+
+    def _second_admin(self):
+        other = get_user_model().objects.create_user('admin2', 'admin2@turnb.com', 'pw')
+        other.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        return other
+
+    def test_admin_can_step_down_once_another_admin_exists(self):
+        """The rule is 'at least one Admin remains', not 'never touch your
+        own account' - once a second Admin exists, self-demotion is fine.
+        fetch_redirect_response=False: stepping down immediately loses this
+        session access to the Users page it's redirected to (expected - a
+        Recruiter can't reach it), so following the redirect would 403."""
+        self._second_admin()
+        response = self._edit_admin(self.admin.pk, role=RECRUITER)
+        self.assertRedirects(response, reverse('user_list'), fetch_redirect_response=False)
+        self.admin.refresh_from_db()
+        self.assertFalse(self.admin.groups.filter(name=HR_ADMIN).exists())
+
+    def test_admin_can_deactivate_their_own_account_once_another_admin_exists(self):
+        # fetch_redirect_response=False: deactivating your own account signs
+        # this session out too (ModelBackend.get_user() rejects an inactive
+        # user on the very next request), so following the redirect would
+        # itself redirect again, to the login page.
+        self._second_admin()
+        response = self._edit_admin(self.admin.pk, is_active='')
+        self.assertRedirects(response, reverse('user_list'), fetch_redirect_response=False)
+        self.admin.refresh_from_db()
+        self.assertFalse(self.admin.is_active)
+
+    def test_cannot_demote_someone_else_who_is_the_last_admin(self):
+        """The rule applies to editing anyone, not just yourself. Note this
+        can't be shown by one Admin demoting another while both are Admin -
+        excluding the target still leaves the actor, so the count never hits
+        zero that way (correctly - that case just isn't dangerous). A
+        superuser bypasses the Admin-group check to reach this page at all
+        (GroupRequiredMixin), so it's the case that actually demonstrates the
+        target-based (not self-based) rule: editing self.admin, the sole
+        HR_ADMIN-group user, while acting as someone who isn't that group."""
+        superuser = get_user_model().objects.create_superuser('root', 'root@turnb.com', 'pw')
+        self.client.force_login(superuser)
+        response = self._edit_admin(self.admin.pk, role=RECRUITER)
+        self.assertContains(response, 'only active Admin account')
+        self.admin.refresh_from_db()
+        self.assertTrue(self.admin.groups.filter(name=HR_ADMIN).exists())
+
+    def test_toggle_off_works_once_another_admin_exists(self):
+        self._second_admin()
+        self.client.post(reverse('user_toggle_active', args=[self.admin.pk]))
+        self.admin.refresh_from_db()
+        self.assertFalse(self.admin.is_active)

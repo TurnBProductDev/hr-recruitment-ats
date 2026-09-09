@@ -51,22 +51,38 @@ class UserCreateView(GroupRequiredMixin, CreateView):
         return reverse('user_list')
 
 
+LAST_ADMIN_MESSAGE = 'This is the only active Admin account - promote someone else to Admin first.'
+
+
+def _other_active_admins_exist(exclude_pk):
+    return User.objects.filter(groups__name=HR_ADMIN, is_active=True).exclude(pk=exclude_pk).exists()
+
+
 class UserUpdateView(GroupRequiredMixin, UpdateView):
     model = User
     form_class = UserAccountForm
     template_name = 'dashboard/user_form.html'
     allowed_groups = (HR_ADMIN,)
 
+    def get_object(self, queryset=None):
+        obj = super().get_object(queryset)
+        # Snapshot before the form's validation overwrites is_active on this
+        # same instance - the only way to know what it used to be, whether
+        # this is a self-edit or someone editing another admin.
+        self.was_active_admin = obj.is_active and obj.groups.filter(name=HR_ADMIN).exists()
+        return obj
+
     def form_valid(self, form):
-        # An admin can't lock themselves out - deactivating their own account
-        # or demoting themselves out of Admin would leave nobody able to fix it.
-        if form.instance.pk == self.request.user.pk:
+        # The one HR-wide safety rail on this page: a role/active change is
+        # free otherwise (including on your own account), as long as at
+        # least one other active Admin is left standing to fix things.
+        still_active_admin = form.cleaned_data['is_active'] and form.cleaned_data['role'] == HR_ADMIN
+        if self.was_active_admin and not still_active_admin and not _other_active_admins_exist(form.instance.pk):
             if not form.cleaned_data['is_active']:
-                form.add_error('is_active', "You can't deactivate your own account.")
-                return self.form_invalid(form)
+                form.add_error('is_active', LAST_ADMIN_MESSAGE)
             if form.cleaned_data['role'] != HR_ADMIN:
-                form.add_error('role', "You can't remove your own Admin role.")
-                return self.form_invalid(form)
+                form.add_error('role', LAST_ADMIN_MESSAGE)
+            return self.form_invalid(form)
         response = super().form_valid(form)
         messages.success(self.request, f'{self.object.get_full_name() or self.object.username} was updated.')
         return response
@@ -82,8 +98,9 @@ class UserToggleActiveView(GroupRequiredMixin, View):
 
     def post(self, request, pk):
         account = get_object_or_404(User, pk=pk)
-        if account.pk == request.user.pk:
-            messages.error(request, "You can't deactivate your own account.")
+        is_active_admin = account.is_active and account.groups.filter(name=HR_ADMIN).exists()
+        if is_active_admin and not _other_active_admins_exist(account.pk):
+            messages.error(request, LAST_ADMIN_MESSAGE)
         else:
             account.is_active = not account.is_active
             account.save(update_fields=['is_active'])
