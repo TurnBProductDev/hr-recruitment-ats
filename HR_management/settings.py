@@ -199,7 +199,8 @@ AZURE_STORAGE_CV_CONTAINER = os.environ.get("AZURE_STORAGE_CV_CONTAINER", "candi
 
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'hr_dashboard'
-LOGOUT_REDIRECT_URL = 'vacancy_list'
+# Logout's redirect is role-aware (HR_management.auth_views.HRLogoutView) -
+# no static LOGOUT_REDIRECT_URL needed.
 
 # Console backend by default so "Send Invite" / notifications work without
 # any setup in dev. Point EMAIL_BACKEND at django.core.mail.backends.smtp

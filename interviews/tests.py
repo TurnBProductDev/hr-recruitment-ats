@@ -676,3 +676,23 @@ class InterviewerPortalAdminTests(TestCase):
         self.client.force_login(recruiter)
         response = self.client.get(reverse('interviewer_home'))
         self.assertEqual(response.status_code, 403)
+
+
+class LogoutRedirectTests(TestCase):
+    """Logging out used to land on the public careers page
+    (LOGOUT_REDIRECT_URL='vacancy_list') - now it's a sign-in page instead,
+    the right one for whichever role just logged out."""
+
+    def test_hr_user_lands_on_the_main_login(self):
+        hr = get_user_model().objects.create_user('hr', 'hr@turnb.com', 'pw')
+        hr.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.client.force_login(hr)
+        response = self.client.post(reverse('logout'))
+        self.assertRedirects(response, reverse('login'))
+
+    def test_interviewer_lands_on_the_interviewer_login(self):
+        interviewer = get_user_model().objects.create_user('panel', 'panel@turnb.com', 'pw')
+        interviewer.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
+        self.client.force_login(interviewer)
+        response = self.client.post(reverse('logout'))
+        self.assertRedirects(response, reverse('interviewer_login'))
