@@ -274,7 +274,7 @@ html { scroll-behavior: smooth; }
             {% if candidate.last_role or candidate.last_company %}
               <div>
                 <strong>{{ candidate.last_role|default:"-" }}</strong><br>
-                {{ candidate.last_company|default:"" }}
+                <span class="text-muted pd-meta">{{ candidate.last_company|default:"-" }}</span>
               </div>
             {% else %}<p class="text-muted mb-0">No experience records.</p>{% endif %}
           {% endfor %}
