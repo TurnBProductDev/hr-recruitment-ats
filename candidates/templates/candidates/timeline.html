@@ -67,6 +67,7 @@
 
 .stage-action-row { display:flex; flex-wrap:wrap; gap:8px; }
 .stage-action-btn { border:1.5px solid; border-radius:10px; padding:.5rem 1.1rem; font-size:.82rem; font-weight:600; background:#fff; }
+.final-status-actions .stage-action-btn { padding:.35rem .8rem; font-size:.68rem; }
 .stage-action-btn.stage-tone-advance { border-color: var(--primary-green); color: var(--primary-green); }
 .stage-action-btn.stage-tone-advance:hover { background: var(--primary-green); color:#fff; }
 .stage-action-btn.stage-tone-hold { border-color:#e0c97e; color:#7a5c00; background:#fbf1c9; }
@@ -425,12 +426,6 @@ html { scroll-behavior: smooth; }
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
           <div class="section-eyebrow mb-0"><i class="bi bi-check-circle-fill"></i> {{ stage.label }}</div>
           <div class="d-flex align-items-center gap-2">
-            {% if stage.comm_channel == 'PHONE' %}
-            <button type="button" class="btn btn-sm btn-outline-app" data-bs-toggle="modal" data-bs-target="#screeningQuestionsModal"
-                    data-load-url="{% url 'candidate_screening_questions' candidate.pk %}">
-              <i class="bi bi-question-circle"></i> {% if candidate.screening_questions %}View{% else %}Generate{% endif %} Questions
-            </button>
-            {% endif %}
             {% if stage.decision %}<span class="stage-decision-badge stage-tone-{{ stage.decision.tone }}">{{ stage.decision.label }}</span>{% endif %}
           </div>
         </div>
@@ -446,12 +441,6 @@ html { scroll-behavior: smooth; }
             {% if stage.interview_rounds and stage.round_phase == 'schedule' %}{{ stage.schedule_label }}{% else %}{{ stage.label }}{% endif %}
           </div>
           <div class="d-flex align-items-center gap-2">
-            {% if stage.comm_channel == 'PHONE' %}
-            <button type="button" class="btn btn-sm btn-outline-app" data-bs-toggle="modal" data-bs-target="#screeningQuestionsModal"
-                    data-load-url="{% url 'candidate_screening_questions' candidate.pk %}">
-              <i class="bi bi-question-circle"></i> {% if candidate.screening_questions %}View{% else %}Generate{% endif %} Questions
-            </button>
-            {% endif %}
             {% if stage.latest_call %}<span class="call-status-badge">{{ stage.latest_call.get_outcome_display }}</span>{% endif %}
             {% if is_on_hold %}<span class="hold-banner"><i class="bi bi-pause-circle-fill"></i> On Hold</span>{% endif %}
           </div>
@@ -669,12 +658,12 @@ html { scroll-behavior: smooth; }
       <div class="text-center" style="color:{{ final_status.color }}; font-size:1.05rem; font-weight:700;">{{ final_status.label }}</div>
       {% if is_on_hold %}
       <div class="stage-subsection">
-        <form method="post" class="js-stage-form">
+        <form method="post" class="js-stage-form js-confirm-reason-form">
           {% csrf_token %}
           <input type="hidden" name="next" value="{{ request.get_full_path }}">
           <input type="hidden" name="performed_by" value="{{ user.get_full_name|default:user.get_username }}">
-          <textarea name="reason" class="form-control form-control-sm mb-2 js-stage-reason" rows="2" placeholder="Remarks / reason…"></textarea>
-          <div class="stage-action-row justify-content-center">
+          <textarea name="reason" hidden class="form-control form-control-sm mb-2 js-stage-reason" rows="2" placeholder="Remarks / reason…"></textarea>
+          <div class="stage-action-row justify-content-center final-status-actions">
             <button type="submit" formaction="{% url candidate.resume_action.url_name candidate.pk %}" class="stage-action-btn stage-tone-advance">{{ candidate.resume_action.label }}</button>
             <button type="submit" formaction="{% url 'candidate_reject' candidate.pk %}" class="stage-action-btn stage-tone-reject">Reject</button>
             {% if candidate.hold_from_status != 'OPEN' %}
@@ -776,20 +765,6 @@ html { scroll-behavior: smooth; }
   </div>
 </div>
 
-<div class="modal fade" id="screeningQuestionsModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-lg modal-dialog-scrollable">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Tele Screening Questions</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body" id="screeningQuestionsBody">
-        <div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm"></span> Loading…</div>
-      </div>
-    </div>
-  </div>
-</div>
-
 <div class="modal fade" id="rejectionModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
@@ -847,6 +822,23 @@ document.querySelectorAll('.js-stage-form').forEach(function (form) {
   // see stage.done_interview.feedback above), so sync once immediately
   // rather than waiting for the first edit.
   sync();
+});
+
+// Final Status actions (Move to Round 2/Reject/Move to Future while on
+// Hold): Remarks stays hidden until an action button is actually clicked -
+// that first click just reveals it instead of submitting, so the box isn't
+// cluttering the page for a decision that hasn't been made yet. Clicking
+// again (now that it's visible) submits as normal.
+document.querySelectorAll('.js-confirm-reason-form').forEach(function (form) {
+  var reason = form.querySelector('.js-stage-reason');
+  if (!reason) return;
+  form.addEventListener('submit', function (event) {
+    if (reason.hidden) {
+      event.preventDefault();
+      reason.hidden = false;
+      reason.focus();
+    }
+  });
 });
 
 // Re-score runs in the background (it calls an external AI service and can
@@ -979,22 +971,6 @@ pollCandidateAction("{% url 'candidate_rescore_status' candidate.pk %}");
         else if (submitBtn) { submitBtn.disabled = false; }
       })
       .catch(function () { if (submitBtn) { submitBtn.disabled = false; } });
-  });
-})();
-
-// Tele Screening Questions popup: generated on first open (see
-// CandidateScreeningQuestionsView), just displayed on every open after that.
-(function () {
-  var modalEl = document.getElementById('screeningQuestionsModal');
-  if (!modalEl) return;
-  var body = document.getElementById('screeningQuestionsBody');
-  modalEl.addEventListener('show.bs.modal', function (event) {
-    var btn = event.relatedTarget;
-    body.innerHTML = '<div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm"></span> Generating…</div>';
-    fetch(btn.dataset.loadUrl, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
-      .then(function (r) { return r.text(); })
-      .then(function (html) { body.innerHTML = html; })
-      .catch(function () { body.innerHTML = '<div class="alert alert-danger">Could not load questions. Please try again.</div>'; });
   });
 })();
 

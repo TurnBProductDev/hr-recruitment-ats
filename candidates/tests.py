@@ -1303,18 +1303,6 @@ class ScreeningQuestionsViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'alert-danger')
 
-    def test_button_shows_on_the_active_tele_screening_card(self):
-        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
-        self.assertContains(response, 'Generate Questions')
-        self.assertContains(response, reverse('candidate_screening_questions', args=[self.candidate.pk]))
-
-    def test_view_button_still_shows_once_shortlisted_past_tele_screening(self):
-        self.candidate.screening_questions = screening_questions.dump_questions(['Q?'])
-        self.candidate.save(update_fields=['screening_questions'])
-        services.change_status(self.candidate, Candidate.Status.ROUND1)
-        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
-        self.assertContains(response, 'View Questions')
-
     def test_interviewer_can_view_questions_for_a_candidate_they_interview(self):
         interviewer = get_user_model().objects.create_user('panel9', 'panel9@example.com', 'pw')
         interviewer.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
