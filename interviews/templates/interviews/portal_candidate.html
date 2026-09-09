@@ -99,6 +99,14 @@
     </div>
     {% endif %}
 
+    <div class="card app-card p-4 mb-3">
+      <div class="section-eyebrow">Tele Screening Questions</div>
+      <button type="button" class="btn btn-sm btn-outline-app" data-bs-toggle="modal" data-bs-target="#screeningQuestionsModal"
+              data-load-url="{% url 'candidate_screening_questions' candidate.pk %}">
+        <i class="bi bi-question-circle"></i> {% if candidate.screening_questions %}View{% else %}Generate{% endif %} Questions
+      </button>
+    </div>
+
     {% if candidate.match_score is not None %}
     <div class="card app-card p-4">
       <div class="section-eyebrow"><i class="bi bi-bullseye"></i> Match Score</div>
@@ -128,6 +136,20 @@
     </div>
   {% empty %}<p class="text-muted mb-0">No interviews on record.</p>{% endfor %}
 </div>
+
+<div class="modal fade" id="screeningQuestionsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Tele Screening Questions</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="screeningQuestionsBody">
+        <div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm"></span> Loading…</div>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -140,6 +162,22 @@
   if (!raw || !target || typeof marked === 'undefined' || typeof DOMPurify === 'undefined') return;
   var html = DOMPurify.sanitize(marked.parse(raw.textContent));
   target.innerHTML = html;
+})();
+
+// Tele Screening Questions popup: generated on first open, just displayed
+// on every open after that (see CandidateScreeningQuestionsView).
+(function () {
+  var modalEl = document.getElementById('screeningQuestionsModal');
+  if (!modalEl) return;
+  var body = document.getElementById('screeningQuestionsBody');
+  modalEl.addEventListener('show.bs.modal', function (event) {
+    var btn = event.relatedTarget;
+    body.innerHTML = '<div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm"></span> Generating…</div>';
+    fetch(btn.dataset.loadUrl, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+      .then(function (r) { return r.text(); })
+      .then(function (html) { body.innerHTML = html; })
+      .catch(function () { body.innerHTML = '<div class="alert alert-danger">Could not load questions. Please try again.</div>'; });
+  });
 })();
 </script>
 {% endblock %}

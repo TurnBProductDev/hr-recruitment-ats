@@ -4,6 +4,7 @@ upload -> parse -> candidate pipeline.
 Run against sqlite so the live Azure DB is never touched:
     DB_ENGINE=sqlite python manage.py test candidates
 """
+import json
 from unittest import mock
 
 from django.contrib.auth import get_user_model
@@ -16,10 +17,11 @@ from django.utils import timezone
 from interviews.models import Interview
 from jobs.models import Job
 
-from . import bulk, cv_parser, services
+from . import bulk, cv_parser, screening_questions, services
 from .cv_parser import CVParseError
-from .models import BulkUploadBatch, BulkUploadItem, Candidate, EmailRegistry
+from .models import BulkUploadBatch, BulkUploadItem, Candidate, CommunicationLog, EmailRegistry
 from .permissions import HIRING_MANAGER, HR_ADMIN, INTERVIEWER, RECRUITER
+from .screening_questions import ScreeningQuestionsError
 from .views import HOLD_TAB
 
 PARSED = {
@@ -1098,3 +1100,194 @@ class SlaTrackerInterviewDateTests(TestCase):
         self.assertContains(response, 'Round 2 Scheduled')
         self.assertContains(response, 'Not yet scheduled')
         self.assertNotContains(response, 'Round 1 Scheduled')
+
+
+@override_settings(AZURE_OPENAI_ENDPOINT='https://example.openai.azure.com',
+                   AZURE_OPENAI_KEY='fake-key')
+class ScreeningQuestionsGenerationTests(TestCase):
+    """candidates/screening_questions.py's Azure OpenAI call, mocked - never
+    touches the real API."""
+
+    def _candidate(self):
+        return Candidate.objects.create(
+            full_name='Rose E G', email='rose@example.com', cv_summary='Five years in analytics.')
+
+    def _response(self, status_code=200, json_body=None, text=''):
+        response = mock.Mock(status_code=status_code, text=text)
+        response.json.return_value = {} if json_body is None else json_body
+        return response
+
+    def test_is_configured_false_when_unset(self):
+        with override_settings(AZURE_OPENAI_ENDPOINT='', AZURE_OPENAI_KEY=''):
+            self.assertFalse(screening_questions.is_configured())
+
+    def test_returns_ten_questions(self):
+        body = {'choices': [{'message': {'content': json.dumps(
+            {'questions': [f'Question {i}?' for i in range(1, 11)]})}}]}
+        with mock.patch('candidates.screening_questions.requests.post',
+                        return_value=self._response(json_body=body)):
+            result = screening_questions.generate_questions(self._candidate())
+        self.assertEqual(len(result), 10)
+        self.assertEqual(result[0], 'Question 1?')
+
+    def test_http_error_is_reported(self):
+        with mock.patch('candidates.screening_questions.requests.post',
+                        return_value=self._response(status_code=500, text='boom')):
+            with self.assertRaises(ScreeningQuestionsError):
+                screening_questions.generate_questions(self._candidate())
+
+    def test_malformed_response_is_reported(self):
+        with mock.patch('candidates.screening_questions.requests.post',
+                        return_value=self._response(json_body={'choices': []})):
+            with self.assertRaises(ScreeningQuestionsError):
+                screening_questions.generate_questions(self._candidate())
+
+    def test_not_configured_is_reported(self):
+        with override_settings(AZURE_OPENAI_ENDPOINT='', AZURE_OPENAI_KEY=''):
+            with self.assertRaises(ScreeningQuestionsError):
+                screening_questions.generate_questions(self._candidate())
+
+    def test_dump_and_load_round_trip(self):
+        questions = ['Q1?', 'Q2?']
+        text = screening_questions.dump_questions(questions)
+        self.assertEqual(screening_questions.load_questions(text), questions)
+
+    def test_load_questions_handles_blank_and_junk(self):
+        self.assertEqual(screening_questions.load_questions(None), [])
+        self.assertEqual(screening_questions.load_questions(''), [])
+        self.assertEqual(screening_questions.load_questions('not json'), [])
+
+
+@override_settings(AZURE_OPENAI_ENDPOINT='https://example.openai.azure.com',
+                   AZURE_OPENAI_KEY='fake-key')
+class ScreeningQuestionsViewTests(TestCase):
+    """The Tele Screening Questions popup: generated once, then reused - and
+    still reachable (view button) once the candidate has moved past Tele
+    Screening, including from the Interviewer portal."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('hr8', 'hr8@example.com', 'pw')
+        self.user.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.client.force_login(self.user)
+        self.candidate = Candidate.objects.create(
+            full_name='Rose E G', email='rose@example.com', cv_summary='Five years in analytics.')
+        services.record_creation(self.candidate)
+        services.change_status(self.candidate, Candidate.Status.SHORTLISTED)
+
+    def _mock_response(self):
+        body = {'choices': [{'message': {'content': json.dumps(
+            {'questions': [f'Question {i}?' for i in range(1, 11)]})}}]}
+        response = mock.Mock(status_code=200, text='')
+        response.json.return_value = body
+        return response
+
+    def test_first_view_generates_and_persists(self):
+        with mock.patch('candidates.screening_questions.requests.post',
+                        return_value=self._mock_response()) as post:
+            response = self.client.get(reverse('candidate_screening_questions', args=[self.candidate.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Question 1?')
+        post.assert_called_once()
+        self.candidate.refresh_from_db()
+        self.assertEqual(screening_questions.load_questions(self.candidate.screening_questions)[0], 'Question 1?')
+
+    def test_second_view_does_not_regenerate(self):
+        self.candidate.screening_questions = screening_questions.dump_questions(['Already there?'])
+        self.candidate.save(update_fields=['screening_questions'])
+        with mock.patch('candidates.screening_questions.requests.post') as post:
+            response = self.client.get(reverse('candidate_screening_questions', args=[self.candidate.pk]))
+        self.assertContains(response, 'Already there?')
+        post.assert_not_called()
+
+    def test_generation_failure_shows_an_error_without_crashing(self):
+        with mock.patch('candidates.screening_questions.requests.post',
+                        return_value=mock.Mock(status_code=500, text='boom')):
+            response = self.client.get(reverse('candidate_screening_questions', args=[self.candidate.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'alert-danger')
+
+    def test_button_shows_on_the_active_tele_screening_card(self):
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertContains(response, 'Generate Questions')
+        self.assertContains(response, reverse('candidate_screening_questions', args=[self.candidate.pk]))
+
+    def test_view_button_still_shows_once_shortlisted_past_tele_screening(self):
+        self.candidate.screening_questions = screening_questions.dump_questions(['Q?'])
+        self.candidate.save(update_fields=['screening_questions'])
+        services.change_status(self.candidate, Candidate.Status.ROUND1)
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertContains(response, 'View Questions')
+
+    def test_interviewer_can_view_questions_for_a_candidate_they_interview(self):
+        interviewer = get_user_model().objects.create_user('panel9', 'panel9@example.com', 'pw')
+        interviewer.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
+        self.candidate.screening_questions = screening_questions.dump_questions(['Q?'])
+        self.candidate.save(update_fields=['screening_questions'])
+        Interview.objects.create(
+            candidate=self.candidate, interviewer=interviewer, round_type=Interview.RoundType.ROUND1,
+            scheduled_date=timezone.now() + timezone.timedelta(days=1))
+        self.client.force_login(interviewer)
+        response = self.client.get(reverse('candidate_screening_questions', args=[self.candidate.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Q?')
+
+
+class TeleScreeningMergedRemarksTests(TestCase):
+    """Tele Screening's card uses one shared Remarks box for both the call
+    log and the status decision, instead of two separate ones."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('hr9', 'hr9@example.com', 'pw')
+        self.user.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.client.force_login(self.user)
+        self.candidate = Candidate.objects.create(full_name='Rose E G', email='rose@example.com')
+        services.record_creation(self.candidate)
+        services.change_status(self.candidate, Candidate.Status.SHORTLISTED)
+
+    def test_only_one_remarks_box_is_rendered(self):
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertContains(response, 'Phone Communication Log')
+        self.assertContains(response, 'Update Tele Screening Status')
+        # The old second box (the call log's own "message" field) is gone -
+        # only the shared "reason" textarea remains anywhere on the page,
+        # since Round 1/2's cards are locked (not yet reached) for this candidate.
+        self.assertNotContains(response, 'name="message"')
+
+    def test_shared_remarks_box_logs_the_call_with_that_text(self):
+        response = self.client.post(reverse('candidate_add_log', args=[self.candidate.pk]), {
+            'channel': 'PHONE', 'outcome': 'UNABLE', 'reason': 'Tried twice, no answer.',
+        })
+        self.assertRedirects(response, reverse('candidate_timeline', args=[self.candidate.pk]))
+        log = self.candidate.communication_logs.get()
+        self.assertEqual(log.message, 'Tried twice, no answer.')
+        self.assertEqual(log.outcome, 'UNABLE')
+
+    def test_shared_remarks_box_also_drives_the_shortlist_decision(self):
+        response = self.client.post(reverse('candidate_round1', args=[self.candidate.pk]), {
+            'reason': 'Sounded strong on the call.',
+        })
+        self.assertRedirects(response, reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.status, Candidate.Status.ROUND1)
+        self.assertEqual(self.candidate.history.latest('changed_at').remarks, 'Sounded strong on the call.')
+
+    def test_latest_call_outcome_badge_shows_in_the_stage_header(self):
+        CommunicationLog.objects.create(
+            candidate=self.candidate, channel=CommunicationLog.Channel.PHONE,
+            outcome=CommunicationLog.Outcome.UNABLE, logged_by=self.user)
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        # 'call-status-badge' alone would also match the page's <style> block
+        # (the CSS rule exists regardless of whether it's applied) - check for
+        # the class actually landing on an element instead.
+        self.assertContains(response, 'class="call-status-badge"')
+        self.assertContains(response, 'Unable to connect')
+
+    def test_no_badge_once_the_stage_is_done(self):
+        """Once Tele Screening is done, the decision badge takes over - the
+        call-outcome badge (meant for the still-active stage) doesn't linger."""
+        CommunicationLog.objects.create(
+            candidate=self.candidate, channel=CommunicationLog.Channel.PHONE,
+            outcome=CommunicationLog.Outcome.UNABLE, logged_by=self.user)
+        services.change_status(self.candidate, Candidate.Status.ROUND1)
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertNotContains(response, 'class="call-status-badge"')

@@ -38,6 +38,8 @@ urlpatterns = [
          name='candidate_rescore_status'),
     path('hr/candidates/<int:pk>/note/', views.AddNoteView.as_view(), name='candidate_add_note'),
     path('hr/candidates/<int:pk>/log/', views.AddCommunicationLogView.as_view(), name='candidate_add_log'),
+    path('hr/candidates/<int:pk>/screening-questions/', views.CandidateScreeningQuestionsView.as_view(),
+         name='candidate_screening_questions'),
 
     path('hr/candidates/<int:pk>/shortlist/', views.CandidateStatusActionView.as_view(
         target_status=STATUS.SHORTLISTED), name='candidate_shortlist'),

@@ -1,0 +1,9 @@
+{% if error %}
+<div class="alert alert-danger mb-0">{{ error }}</div>
+{% elif questions %}
+<ol class="ps-3 mb-0">
+  {% for q in questions %}<li class="mb-2">{{ q }}</li>{% endfor %}
+</ol>
+{% else %}
+<p class="text-muted mb-0">No questions available.</p>
+{% endif %}

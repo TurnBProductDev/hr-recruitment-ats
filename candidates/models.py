@@ -133,6 +133,11 @@ class Candidate(models.Model):
     cv_summary = models.TextField('AI CV Summary', blank=True, null=True,
                                   help_text='Short AI-generated summary of the resume.')
 
+    # 10 AI-generated Tele Screening call questions, based on the CV - see
+    # candidates/screening_questions.py. Generated once (on first View/Generate
+    # click) and reused after that; JSON list of strings.
+    screening_questions = models.TextField('Tele Screening Questions', blank=True, null=True)
+
     # AI match score against the mapped vacancy's JD (0-100). Never computed for
     # "General Application" - see candidates/match_scoring.py. match_breakdown
     # holds the raw JSON (sub-scores + matched/missing skills) for the detail page.

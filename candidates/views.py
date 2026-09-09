@@ -13,7 +13,7 @@ from django.views.generic import DetailView, ListView, UpdateView
 from interviews.models import Interview, InterviewReschedule
 from jobs.models import Job
 
-from . import bulk, cv_parser, cv_storage, match_scoring, scoring, services
+from . import bulk, cv_parser, cv_storage, match_scoring, screening_questions, scoring, services
 from .forms import (
     BulkUploadForm,
     CandidateApplicationForm,
@@ -760,6 +760,14 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
             comm_logs_by_channel.setdefault(log.channel, []).append(log)
         ctx['comm_logs_by_channel'] = comm_logs_by_channel
 
+        # Latest call outcome (e.g. "Unable to connect"), shown as a badge in
+        # the stage card's header while the stage is still active - a done
+        # stage already shows its final decision badge instead. communication_logs
+        # is ordered -logged_at (CommunicationLog.Meta), so [0] is the latest.
+        for stage in hiring_stages:
+            logs = comm_logs_by_channel.get(stage['comm_channel']) if stage['comm_channel'] else None
+            stage['latest_call'] = logs[0] if logs and not stage['is_done'] and not stage['is_locked'] else None
+
         return ctx
 
 
@@ -972,7 +980,13 @@ class AddCommunicationLogView(GroupRequiredMixin, View):
 
     def post(self, request, pk):
         candidate = get_object_or_404(Candidate, pk=pk)
-        form = CommunicationLogForm(request.POST)
+        data = request.POST.copy()
+        # Tele Screening's merged form (timeline.html) shares one "reason" box
+        # between this and the stage's status-change buttons, rather than a
+        # second "message" box just for the call log.
+        if not data.get('message') and data.get('reason'):
+            data['message'] = data['reason']
+        form = CommunicationLogForm(data)
         if form.is_valid():
             log = form.save(commit=False)
             log.candidate = candidate
@@ -980,6 +994,31 @@ class AddCommunicationLogView(GroupRequiredMixin, View):
             log.save()
             messages.success(request, 'Communication logged.')
         return redirect('candidate_timeline', pk=pk)
+
+
+class CandidateScreeningQuestionsView(GroupRequiredMixin, View):
+    """10 Tele Screening call questions, generated once from the candidate's
+    CV and reused after that (Candidate.screening_questions) - reachable from
+    the Tele Screening stage card, from later stages once generated (so
+    nothing is lost once the candidate moves on), and from the Interviewer
+    portal so an interviewer preparing for Round 1+ can still refer back to
+    them. ALL_GROUPS (not ANY_STAFF) so Interviewer can reach this too."""
+    allowed_groups = ALL_GROUPS
+
+    def get(self, request, pk):
+        candidate = get_object_or_404(Candidate, pk=pk)
+        questions = screening_questions.load_questions(candidate.screening_questions)
+        error = None
+        if not questions:
+            try:
+                questions = screening_questions.generate_questions(candidate)
+            except screening_questions.ScreeningQuestionsError as exc:
+                error = str(exc)
+            else:
+                candidate.screening_questions = screening_questions.dump_questions(questions)
+                candidate.save(update_fields=['screening_questions', 'updated_at'])
+        return render(request, 'candidates/_screening_questions.html',
+                     {'candidate': candidate, 'questions': questions, 'error': error})
 
 
 class CandidateStatusActionView(GroupRequiredMixin, View):

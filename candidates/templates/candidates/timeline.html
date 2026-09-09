@@ -60,6 +60,7 @@
 .stage-decision-badge.stage-tone-blacklist { background:#212529; }
 
 .hold-banner { display:inline-flex; align-items:center; gap:4px; font-size:.72rem; font-weight:700; color:#7a5c00; background:#fbf1c9; border:1px solid #ecd9a0; border-radius:12px; padding:.3em .75em; }
+.call-status-badge { display:inline-flex; align-items:center; font-size:.72rem; font-weight:700; color:#0a58ca; background:#e7f1ff; border:1px solid #cfe2ff; border-radius:12px; padding:.3em .75em; white-space:nowrap; }
 
 .stage-subsection { margin-top:14px; padding-top:14px; border-top:1px solid var(--border-color); }
 .stage-subsection-title { font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#8b9998; margin-bottom:8px; }
@@ -423,7 +424,15 @@ html { scroll-behavior: smooth; }
       {% elif stage.is_done %}
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
           <div class="section-eyebrow mb-0"><i class="bi bi-check-circle-fill"></i> {{ stage.label }}</div>
-          {% if stage.decision %}<span class="stage-decision-badge stage-tone-{{ stage.decision.tone }}">{{ stage.decision.label }}</span>{% endif %}
+          <div class="d-flex align-items-center gap-2">
+            {% if stage.comm_channel == 'PHONE' %}
+            <button type="button" class="btn btn-sm btn-outline-app" data-bs-toggle="modal" data-bs-target="#screeningQuestionsModal"
+                    data-load-url="{% url 'candidate_screening_questions' candidate.pk %}">
+              <i class="bi bi-question-circle"></i> {% if candidate.screening_questions %}View{% else %}Generate{% endif %} Questions
+            </button>
+            {% endif %}
+            {% if stage.decision %}<span class="stage-decision-badge stage-tone-{{ stage.decision.tone }}">{{ stage.decision.label }}</span>{% endif %}
+          </div>
         </div>
         {% if stage.decision %}
         <div class="pd-meta text-muted mt-2">{{ stage.decision.who|default:"Unknown" }} &middot; {{ stage.decision.when|date:"d M Y H:i" }}</div>
@@ -436,7 +445,16 @@ html { scroll-behavior: smooth; }
             <i class="bi bi-arrow-right-circle-fill"></i>
             {% if stage.interview_rounds and stage.round_phase == 'schedule' %}{{ stage.schedule_label }}{% else %}{{ stage.label }}{% endif %}
           </div>
-          {% if is_on_hold %}<span class="hold-banner"><i class="bi bi-pause-circle-fill"></i> On Hold</span>{% endif %}
+          <div class="d-flex align-items-center gap-2">
+            {% if stage.comm_channel == 'PHONE' %}
+            <button type="button" class="btn btn-sm btn-outline-app" data-bs-toggle="modal" data-bs-target="#screeningQuestionsModal"
+                    data-load-url="{% url 'candidate_screening_questions' candidate.pk %}">
+              <i class="bi bi-question-circle"></i> {% if candidate.screening_questions %}View{% else %}Generate{% endif %} Questions
+            </button>
+            {% endif %}
+            {% if stage.latest_call %}<span class="call-status-badge">{{ stage.latest_call.get_outcome_display }}</span>{% endif %}
+            {% if is_on_hold %}<span class="hold-banner"><i class="bi bi-pause-circle-fill"></i> On Hold</span>{% endif %}
+          </div>
         </div>
         {% if stage.entered %}
         <div class="pd-meta text-muted mb-2">
@@ -497,9 +515,55 @@ html { scroll-behavior: smooth; }
         {% endif %}
 
         {% if not stage.interview_rounds or stage.round_phase == 'decision' %}
+        {% if stage.comm_channel == 'PHONE' %}
+        {% comment %}
+          Tele Screening: one shared Remarks box for both the call log and the
+          status decision, instead of two separate ones - see AddCommunicationLogView,
+          which reads this same "reason" field as the log's message.
+        {% endcomment %}
+        <div class="stage-subsection">
+          <div class="stage-subsection-title">Phone Communication Log</div>
+          <form method="post" class="js-stage-form">
+            {% csrf_token %}
+            <input type="hidden" name="channel" value="{{ stage.comm_channel }}">
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <input type="hidden" name="performed_by" value="{{ user.get_full_name|default:user.get_username }}">
+            <select name="outcome" class="form-select form-select-sm mb-2">
+              <option value="">— Outcome —</option>
+              <option value="UNABLE">Unable to connect</option>
+              <option value="CALLBACK">Call back</option>
+              <option value="ATTENDED">Attended</option>
+            </select>
+            {% with logs=comm_logs_by_channel|dict_get:stage.comm_channel %}
+            {% for l in logs %}
+            <div class="pd-body mb-1 pb-1 {% if not forloop.last %}border-bottom{% endif %}">
+              {% if l.outcome %}<strong>{{ l.get_outcome_display }}</strong>{% endif %}
+              {% if l.message %} &middot; {{ l.message }}{% endif %}
+              <div class="text-muted pd-meta">{{ l.logged_by|default:"Unknown" }} &middot; {{ l.logged_at|date:"d M Y H:i" }}</div>
+            </div>
+            {% endfor %}
+            {% endwith %}
+
+            <div class="stage-subsection-title mt-3">Remarks</div>
+            <textarea name="reason" class="form-control form-control-sm mb-2 js-stage-reason" rows="2" placeholder="Remarks…"></textarea>
+
+            <div class="stage-subsection-title">Update {{ stage.label }} Status</div>
+            <div class="stage-action-row">
+              <button type="submit" formaction="{% url 'candidate_add_log' candidate.pk %}" class="btn btn-sm btn-outline-app">Add Log</button>
+              {% for action in stage.actions %}
+              <button type="submit" formaction="{% url action.url candidate.pk %}"
+                      class="stage-action-btn stage-tone-{{ action.tone }}"
+                      {% if action.require_reason %}data-require-reason="1" disabled{% endif %}>
+                {{ action.label }}
+              </button>
+              {% endfor %}
+            </div>
+          </form>
+        </div>
+        {% else %}
         {% if stage.comm_channel %}
         <div class="stage-subsection">
-          <div class="stage-subsection-title">{% if stage.comm_channel == 'PHONE' %}Phone{% else %}Interview{% endif %} Communication Log</div>
+          <div class="stage-subsection-title">Interview Communication Log</div>
           <form method="post" action="{% url 'candidate_add_log' candidate.pk %}" class="mb-2 js-autosave">
             {% csrf_token %}
             <input type="hidden" name="channel" value="{{ stage.comm_channel }}">
@@ -507,14 +571,8 @@ html { scroll-behavior: smooth; }
               <div class="col-12">
                 <select name="outcome" class="form-select form-select-sm">
                   <option value="">— Outcome —</option>
-                  {% if stage.comm_channel == 'PHONE' %}
-                  <option value="UNABLE">Unable to connect</option>
-                  <option value="CALLBACK">Call back</option>
-                  <option value="ATTENDED">Attended</option>
-                  {% else %}
                   <option value="ATTENDED">Attended</option>
                   <option value="NOT_TURNED_UP">Not turned up</option>
-                  {% endif %}
                 </select>
               </div>
               <div class="col-12"><textarea name="message" class="form-control form-control-sm" rows="2" placeholder="Remarks…"></textarea></div>
@@ -551,6 +609,7 @@ html { scroll-behavior: smooth; }
             </div>
           </form>
         </div>
+        {% endif %}
         {% endif %}
       {% endif %}
     </div>
@@ -648,6 +707,20 @@ html { scroll-behavior: smooth; }
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body" id="interviewModalBody">
+        <div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm"></span> Loading…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="screeningQuestionsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Tele Screening Questions</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="screeningQuestionsBody">
         <div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm"></span> Loading…</div>
       </div>
     </div>
@@ -782,6 +855,22 @@ pollCandidateAction("{% url 'candidate_rescore_status' candidate.pk %}");
           if (submitBtn) { submitBtn.disabled = false; }
         });
     }
+  });
+})();
+
+// Tele Screening Questions popup: generated on first open (see
+// CandidateScreeningQuestionsView), just displayed on every open after that.
+(function () {
+  var modalEl = document.getElementById('screeningQuestionsModal');
+  if (!modalEl) return;
+  var body = document.getElementById('screeningQuestionsBody');
+  modalEl.addEventListener('show.bs.modal', function (event) {
+    var btn = event.relatedTarget;
+    body.innerHTML = '<div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm"></span> Generating…</div>';
+    fetch(btn.dataset.loadUrl, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+      .then(function (r) { return r.text(); })
+      .then(function (html) { body.innerHTML = html; })
+      .catch(function () { body.innerHTML = '<div class="alert alert-danger">Could not load questions. Please try again.</div>'; });
   });
 })();
 
