@@ -65,6 +65,11 @@ class Interview(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+'
     )
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    # Set only by InterviewCancelView, cleared on un-cancel - lets
+    # CandidateRevertLastActionView tell whether a Cancel is the most recent
+    # thing that happened to this candidate (nothing else stamps a "when" for
+    # it - see that view's docstring).
+    cancelled_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['scheduled_date']

@@ -15,7 +15,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from interviews.models import Interview
+from interviews.models import Interview, InterviewRequest
 from jobs.models import Job
 
 from . import bulk, cv_parser, rejection_emails, screening_questions, services
@@ -693,9 +693,26 @@ class HoldNamingTests(TestCase):
         self.assertEqual(self.candidate.status_label, 'Round 2 Hold')
 
     def test_undo_cancels_the_interview_scheduled_at_the_undone_stage(self):
-        """Advancing to Round 1 and scheduling an interview there, then
-        undoing the advance, must not leave that interview dangling open -
-        it was only ever justified by the status change being undone."""
+        """Advancing to Round 1, scheduling an interview there, then undoing
+        the advance while that interview is still open (nothing scheduled
+        since) must not leave it dangling open - it was only ever justified
+        by the status change being undone."""
+        services.change_status(self.candidate, Candidate.Status.SHORTLISTED)
+        interview = Interview.objects.create(
+            candidate=self.candidate, round_type=Interview.RoundType.ROUND1,
+            scheduled_date=timezone.now() + timezone.timedelta(days=1))
+        services.change_status(self.candidate, Candidate.Status.ROUND1)
+        self.client.post(reverse('candidate_revert', args=[self.candidate.pk]))
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.status, Candidate.Status.SHORTLISTED)
+        interview.refresh_from_db()
+        self.assertEqual(interview.status, Interview.Status.CANCELLED)
+
+    def test_undo_targets_the_truly_latest_action_one_step_at_a_time(self):
+        """If an interview is scheduled *after* the status change that (in
+        the app's own stage-card ordering) would normally justify it, Undo
+        reverses exactly the most recent thing - the interview - first, and
+        only a second Undo reaches the status change underneath it."""
         services.change_status(self.candidate, Candidate.Status.SHORTLISTED)
         services.change_status(self.candidate, Candidate.Status.ROUND1)
         interview = Interview.objects.create(
@@ -703,9 +720,73 @@ class HoldNamingTests(TestCase):
             scheduled_date=timezone.now() + timezone.timedelta(days=1))
         self.client.post(reverse('candidate_revert', args=[self.candidate.pk]))
         self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.status, Candidate.Status.ROUND1)  # untouched by the first Undo
+        self.assertEqual(self.candidate.interviews.count(), 0)  # the interview is gone instead
+
+        self.client.post(reverse('candidate_revert', args=[self.candidate.pk]))
+        self.candidate.refresh_from_db()
         self.assertEqual(self.candidate.status, Candidate.Status.SHORTLISTED)
+
+    def _interviewer(self):
+        interviewer = get_user_model().objects.create_user('panel', 'panel@example.com', 'pw')
+        interviewer.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
+        return interviewer
+
+    def test_undo_right_after_scheduling_deletes_the_interview(self):
+        self.client.post(reverse('interview_schedule', args=[self.candidate.pk]), {
+            'round_type': Interview.RoundType.ROUND1, 'interviewer': '',
+            'scheduled_date': '2026-09-01T10:00', 'mode': Interview.Mode.VIDEO, 'meeting_link': ''})
+        self.assertEqual(self.candidate.interviews.count(), 1)
+        self.client.post(reverse('candidate_revert', args=[self.candidate.pk]))
+        self.assertEqual(self.candidate.interviews.count(), 0)
+
+    def test_undo_right_after_allocating_deletes_the_request(self):
+        interviewer = self._interviewer()
+        self.client.post(reverse('interview_allocate', args=[self.candidate.pk]), {
+            'round_type': Interview.RoundType.ROUND1, 'interviewer': interviewer.pk,
+            'mode': Interview.Mode.VIDEO})
+        self.assertEqual(self.candidate.interview_requests.count(), 1)
+        self.client.post(reverse('candidate_revert', args=[self.candidate.pk]))
+        self.assertEqual(self.candidate.interview_requests.count(), 0)
+
+    def test_undo_right_after_selecting_a_slot_reverts_to_awaiting_selection(self):
+        interviewer = self._interviewer()
+        req = InterviewRequest.objects.create(
+            candidate=self.candidate, round_type=Interview.RoundType.ROUND1,
+            interviewer=interviewer, status=InterviewRequest.Status.AWAITING_SELECTION)
+        slot = req.slots.create(start_datetime=timezone.now() + timezone.timedelta(days=1))
+        self.client.post(reverse('interview_request_select_slot', args=[req.pk]), {'slot': slot.pk})
+        self.assertEqual(self.candidate.interviews.count(), 1)
+        self.client.post(reverse('candidate_revert', args=[self.candidate.pk]))
+        self.assertEqual(self.candidate.interviews.count(), 0)
+        req.refresh_from_db()
+        self.assertEqual(req.status, InterviewRequest.Status.AWAITING_SELECTION)
+        self.assertIsNone(req.interview_id)
+
+    def test_undo_right_after_cancelling_restores_the_interview(self):
+        interview = Interview.objects.create(
+            candidate=self.candidate, round_type=Interview.RoundType.ROUND1,
+            scheduled_date=timezone.now() + timezone.timedelta(days=1))
+        self.client.post(reverse('interview_cancel', args=[interview.pk]))
         interview.refresh_from_db()
         self.assertEqual(interview.status, Interview.Status.CANCELLED)
+        self.client.post(reverse('candidate_revert', args=[self.candidate.pk]))
+        interview.refresh_from_db()
+        self.assertEqual(interview.status, Interview.Status.SCHEDULED)
+        self.assertIsNone(interview.cancelled_at)
+
+    def test_undo_prefers_whichever_action_is_actually_most_recent(self):
+        """Scheduling, then later deciding a status - Undo must undo the
+        status change, not the older schedule (and vice versa)."""
+        interview = Interview.objects.create(
+            candidate=self.candidate, round_type=Interview.RoundType.ROUND1,
+            scheduled_date=timezone.now() + timezone.timedelta(days=1))
+        services.change_status(self.candidate, Candidate.Status.SCREENING_HOLD)
+        self.client.post(reverse('candidate_revert', args=[self.candidate.pk]))
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.status, Candidate.Status.OPEN)
+        interview.refresh_from_db()
+        self.assertEqual(interview.status, Interview.Status.SCHEDULED)  # untouched
 
 
 class HoldResumeActionTests(TestCase):

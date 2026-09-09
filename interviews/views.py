@@ -384,7 +384,8 @@ class InterviewCancelView(GroupRequiredMixin, View):
     def post(self, request, pk):
         interview = get_object_or_404(Interview, pk=pk)
         interview.status = Interview.Status.CANCELLED
-        interview.save(update_fields=['status'])
+        interview.cancelled_at = timezone.now()
+        interview.save(update_fields=['status', 'cancelled_at'])
         return redirect('candidate_timeline', pk=interview.candidate_id)
 
 

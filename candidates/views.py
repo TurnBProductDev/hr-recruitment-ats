@@ -1175,18 +1175,48 @@ class CandidateMoveToFutureView(GroupRequiredMixin, View):
 
 
 class CandidateRevertLastActionView(GroupRequiredMixin, View):
-    """Undo the most recent status change: remove it from history entirely and
-    roll the candidate back, so the dashboard funnel no longer counts it."""
+    """Undo whichever of the candidate's actions actually happened most
+    recently: a status change, or - from the interviews app - scheduling/
+    allocating an interview, or cancelling one. Reschedule and result-
+    recording aren't covered here; those already have their own dedicated
+    undo-ish paths (the invite-draft popup before sending, the Mark Result
+    form itself) rather than needing this catch-all."""
     allowed_groups = (HR_ADMIN, RECRUITER)
 
     def post(self, request, pk):
         candidate = get_object_or_404(Candidate, pk=pk)
-        last = candidate.history.order_by('-changed_at', '-id').first()
         next_url = request.POST.get('next') or reverse('candidate_timeline', args=[pk])
+
         # keep the very first 'Applied' entry (old_status is blank) — nothing to undo before it
-        if not last or not last.old_status:
+        last_status = candidate.history.exclude(old_status='').order_by('-changed_at', '-id').first()
+        last_interview = candidate.interviews.order_by('-created_at', '-pk').first()
+        last_request = candidate.interview_requests.order_by('-created_at', '-pk').first()
+        last_cancelled = (candidate.interviews.filter(cancelled_at__isnull=False)
+                          .order_by('-cancelled_at', '-pk').first())
+
+        candidates_for_latest = [
+            ('status', last_status, last_status.changed_at if last_status else None),
+            ('interview', last_interview, last_interview.created_at if last_interview else None),
+            ('request', last_request, last_request.created_at if last_request else None),
+            ('cancel', last_cancelled, last_cancelled.cancelled_at if last_cancelled else None),
+        ]
+        candidates_for_latest = [c for c in candidates_for_latest if c[2] is not None]
+        if not candidates_for_latest:
             messages.error(request, 'There is no action to undo.')
             return redirect(next_url)
+        kind, obj, _ = max(candidates_for_latest, key=lambda c: c[2])
+
+        if kind == 'status':
+            self._undo_status(request, candidate, obj)
+        elif kind == 'interview':
+            self._undo_interview_created(request, candidate, obj)
+        elif kind == 'request':
+            self._undo_request_created(request, candidate, obj)
+        else:
+            self._undo_cancel(request, candidate, obj)
+        return redirect(next_url)
+
+    def _undo_status(self, request, candidate, last):
         prev_status, undone = last.old_status, last.new_status
         last.delete()  # remove the accidental transition from history
         if undone == STATUS.BLACKLISTED:  # unwind blacklist side-effects
@@ -1210,7 +1240,29 @@ class CandidateRevertLastActionView(GroupRequiredMixin, View):
         candidate.hold_from_status = services.hold_source_from_history(candidate)
         candidate.save(update_fields=['status', 'hold_from_status', 'is_blacklisted', 'updated_at'])
         messages.success(request, f'Last action undone — {candidate.full_name} is back to "{candidate.status_label}".')
-        return redirect(next_url)
+
+    def _undo_interview_created(self, request, candidate, interview):
+        # If this interview came from picking a proposed slot rather than a
+        # direct schedule (interviews.views.InterviewSelectSlotView), put its
+        # InterviewRequest back to awaiting HR's pick instead of leaving it
+        # pointing at an interview that's about to stop existing.
+        req = InterviewRequest.objects.filter(interview=interview).first()
+        if req:
+            req.status = InterviewRequest.Status.AWAITING_SELECTION
+            req.interview = None
+            req.save(update_fields=['status', 'interview'])
+        interview.delete()
+        messages.success(request, f'Interview schedule undone for {candidate.full_name}.')
+
+    def _undo_request_created(self, request, candidate, interview_request):
+        interview_request.delete()
+        messages.success(request, f'Interviewer allocation undone for {candidate.full_name}.')
+
+    def _undo_cancel(self, request, candidate, interview):
+        interview.status = Interview.Status.SCHEDULED
+        interview.cancelled_at = None
+        interview.save(update_fields=['status', 'cancelled_at'])
+        messages.success(request, f'Interview cancellation undone for {candidate.full_name}.')
 
 
 class CandidateDeleteView(GroupRequiredMixin, View):
