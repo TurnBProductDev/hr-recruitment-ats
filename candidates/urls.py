@@ -23,6 +23,8 @@ urlpatterns = [
          name='candidate_bulk_reject'),
     path('hr/candidates/shortlist-selected/', views.CandidateBulkStatusActionView.as_view(
         target_status=STATUS.SHORTLISTED), name='candidate_bulk_shortlist'),
+    path('hr/candidates/reopen-selected/', views.CandidateBulkStatusActionView.as_view(
+        target_status=STATUS.OPEN), name='candidate_bulk_reopen'),
     path('hr/candidates/hold-selected/', views.CandidateBulkStatusActionView.as_view(
         target_status=STATUS.SCREENING_HOLD), name='candidate_bulk_hold'),
     path('hr/candidates/blacklist-selected/', views.CandidateBulkBlacklistView.as_view(),
@@ -41,6 +43,8 @@ urlpatterns = [
     path('hr/candidates/<int:pk>/screening-questions/', views.CandidateScreeningQuestionsView.as_view(),
          name='candidate_screening_questions'),
 
+    path('hr/candidates/<int:pk>/reopen/', views.CandidateStatusActionView.as_view(
+        target_status=STATUS.OPEN), name='candidate_reopen'),
     path('hr/candidates/<int:pk>/shortlist/', views.CandidateStatusActionView.as_view(
         target_status=STATUS.SHORTLISTED), name='candidate_shortlist'),
     path('hr/candidates/<int:pk>/round1/', views.CandidateStatusActionView.as_view(

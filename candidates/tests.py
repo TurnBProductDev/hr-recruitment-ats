@@ -809,7 +809,7 @@ class HoldResumeActionTests(TestCase):
 
     def test_the_offered_move_follows_the_stage_held_at(self):
         expected = {
-            Candidate.Status.OPEN: ('Move to Qualified', 'candidate_shortlist'),
+            Candidate.Status.OPEN: ('Move to Applied', 'candidate_reopen'),
             Candidate.Status.SHORTLISTED: ('Move to Round 1', 'candidate_round1'),
             Candidate.Status.ROUND1: ('Move to Round 2', 'candidate_interview_stage'),
             Candidate.Status.INTERVIEW: ('Move to Final Selection', 'candidate_final_selection'),
@@ -821,9 +821,9 @@ class HoldResumeActionTests(TestCase):
                 self.assertEqual(self.candidate.resume_action['label'], label)
                 self.assertEqual(self.candidate.resume_action['url_name'], url_name)
 
-    def test_an_unrecorded_stage_falls_back_to_qualified(self):
+    def test_an_unrecorded_stage_falls_back_to_applied(self):
         self.candidate.hold_from_status = ''
-        self.assertEqual(self.candidate.resume_action['label'], 'Move to Qualified')
+        self.assertEqual(self.candidate.resume_action['label'], 'Move to Applied')
 
     def test_the_hold_tab_shows_the_matching_button(self):
         self._hold_at(Candidate.Status.ROUND1)
@@ -831,7 +831,7 @@ class HoldResumeActionTests(TestCase):
         self.assertContains(response, 'Move to Round 2')
         self.assertContains(
             response, reverse('candidate_interview_stage', args=[self.candidate.pk]))
-        self.assertNotContains(response, 'Move to Qualified')
+        self.assertNotContains(response, 'Move to Applied')
 
     def test_the_button_actually_resumes_the_pipeline(self):
         self._hold_at(Candidate.Status.ROUND1)
@@ -923,11 +923,15 @@ class FutureProspectsPageTests(TestCase):
         self.assertContains(response, 'Held Early')
         self.assertNotContains(response, 'Held At Round1')
 
-    def test_resume_button_moves_to_shortlisted(self):
+    def test_resume_button_starts_the_application_over_at_applied(self):
+        """Resuming a Future Prospect doesn't jump straight to Qualified - it
+        starts over at Applied, same as a brand new application, so it goes
+        through CV Screening's own Qualify step again."""
         c = self._candidate('Held Early', Candidate.Status.OPEN, held=True)
-        self.client.post(reverse('candidate_shortlist', args=[c.pk]))
+        self.assertEqual(c.resume_action['url_name'], 'candidate_reopen')
+        self.client.post(reverse('candidate_reopen', args=[c.pk]))
         c.refresh_from_db()
-        self.assertEqual(c.status, Candidate.Status.SHORTLISTED)
+        self.assertEqual(c.status, Candidate.Status.OPEN)
         response = self.client.get(reverse('candidate_future_prospects'))
         self.assertNotIn(c, response.context['candidates'])
 
@@ -1197,6 +1201,46 @@ class SlaTrackerInterviewDateTests(TestCase):
         self.assertContains(response, 'Round 2 Scheduled')
         self.assertContains(response, 'Not yet scheduled')
         self.assertNotContains(response, 'Round 1 Scheduled')
+
+
+class SlaTrackerFutureProspectTests(TestCase):
+    """Future Prospect (held before ever being screened) and a subsequent
+    resume back to Applied both show up as their own Stage Dates (SLA)
+    checkpoints - milestones the normal per-stage walk never produces."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('hr8', 'hr8@example.com', 'pw')
+        self.user.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.client.force_login(self.user)
+        self.candidate = Candidate.objects.create(full_name='Rose E G', email='rose@example.com')
+        services.record_creation(self.candidate)
+
+    def _labels(self, response):
+        return [s['label'] for s in response.context['sla_stages']]
+
+    def test_future_prospect_checkpoint_shows_once_held_before_screening(self):
+        services.change_status(self.candidate, Candidate.Status.SCREENING_HOLD)
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertEqual(self._labels(response), ['Applied', 'Future Prospect'])
+
+    def test_resuming_adds_a_second_applied_checkpoint(self):
+        services.change_status(self.candidate, Candidate.Status.SCREENING_HOLD)
+        self.client.post(reverse('candidate_reopen', args=[self.candidate.pk]))
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertEqual(self._labels(response), ['Applied', 'Future Prospect', 'Applied'])
+
+    def test_hold_taken_later_and_moved_to_future_still_shows_the_checkpoint(self):
+        services.change_status(self.candidate, Candidate.Status.ROUND1)
+        services.change_status(self.candidate, Candidate.Status.SCREENING_HOLD)
+        self.client.post(reverse('candidate_move_to_future', args=[self.candidate.pk]))
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        labels = self._labels(response)
+        self.assertIn('Future Prospect', labels)
+        self.assertEqual(labels.index('Future Prospect'), len(labels) - 1)  # after Shortlisted
+
+    def test_no_future_prospect_checkpoint_for_a_normal_application(self):
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertEqual(self._labels(response), ['Applied'])
 
 
 @override_settings(AZURE_OPENAI_ENDPOINT='https://example.openai.azure.com',

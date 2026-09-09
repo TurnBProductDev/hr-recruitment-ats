@@ -214,6 +214,33 @@ def _settle_round_interview(candidate, target_status):
     interview.status = Interview.Status.COMPLETED
     interview.save(update_fields=['result', 'status'])
 
+
+def _first_matching_history(history, predicate):
+    """The earliest history row (oldest changed_at) matching predicate, or
+    None. Used by the Stage Dates (SLA) tracker for one-off milestones -
+    Future Prospect, a resumed Applied - that aren't a forward pipeline
+    stage and so never come out of _build_hiring_stages's per-stage walk."""
+    matches = [h for h in history if predicate(h)]
+    return min(matches, key=lambda h: (h.changed_at, h.id)) if matches else None
+
+
+def _insert_sla_checkpoint(stages, label, when, color=None):
+    """Insert one checkpoint into the Stage Dates (SLA) tracker at the right
+    chronological spot. The tracker is otherwise built stage-by-stage (not
+    already date-sorted), so this finds the first already-dated entry that
+    comes after `when` and inserts before it; undated/pending placeholders
+    are skipped rather than reordered around."""
+    entry = {'label': label, 'date': when}
+    if color:
+        entry['color'] = color
+    idx = len(stages)
+    for i, s in enumerate(stages):
+        if s.get('date') is not None and s['date'] > when:
+            idx = i
+            break
+    stages.insert(idx, entry)
+
+
 REPOSITORY_TABS = [
     ('open', 'Open Applications', STATUS.OPEN),
     ('shortlisted', 'Qualified', STATUS.SHORTLISTED),
@@ -791,6 +818,23 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
                         'label': f"{stage['decision_label']} Scheduled",
                         'date': None, 'pending': True,
                     })
+        # Future Prospect (held before ever being screened - or explicitly
+        # re-tagged as one later, see services.move_to_future_prospects) and
+        # a subsequent resume back to Applied (HOLD_RESUME_ACTIONS[OPEN])
+        # are one-off milestones, not a forward pipeline stage, so the loop
+        # above never produces them - inserted by date instead. Only the
+        # first occurrence of each is shown, same convention as every other
+        # checkpoint here (first arrival at a stage, not every visit).
+        future_prospect_row = _first_matching_history(
+            ctx['history'], lambda h: h.new_status == STATUS.SCREENING_HOLD
+            and h.old_status in (STATUS.OPEN, STATUS.SCREENING_HOLD))
+        if future_prospect_row:
+            _insert_sla_checkpoint(sla_stages, 'Future Prospect', future_prospect_row.changed_at, color='#e0c97e')
+        reapplied_row = _first_matching_history(
+            ctx['history'], lambda h: h.new_status == STATUS.OPEN and h.old_status)
+        if reapplied_row:
+            _insert_sla_checkpoint(sla_stages, 'Applied', reapplied_row.changed_at)
+
         if active_stage_index is None and last and last.new_status == candidate.status:
             sla_stages.append({'label': ctx['final_status']['label'], 'date': last.changed_at,
                                'color': ctx['final_status']['color']})

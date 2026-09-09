@@ -227,8 +227,12 @@ HOLD_STAGE_NAMES = {Candidate.Status.OPEN: 'Screening'}
 
 # The pipeline stages a hold can be taken at, and where lifting it goes: back
 # into the pipeline at the next stage, so a Round 1 Hold resumes at Round 2.
+# A Future Prospect (held before ever being screened - see
+# services.move_to_future_prospects) is the one exception: resuming them
+# doesn't jump straight to Qualified, it starts the application over at
+# Applied, so they go through CV Screening's own Qualify step again.
 HOLD_RESUME_ACTIONS = {
-    Candidate.Status.OPEN: ('candidate_shortlist', 'Qualified'),
+    Candidate.Status.OPEN: ('candidate_reopen', 'Applied'),
     Candidate.Status.SHORTLISTED: ('candidate_round1', 'Round 1'),
     Candidate.Status.ROUND1: ('candidate_interview_stage', 'Round 2'),
     Candidate.Status.INTERVIEW: ('candidate_final_selection', 'Final Selection'),
