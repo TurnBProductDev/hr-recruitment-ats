@@ -304,6 +304,7 @@ class InterviewResultView(GroupRequiredMixin, UpdateView):
             recommendation = {
                 Interview.Result.PASS_: 'Recommended: Pass.',
                 Interview.Result.FAIL: 'Recommended: Fail.',
+                Interview.Result.HOLD: 'Recommended: Hold.',
             }.get(picked)
             if recommendation:
                 feedback = (form.cleaned_data.get('feedback') or '').strip()
@@ -326,6 +327,18 @@ class InterviewResultView(GroupRequiredMixin, UpdateView):
             services.change_status(candidate, Candidate.Status.REJECTED, user=self.request.user,
                                    remarks=f'{round_label} interview failed.', performed_by=performed_by)
             messages.success(self.request, f'{candidate.full_name} failed and was moved to Rejected.')
+        elif interview.result == Interview.Result.HOLD:
+            # Hold pauses the candidate - it doesn't decide the interview, so
+            # it's put back to Pending rather than saved as Hold (matches the
+            # Hiring block's own Hold action - see
+            # candidates.views._settle_round_interview) so the round's
+            # decision phase, with this feedback, is still there once the
+            # candidate resumes.
+            interview.result = Interview.Result.PENDING
+            interview.save(update_fields=['result'])
+            services.change_status(candidate, Candidate.Status.SCREENING_HOLD, user=self.request.user,
+                                   remarks=f'{round_label} interview put on hold.', performed_by=performed_by)
+            messages.success(self.request, f'{candidate.full_name} moved to Hold.')
         else:
             messages.success(self.request, 'Interview result recorded.')
         return response

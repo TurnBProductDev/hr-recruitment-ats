@@ -509,6 +509,55 @@ class InterviewerRecommendationTests(TestCase):
         self.candidate.refresh_from_db()
         self.assertEqual(self.candidate.status, Candidate.Status.REJECTED)
 
+    def test_interviewer_hold_is_a_recommendation_only(self):
+        interviewer = get_user_model().objects.create_user('panel3', 'panel3@turnb.com', 'pw')
+        interviewer.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
+        self._submit(interviewer, result=Interview.Result.HOLD, feedback='Notice period too long.')
+        self.interview.refresh_from_db()
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.interview.status, Interview.Status.COMPLETED)
+        self.assertEqual(self.interview.result, Interview.Result.PENDING)
+        self.assertEqual(self.interview.feedback, 'Recommended: Hold. Notice period too long.')
+        self.assertEqual(self.candidate.status, Candidate.Status.ROUND1)
+
+    def test_hr_admin_hold_pauses_the_candidate_and_leaves_the_interview_pending(self):
+        hr = get_user_model().objects.create_user('hr4', 'hr4@turnb.com', 'pw')
+        hr.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self._submit(hr, result=Interview.Result.HOLD)
+        self.interview.refresh_from_db()
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.interview.status, Interview.Status.COMPLETED)
+        # Hold pauses the candidate, it doesn't decide the interview - stays
+        # Pending so the round's decision phase is still there on resume.
+        self.assertEqual(self.interview.result, Interview.Result.PENDING)
+        self.assertEqual(self.candidate.status, Candidate.Status.SCREENING_HOLD)
+        self.assertEqual(self.candidate.hold_from_status, Candidate.Status.ROUND1)
+
+    def test_result_is_required(self):
+        hr = get_user_model().objects.create_user('hr5', 'hr5@turnb.com', 'pw')
+        hr.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        response = self._submit(hr, result='')
+        self.assertEqual(response.status_code, 200)  # re-rendered with an error, not saved
+        self.assertFormError(response.context['form'], 'result', 'This field is required.')
+        self.interview.refresh_from_db()
+        self.assertEqual(self.interview.status, Interview.Status.SCHEDULED)
+
+    def test_pending_is_not_an_offered_result_choice(self):
+        hr = get_user_model().objects.create_user('hr6', 'hr6@turnb.com', 'pw')
+        hr.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.client.force_login(hr)
+        response = self.client.get(reverse('interview_result', args=[self.interview.pk]))
+        self.assertNotContains(response, '"PENDING"')
+
+    def test_feedback_is_required(self):
+        hr = get_user_model().objects.create_user('hr7', 'hr7@turnb.com', 'pw')
+        hr.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        response = self._submit(hr, feedback='')
+        self.assertEqual(response.status_code, 200)
+        self.assertFormError(response.context['form'], 'feedback', 'This field is required.')
+        self.interview.refresh_from_db()
+        self.assertEqual(self.interview.status, Interview.Status.SCHEDULED)
+
 
 class InterviewDoneCancelTests(TestCase):
     """Marking an interview "Done" only completes it - it doesn't decide

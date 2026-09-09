@@ -99,4 +99,16 @@ class InterviewResultForm(BootstrapFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # A verdict must actually be picked - Pending (the not-yet-decided
+        # default) isn't offered here, and Feedback backs it up, so both are
+        # required to save. See InterviewResultView.form_valid, which branches
+        # on Pass/Fail/Hold being one of these three.
+        self.fields['result'].choices = [
+            ('', '— Select —'),
+            *(c for c in Interview.Result.choices if c[0] != Interview.Result.PENDING),
+        ]
+        self.fields['result'].required = True
+        if self.instance.result == Interview.Result.PENDING:
+            self.initial['result'] = ''
+        self.fields['feedback'].required = True
         self._add_bootstrap_classes()

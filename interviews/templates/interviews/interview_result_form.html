@@ -10,9 +10,9 @@
         {% csrf_token %}
         <div class="row g-3">
           <div class="col-md-6"><label class="form-label">Status</label>{{ form.status }}</div>
-          <div class="col-md-6"><label class="form-label">Result</label>{{ form.result }}</div>
+          <div class="col-md-6"><label class="form-label">Result <span class="text-danger">*</span></label>{{ form.result }}</div>
           <div class="col-md-6"><label class="form-label">Score</label>{{ form.score }}</div>
-          <div class="col-12"><label class="form-label">Feedback</label>{{ form.feedback }}</div>
+          <div class="col-12"><label class="form-label">Feedback <span class="text-danger">*</span></label>{{ form.feedback }}</div>
         </div>
         <div class="mt-4 d-flex gap-2">
           <button type="submit" class="btn btn-fill-app">Save</button>

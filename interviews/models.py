@@ -36,6 +36,13 @@ class Interview(models.Model):
         PASS_ = 'PASS', 'Pass'
         FAIL = 'FAIL', 'Fail'
         PENDING = 'PENDING', 'Pending'
+        # A transient pick on the Mark Result form only - a Hold pauses the
+        # candidate, it doesn't decide the interview, so it's never the value
+        # actually saved: InterviewResultView.form_valid puts the interview
+        # back to Pending right after applying the hold (see
+        # candidates.views._settle_round_interview for the same convention
+        # from the Hiring block's own Hold action).
+        HOLD = 'HOLD', 'Hold'
 
     # An interview is "open" while it is still waiting for a result. A candidate
     # may only have one open interview at a time - see open_for().
