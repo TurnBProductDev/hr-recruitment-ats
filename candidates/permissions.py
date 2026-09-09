@@ -26,6 +26,28 @@ def is_interviewer_only(user):
     return INTERVIEWER in groups and not groups.intersection(ANY_STAFF)
 
 
+# Session key InterviewerLoginView sets on a successful sign-in, and
+# HRLoginView clears - "which door did you come in through", independent of
+# is_interviewer_only(). An Admin's permissions never change (they can always
+# reach the full HR app), but while they're in a session that started at the
+# Interviewer login, the UI should behave like the portal throughout - nav,
+# breadcrumbs, and a Record Result page's Cancel/back links all stay inside
+# the portal instead of dropping them into the main HR app mid-flow.
+PORTAL_SESSION_KEY = 'in_interviewer_portal'
+
+
+def in_interviewer_portal(request):
+    """True whenever this request should get the restricted Interviewer
+    portal experience. Always true for an interviewer-only account (they
+    have nowhere else to go); also true for anyone else (Admin) whose
+    current session was started via the Interviewer login."""
+    user = getattr(request, 'user', None)
+    if user is not None and is_interviewer_only(user):
+        return True
+    session = getattr(request, 'session', None)
+    return bool(session and session.get(PORTAL_SESSION_KEY))
+
+
 class GroupRequiredMixin(LoginRequiredMixin):
     """Restricts a view to superusers or members of `allowed_groups`.
 

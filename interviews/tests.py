@@ -696,3 +696,63 @@ class LogoutRedirectTests(TestCase):
         self.client.force_login(interviewer)
         response = self.client.post(reverse('logout'))
         self.assertRedirects(response, reverse('interviewer_login'))
+
+
+class AdminPortalSessionModeTests(TestCase):
+    """An Admin who signs in via the Interviewer login gets the same
+    restricted nav/back-links/breadcrumbs/logout-target an Interviewer does,
+    for as long as that session lasts - "which door you came in through"
+    (candidates.permissions.in_interviewer_portal), not just role. Logging
+    in via force_login() bypasses InterviewerLoginView.form_valid() entirely,
+    so every test here signs in for real via a POST to reach it."""
+
+    def setUp(self):
+        self.admin = get_user_model().objects.create_user('admin2', 'admin2@turnb.com', 'pw')
+        self.admin.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.job = Job.objects.create(job_code='J1', title='Program Manager')
+        self.candidate = Candidate.objects.create(
+            full_name='Rose E G', email='rose@example.com', job=self.job)
+        self.interview = Interview.objects.create(
+            candidate=self.candidate, round_type=Interview.RoundType.ROUND1,
+            scheduled_date=timezone.now() + timezone.timedelta(days=1))
+
+    def _login_via_portal(self):
+        self.client.post(reverse('interviewer_login'), {'username': 'admin2', 'password': 'pw'})
+
+    def test_nav_is_restricted_after_portal_login(self):
+        self._login_via_portal()
+        response = self.client.get(reverse('interviewer_home'))
+        self.assertContains(response, 'My Interviews')
+        self.assertNotContains(response, 'Vacancies')
+
+    def test_record_result_cancel_points_back_into_the_portal_not_hr(self):
+        self._login_via_portal()
+        response = self.client.get(reverse('interview_result', args=[self.interview.pk]))
+        self.assertContains(response, reverse('interviewer_candidate', args=[self.candidate.pk]))
+        self.assertNotContains(response, reverse('candidate_timeline', args=[self.candidate.pk]))
+
+    def test_recording_a_result_redirects_back_to_the_portal(self):
+        self._login_via_portal()
+        response = self.client.post(reverse('interview_result', args=[self.interview.pk]), {
+            'status': Interview.Status.COMPLETED, 'result': Interview.Result.PASS_,
+            'score': '8', 'feedback': 'Good.',
+        })
+        self.assertRedirects(response, reverse('interviewer_home'))
+
+    def test_logout_returns_to_the_interviewer_login(self):
+        self._login_via_portal()
+        response = self.client.post(reverse('logout'))
+        self.assertRedirects(response, reverse('interviewer_login'))
+
+    def test_logging_in_via_the_main_hr_login_clears_portal_mode(self):
+        self._login_via_portal()
+        self.client.post(reverse('logout'))
+        self.client.post(reverse('login'), {'username': 'admin2', 'password': 'pw'})
+        response = self.client.get(reverse('hr_dashboard'))
+        self.assertContains(response, 'Vacancies')
+        self.assertNotContains(response, 'My Interviews')
+
+    def test_normal_hr_login_never_enters_portal_mode(self):
+        self.client.post(reverse('login'), {'username': 'admin2', 'password': 'pw'})
+        response = self.client.get(reverse('interview_result', args=[self.interview.pk]))
+        self.assertContains(response, reverse('candidate_timeline', args=[self.candidate.pk]))

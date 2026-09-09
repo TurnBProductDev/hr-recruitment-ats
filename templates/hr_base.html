@@ -53,14 +53,14 @@
 <body>
 <nav class="app-nav navbar navbar-expand-lg">
   <div class="app-nav-inner">
-    <a class="app-nav-brand" href="{% if is_interviewer_only %}{% url 'interviewer_home' %}{% else %}{% url 'hr_dashboard' %}{% endif %}">
+    <a class="app-nav-brand" href="{% if is_interviewer_portal %}{% url 'interviewer_home' %}{% else %}{% url 'hr_dashboard' %}{% endif %}">
       <span class="app-nav-mark">H</span>
       <span class="app-nav-title">HireB</span>
     </a>
 
     <div class="collapse navbar-collapse app-nav-collapse" id="appNavCollapse">
       <div class="app-nav-links">
-        {% if is_interviewer_only %}
+        {% if is_interviewer_portal %}
         <a class="app-nav-link {% if request.resolver_match.url_name == 'interviewer_home' %}active{% endif %}" href="{% url 'interviewer_home' %}">My Interviews</a>
         {% else %}
         <a class="app-nav-link {% if request.resolver_match.url_name == 'hr_dashboard' %}active{% endif %}" href="{% url 'hr_dashboard' %}">Home</a>
@@ -93,7 +93,7 @@
           <span class="app-nav-username">{{ user.get_username }}</span>
         </a>
         <ul class="dropdown-menu dropdown-menu-end">
-          {% if not is_interviewer_only %}
+          {% if not is_interviewer_portal %}
           <li><a class="dropdown-item" href="{% url 'vacancy_list' %}" target="_blank">View Careers Site</a></li>
           {% if is_hr_admin %}
           <li><a class="dropdown-item {% if '/hr/users/' in request.path %}active{% endif %}" href="{% url 'user_list' %}">Users</a></li>
@@ -133,7 +133,7 @@
   // Back presses walk back the exact path you took.
   function goBack() {
     if (window.history.length > 1) { window.history.back(); }
-    else { window.location.href = '{% if is_interviewer_only %}{% url "interviewer_home" %}{% else %}/hr/dashboard/{% endif %}'; }
+    else { window.location.href = '{% if is_interviewer_portal %}{% url "interviewer_home" %}{% else %}/hr/dashboard/{% endif %}'; }
   }
   // Hide Back only when there is genuinely nowhere to go back to.
   (function () {

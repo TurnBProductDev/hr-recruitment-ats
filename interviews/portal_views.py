@@ -10,7 +10,7 @@ from django.urls import reverse
 from django.views.generic import DetailView, ListView
 
 from candidates.models import Candidate
-from candidates.permissions import HR_ADMIN, INTERVIEWER, GroupRequiredMixin
+from candidates.permissions import HR_ADMIN, INTERVIEWER, PORTAL_SESSION_KEY, GroupRequiredMixin
 
 from .models import Interview
 
@@ -38,7 +38,14 @@ class InterviewerLoginView(auth_views.LoginView):
         if not (_is_admin(user) or user.groups.filter(name=INTERVIEWER).exists()):
             form.add_error(None, 'This sign-in is for interviewers only. Use the HR sign-in instead.')
             return self.form_invalid(form)
-        return super().form_valid(form)
+        response = super().form_valid(form)
+        # Marks the whole session as "portal mode" - see
+        # candidates.permissions.in_interviewer_portal - so an Admin using
+        # this door gets the same restricted nav/back-links an Interviewer
+        # does, for as long as this session lasts (cleared by logging in via
+        # the main HR login instead - HR_management.auth_views.HRLoginView).
+        self.request.session[PORTAL_SESSION_KEY] = True
+        return response
 
 
 class InterviewerHomeView(GroupRequiredMixin, ListView):

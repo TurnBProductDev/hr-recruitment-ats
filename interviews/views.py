@@ -13,7 +13,9 @@ from django.views.generic import CreateView, ListView, UpdateView
 
 from candidates import services
 from candidates.models import Candidate, Note
-from candidates.permissions import ANY_STAFF, HR_ADMIN, INTERVIEWER, RECRUITER, GroupRequiredMixin, is_interviewer_only
+from candidates.permissions import (
+    ANY_STAFF, HR_ADMIN, INTERVIEWER, RECRUITER, GroupRequiredMixin, in_interviewer_portal,
+)
 
 from . import graph_client, invites
 from .forms import InterviewForm, InterviewResultForm
@@ -261,8 +263,9 @@ class InterviewResultView(GroupRequiredMixin, UpdateView):
         ctx['breadcrumb_current'] = f'{self.object.candidate.full_name} — {self.object.get_round_type_display()}'
         # Reached from the interviewer portal too (allowed_groups above) -
         # Cancel/breadcrumbs need to point back there instead of the main HR
-        # candidate page, which that role can't open.
-        if is_interviewer_only(self.request.user):
+        # candidate page whenever this session is in portal mode (a plain
+        # Interviewer, or an Admin who signed in via the Interviewer login).
+        if in_interviewer_portal(self.request):
             ctx['cancel_url'] = reverse('interviewer_candidate', args=[self.object.candidate_id])
             ctx['back_url'] = ctx['cancel_url']
             ctx['back_label'] = self.object.candidate.full_name
@@ -293,7 +296,7 @@ class InterviewResultView(GroupRequiredMixin, UpdateView):
         return response
 
     def get_success_url(self):
-        if is_interviewer_only(self.request.user):
+        if in_interviewer_portal(self.request):
             return reverse('interviewer_home')
         return reverse('interview_scheduler')
 
