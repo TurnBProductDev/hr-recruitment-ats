@@ -324,3 +324,27 @@ class UserManagementTests(TestCase):
         self.client.post(reverse('user_toggle_active', args=[self.admin.pk]))
         self.admin.refresh_from_db()
         self.assertFalse(self.admin.is_active)
+
+    def test_a_non_admin_can_toggle_off_their_own_account(self):
+        """The only rule is 'don't remove the last Admin' - a non-Admin
+        deactivating themselves (from their own logged-in session) was never
+        the concern the old unconditional self-check was guarding, so it's
+        simply allowed. Matches the real case this was reported from: a
+        superuser account assigned the Interviewer group (so it reaches this
+        Admin-only page via the superuser bypass, same as an Admin would) had
+        no Deactivate button at all on its own row."""
+        panel = get_user_model().objects.create_superuser('panel', 'panel@turnb.com', 'pw')
+        panel.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
+        self.client.force_login(panel)
+        self.client.post(reverse('user_toggle_active', args=[panel.pk]))
+        panel.refresh_from_db()
+        self.assertFalse(panel.is_active)
+
+    def test_deactivate_button_is_shown_for_your_own_row(self):
+        """Regression: user_list.html used to hide the toggle button
+        entirely for your own row (a leftover from the old unconditional
+        self-lock), even though the view-level rule is now count-based, not
+        self-based - the button should show for every row."""
+        response = self.client.get(reverse('user_list'))
+        self.assertContains(
+            response, reverse('user_toggle_active', args=[self.admin.pk]))
