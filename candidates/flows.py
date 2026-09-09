@@ -113,8 +113,14 @@ def flow_filter(qs, flow):
         'r1_yet': qs.filter(status=S.ROUND1).exclude(interviews__round_type=R1),
         # Cleared R1 = a R1 interview passed OR ever reached the Interview (R2) stage
         'r1_cleared': qs.filter(Q(interviews__round_type=R1, interviews__result=PASS) | _reached(S.INTERVIEW)),
-        'r1_scheduled': qs.filter(_still_open([R1])),
-        'r1_no_show': qs.filter(interviews__round_type=R1, interviews__status=CANC),
+        # Scoped to status=ROUND1 like r1_decision_pending below - otherwise a
+        # candidate HR already Rejected/Held straight from the Hiring block
+        # (skipping "Mark Result") keeps a dangling Scheduled/Cancelled
+        # interview row that would double-count them here too, alongside
+        # 'rejected_after_round1'/hold_before_round2 - breaking "every
+        # candidate counted in exactly one bucket".
+        'r1_scheduled': qs.filter(status=S.ROUND1).filter(_still_open([R1])),
+        'r1_no_show': qs.filter(status=S.ROUND1, interviews__round_type=R1, interviews__status=CANC),
         'r1_decision_pending': qs.filter(status=S.ROUND1).filter(_decision_pending([R1])),
         'rejected_after_round1': qs.filter(status__in=TERMINAL).filter(_reached(S.ROUND1)).exclude(_reached(S.INTERVIEW)),
         # On Hold, taken after clearing Round 1 (before Round 2)
@@ -124,8 +130,8 @@ def flow_filter(qs, flow):
         'r2_yet': qs.filter(status=S.INTERVIEW).exclude(interviews__round_type__in=NON_R1),
         'r2_cleared': qs.filter(Q(interviews__round_type__in=NON_R1, interviews__result=PASS)
                                 | _reached(S.FINAL_SELECTION) | _reached(S.HIRED)),
-        'r2_scheduled': qs.filter(_still_open(NON_R1)),
-        'r2_no_show': qs.filter(interviews__round_type__in=NON_R1, interviews__status=CANC),
+        'r2_scheduled': qs.filter(status=S.INTERVIEW).filter(_still_open(NON_R1)),
+        'r2_no_show': qs.filter(status=S.INTERVIEW, interviews__round_type__in=NON_R1, interviews__status=CANC),
         'r2_decision_pending': qs.filter(status=S.INTERVIEW).filter(_decision_pending(NON_R1)),
         'rejected_after_round2': qs.filter(status__in=TERMINAL).filter(_reached(S.INTERVIEW)).exclude(_reached(S.FINAL_SELECTION)),
         # On Hold, taken after clearing Round 2 (before the final decision)

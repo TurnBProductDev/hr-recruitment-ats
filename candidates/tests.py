@@ -983,6 +983,45 @@ class ScheduledFlowTests(TestCase):
         self.assertIn(c, flow_filter(Candidate.objects.all(), 'r1_decision_pending'))
         self.assertNotIn(c, flow_filter(Candidate.objects.all(), 'r1_scheduled'))
 
+    def test_rejected_candidate_does_not_also_show_as_not_turned_up(self):
+        """HR rejecting a candidate straight from the Hiring block (skipping
+        'Mark Result') leaves the interview row sitting as Cancelled - that
+        must not make the candidate double-count under both Rejected and Not
+        Turned Up."""
+        c = self._candidate(Candidate.Status.ROUND1)
+        Interview.objects.create(
+            candidate=c, round_type=Interview.RoundType.ROUND1,
+            status=Interview.Status.CANCELLED, result=Interview.Result.PENDING,
+            scheduled_date=timezone.now() - timezone.timedelta(days=1))
+        services.change_status(c, Candidate.Status.REJECTED)
+        from .flows import flow_filter
+        self.assertIn(c, flow_filter(Candidate.objects.all(), 'rejected_after_round1'))
+        self.assertNotIn(c, flow_filter(Candidate.objects.all(), 'r1_no_show'))
+
+    def test_rejected_candidate_does_not_also_show_as_scheduled(self):
+        """Same double-counting risk for a dangling Scheduled (not Cancelled)
+        interview left behind by a direct Reject."""
+        c = self._candidate(Candidate.Status.ROUND1)
+        Interview.objects.create(
+            candidate=c, round_type=Interview.RoundType.ROUND1,
+            status=Interview.Status.SCHEDULED, result=Interview.Result.PENDING,
+            scheduled_date=timezone.now() - timezone.timedelta(days=1))
+        services.change_status(c, Candidate.Status.REJECTED)
+        from .flows import flow_filter
+        self.assertIn(c, flow_filter(Candidate.objects.all(), 'rejected_after_round1'))
+        self.assertNotIn(c, flow_filter(Candidate.objects.all(), 'r1_scheduled'))
+
+    def test_held_candidate_does_not_also_show_as_not_turned_up(self):
+        c = self._candidate(Candidate.Status.ROUND1)
+        Interview.objects.create(
+            candidate=c, round_type=Interview.RoundType.ROUND1,
+            status=Interview.Status.CANCELLED, result=Interview.Result.PENDING,
+            scheduled_date=timezone.now() - timezone.timedelta(days=1))
+        services.change_status(c, Candidate.Status.SCREENING_HOLD)
+        from .flows import flow_filter
+        self.assertIn(c, flow_filter(Candidate.objects.all(), 'hold_before_round2'))
+        self.assertNotIn(c, flow_filter(Candidate.objects.all(), 'r1_no_show'))
+
 
 class SlaTrackerInterviewDateTests(TestCase):
     """The Stage Dates (SLA) tracker's "Round 1/2 Scheduled" checkpoint shows
