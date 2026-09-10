@@ -934,15 +934,22 @@ pollCandidateAction("{% url 'candidate_rescore_status' candidate.pk %}");
 // Allocate Interviewer popup: a single step (no invite draft after it - that
 // only happens once HR later picks a slot, via the interviewModal's Select
 // Slot flow above), so it just shows the result and closes on success.
+// The "Manual Slot Allocate" button is an escape hatch out of this popup
+// into the interviewModal's own schedule flow (InterviewScheduleView) - HR
+// picks the exact date/time themselves instead of waiting on the interviewer,
+// reusing that flow's existing conflict checks and invite-draft step rather
+// than duplicating them here.
 (function () {
   var modalEl = document.getElementById('allocateModal');
   if (!modalEl) return;
   var modal = new bootstrap.Modal(modalEl);
   var body = document.getElementById('allocateModalBody');
   var didSave = false;
+  var pendingManualBtn = null;
 
   modalEl.addEventListener('show.bs.modal', function (event) {
     didSave = false;
+    pendingManualBtn = null;
     var btn = event.relatedTarget;
     body.innerHTML = '<div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm"></span> Loading…</div>';
     fetch(btn.dataset.loadUrl, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
@@ -952,7 +959,20 @@ pollCandidateAction("{% url 'candidate_rescore_status' candidate.pk %}");
   });
 
   modalEl.addEventListener('hidden.bs.modal', function () {
+    if (pendingManualBtn) {
+      var btn = pendingManualBtn;
+      pendingManualBtn = null;
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('interviewModal')).show(btn);
+      return;
+    }
     if (didSave) { window.location.reload(); }
+  });
+
+  body.addEventListener('click', function (event) {
+    var manualBtn = event.target.closest('.js-manual-allocate');
+    if (!manualBtn) return;
+    pendingManualBtn = manualBtn;
+    modal.hide();
   });
 
   body.addEventListener('submit', function (event) {
