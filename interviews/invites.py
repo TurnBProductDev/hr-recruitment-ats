@@ -67,12 +67,10 @@ def default_body(interview, sender):
 
 
 def default_cc_list(interview):
-    """Fixed HR address + the selected interviewer, per the invite policy -
-    not user-editable, so a click can't accidentally drop either."""
-    cc = []
-    fixed = getattr(settings, 'INTERVIEW_INVITE_CC_EMAIL', '')
-    if fixed:
-        cc.append(fixed)
+    """The standard careers@turnb.com + HR cc (logic_app_mail.default_cc_list)
+    plus the selected interviewer, per the invite policy - not user-editable,
+    so a click can't accidentally drop any of them."""
+    cc = logic_app_mail.default_cc_list()
     if interview.interviewer and interview.interviewer.email and interview.interviewer.email not in cc:
         cc.append(interview.interviewer.email)
     return cc

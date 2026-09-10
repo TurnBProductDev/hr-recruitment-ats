@@ -30,7 +30,8 @@ def notify_interviewer_new_request(interview_request):
         f'available, so HR can pick one and schedule the interview.\n\n'
         f'Regards,\nHireB'
     )
-    logic_app_mail.send_email(to_email=interviewer.email, subject=subject, body=body)
+    logic_app_mail.send_email(
+        to_email=interviewer.email, cc_emails=logic_app_mail.default_cc_list(), subject=subject, body=body)
 
 
 def notify_hr_slots_proposed(interview_request):
@@ -51,7 +52,8 @@ def notify_hr_slots_proposed(interview_request):
         f'Please pick one from the candidate\'s profile to confirm the interview.\n\n'
         f'Regards,\nHireB'
     )
-    logic_app_mail.send_email(to_email=hr_user.email, subject=subject, body=body)
+    logic_app_mail.send_email(
+        to_email=hr_user.email, cc_emails=logic_app_mail.default_cc_list(), subject=subject, body=body)
 
 
 def notify_interviewer_new_slots_needed(interview_request, note=''):
@@ -69,4 +71,5 @@ def notify_interviewer_new_slots_needed(interview_request, note=''):
         f'{chr(10) + chr(10) + "Note from HR: " + note if note else ""}\n\n'
         f'Regards,\nHireB'
     )
-    logic_app_mail.send_email(to_email=interviewer.email, subject=subject, body=body)
+    logic_app_mail.send_email(
+        to_email=interviewer.email, cc_emails=logic_app_mail.default_cc_list(), subject=subject, body=body)

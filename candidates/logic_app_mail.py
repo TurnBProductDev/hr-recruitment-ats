@@ -23,6 +23,22 @@ def is_configured():
     return bool(getattr(settings, 'LOGIC_APP_EMAIL_SENDER_URL', ''))
 
 
+def default_cc_list():
+    """The two addresses every outbound email copies, per policy -
+    careers@turnb.com (INTERVIEW_INVITE_FROM_EMAIL) and HR
+    (INTERVIEW_INVITE_CC_EMAIL). Not user-editable. Shared by
+    interviews/invites.py, interviews/slot_emails.py and
+    candidates/rejection_emails.py so the policy lives in one place."""
+    cc = []
+    for addr in (
+        getattr(settings, 'INTERVIEW_INVITE_FROM_EMAIL', '') or 'careers@turnb.com',
+        getattr(settings, 'INTERVIEW_INVITE_CC_EMAIL', '') or 'Amrita.Sunilkumar@turnb.com',
+    ):
+        if addr and addr not in cc:
+            cc.append(addr)
+    return cc
+
+
 def send_email(*, to_email, subject, body, cc_emails=None, attachments=None):
     """POST one email to the Logic App. `attachments` is an optional list of
     {'Name': str, 'ContentBytes': base64 str, 'ContentType': str}. Raises

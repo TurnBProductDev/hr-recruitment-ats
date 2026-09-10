@@ -11,8 +11,6 @@ Same shape as interviews/invites.py's interview invite: a starting draft the
 HR user reviews and can edit before sending, with the recipient/CC always
 derived server-side rather than trusted from the client.
 """
-from django.conf import settings
-
 from . import logic_app_mail
 
 
@@ -38,15 +36,9 @@ def default_body(candidate):
 
 
 def default_cc_list():
-    """Fixed HR addresses, not user-editable - same policy and same settings
-    as interviews/invites.py's interview invite CC."""
-    cc = []
-    from_email = getattr(settings, 'INTERVIEW_INVITE_FROM_EMAIL', '') or 'careers@turnb.com'
-    fixed = getattr(settings, 'INTERVIEW_INVITE_CC_EMAIL', '') or 'Amrita.Sunilkumar@turnb.com'
-    for addr in (from_email, fixed):
-        if addr and addr not in cc:
-            cc.append(addr)
-    return cc
+    """Fixed HR addresses, not user-editable - same policy shared by every
+    outbound email in the app, see logic_app_mail.default_cc_list()."""
+    return logic_app_mail.default_cc_list()
 
 
 def send_rejection_email(*, to_email, cc_emails, subject, body):
