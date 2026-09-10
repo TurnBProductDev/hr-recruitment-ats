@@ -1,45 +1,88 @@
 # Logic Apps
 
-Two workflows in the **HRMS** resource group feed candidates into the ATS, and
-both are tracked here so the prompt/config live in Azure can be diffed against
-git instead of trusted from memory:
+Workflows in the **HRMS** resource group that feed candidates into the ATS,
+tracked here so the prompt/config live in Azure can be diffed against git
+instead of trusted from memory:
 
-| Workflow (Azure name) | File | Trigger | Writes candidates via |
-|---|---|---|---|
-| `CV-Automation-Flow` | [`mailbox_intake.json`](mailbox_intake.json) | New email in the careers inbox | `sp_intake_add_candidate` (stored proc) |
-| `cv-parse-single` | [`cv_parse_single.json`](cv_parse_single.json) | HTTP POST from the ATS **Bulk Upload CV** screen | Django writes the row itself |
+| Workflow (Azure name) | File | Trigger | Writes candidates via | Status |
+|---|---|---|---|---|
+| `CV-Automation-Flow` | [`mailbox_intake.json`](mailbox_intake.json) | New email in the careers inbox | `sp_intake_add_candidate` (stored proc) | **Live** |
+| `cv-parse-single` | [`cv_parse_single.json`](cv_parse_single.json) | HTTP POST from the ATS **Bulk Upload CV** screen | Django writes the row itself | **Live** (SharePoint filing only - see below) |
+| `CV-Automation-Flow-Final` | [`cv_automation_flow_final.json`](cv_automation_flow_final.json) | New email in the careers inbox (same mailbox) | `sp_intake_add_candidate`, extended params | **Disabled** - being built as `CV-Automation-Flow`'s eventual replacement, see below |
 
-A third workflow, `CV-Automation-Flow-Final`, exists in the resource group but
-is **Disabled** — an old draft, not tracked here.
+`mailbox_intake.json` (the live `CV-Automation-Flow`) is **untouched** by any
+of this - the rebuild happens entirely in `CV-Automation-Flow-Final`, which
+stays Disabled until it's been verified end-to-end against real test emails.
+Only once that's confirmed working does `CV-Automation-Flow-Final` get
+Enabled and `CV-Automation-Flow` get Disabled - never both changed at once.
 
-Both workflows' `Summary_completion` step shares the same structured-Markdown
-prompt (headings, a skills table, bulleted sections — see either file's system
-message) and `max_tokens: 900`. Update both together if the prompt changes
-again, then re-export with `az logic workflow show --resource-group HRMS
---name <workflow-name> --query definition -o json` to keep this copy in sync.
+## The CV-reading rebuild (Bulk Upload done, mailbox intake pending)
+
+Both intake pipelines used to read CVs the same way: Form Recognizer's
+**`MyCVModel`** custom model (labelled only for `NAME`, `EMAIL`, `MOBILE NO`,
+`EDUCATION`) feeding two separate Azure OpenAI completions (a narrow field
+extraction, then a summary). That's replaced by `candidates/cv_extraction.py`,
+which reads the PDF directly (its own text layer, or page images as a
+fallback for a scanned CV) and asks Azure OpenAI for *every* field - including
+Skills and a structured Experience list, which the old pipeline never
+captured at all - in one call. See that module's docstring for the full
+reasoning.
+
+- **`cv-parse-single` / Bulk Upload CV**: done. Django calls
+  `cv_extraction.py` directly (no Logic App round trip for reading); the
+  Logic App now only files the CV to SharePoint and returns the link.
+- **`CV-Automation-Flow` / mailbox intake**: pending, via
+  `CV-Automation-Flow-Final`. Since this path has no Django code in the
+  loop before the candidate is created (it's a pure Logic-App-to-SQL flow),
+  the rebuild adds one new piece: **`candidates.views.CVExtractAPIView`**
+  (`POST /api/cv/extract/`, key-authenticated via `X-Api-Key` /
+  `CV_EXTRACT_API_KEY` - treat it as a password) - a thin HTTP wrapper around
+  `cv_extraction.py` that a Logic App can call. `CV-Automation-Flow-Final`
+  POSTs the attachment + email Subject/Body there instead of running
+  `AnalyzeCV`/`Extract_completion`/`Summary_completion` itself, then calls
+  the extended `sp_intake_add_candidate` (see `sql/sp_intake_add_candidate.sql`)
+  with everything the API returned. Everything else in the original flow -
+  the sender/subject exclusion filter, the cover-letter filename filter, the
+  SharePoint + Blob dual-storage upload, and the Excel-based recruitment-
+  agency source lookup - is unchanged.
+
+`sp_intake_add_candidate`'s new parameters (skills, linkedin, current_location,
+dob, last_role, last_company, total_experience_years, notice_period,
+expected/current salary, and an `experience_json` array for structured
+`CandidateExperience` rows) are all optional and default to `NULL` - the live
+`CV-Automation-Flow` calls the procedure with today's parameter set only and
+is unaffected by the extension.
 
 ## `cv-parse-single`
 
-Parses **one** CV on demand and returns the extracted fields as JSON. Used by the
-ATS **Bulk Upload CV** screen, so bulk-uploaded CVs get the same email / phone /
-education / summary extraction that the careers-mailbox intake flow already does.
+Files **one** CV to SharePoint and returns its share link. Used by the ATS
+**Bulk Upload CV** screen.
 
-The careers intake workflow (email trigger → `sp_intake_add_candidate`,
-tracked as [`mailbox_intake.json`](mailbox_intake.json)) is **unchanged** by
-this one. This is a second, separate workflow that shares the same Form
-Recognizer, Azure OpenAI and SharePoint connections.
+CV *reading* (Name/Email/Skills/Experience/Summary/...) no longer happens
+here - it moved to `candidates/cv_extraction.py`, which reads the PDF's own
+text layer directly (falling back to page images for a scanned CV) and asks
+Azure OpenAI for every field in one call, instead of Form Recognizer's 4
+labelled fields (`MyCVModel`) plus two separate Logic-App completions. See
+that module's docstring for why. This workflow now only exists to keep the
+SharePoint filing step in one place, since Django doesn't yet talk to
+SharePoint directly.
 
 ```
-Django (bulk upload)  --POST one CV-->  cv-parse-single  --JSON-->  Django
+Django (bulk upload)  --reads the PDF itself, via cv_extraction.py-->  every candidate field
+                       --POST one CV-->  cv-parse-single  --{CV_Link}-->  Django
                                              |
-                                             +-- AnalyzeCV (MyCVModel)
-                                             +-- Extract_completion (cv-data-agent)
-                                             +-- Summary_completion (cv-data-agent)
                                              +-- SharePoint upload + sharing link
 ```
 
+The careers intake workflow (email trigger → `sp_intake_add_candidate`,
+tracked as [`mailbox_intake.json`](mailbox_intake.json)) is **unchanged** by
+this one - see "Extending the extracted fields" below for the plan to bring
+it onto the same `cv_extraction.py` pipeline.
+
 Django writes the candidate row itself (it already knows the vacancy and source
 the HR user picked), so this workflow does **not** call the stored procedure.
+A missing/failed SharePoint filing is a warning on the results screen, not a
+failed upload - CV reading and CV filing are independent now.
 
 ## Create the workflow
 
@@ -81,7 +124,9 @@ are created. Nothing else in the app is affected.
 
 ## Request / response contract
 
-Request body:
+Request body (unchanged from before, so Django's client didn't need to change
+its call shape - `role_hint`/`source_hint` are accepted but no longer used
+for anything, since this workflow doesn't read the CV anymore):
 
 ```json
 {
@@ -93,91 +138,44 @@ Request body:
 }
 ```
 
-`role_hint` / `source_hint` are the vacancy title and source the HR user picked
-on the upload screen; they stand in for the email subject the intake flow reads.
-Django overrides `Role_Applied` and `Source` with the HR picks anyway — the hints
-only steer the model.
-
 Success response (HTTP 200):
 
 ```json
-{
-  "status": "ok",
-  "Name": "John Doe",
-  "Email": "john.doe@example.com",
-  "Mobile": "+91-9876543210",
-  "Education": "MBA - DC School of Management & Technology - 2019",
-  "Role_Applied": "Data Analyst",
-  "Source": "Careers",
-  "Summary": "### Candidate Overview\n…\n\n### Core Technical Competencies\n…\n\n### Professional Experience Highlights\n…\n\n### Education, Logistics & Career Continuity\n…",
-  "CV_Link": "https://netorg519925.sharepoint.com/…"
-}
+{ "status": "ok", "CV_Link": "https://netorg519925.sharepoint.com/…" }
 ```
+
+`CV_Link` is `""` when `upload_to_sharepoint` was `false` - that's still
+`status: ok`, there was just nothing to file. Django turns a missing link into
+a warning on the results screen, not an error, same as before.
 
 Failure response is **also HTTP 200** so the app can show a readable reason
 instead of a raw gateway error:
 
 ```json
-{ "status": "error", "action": "AnalyzeCV", "message": "…" }
+{ "status": "error", "action": "Create_file_1", "message": "…" }
 ```
-
-`Summary` or `CV_Link` can come back empty on an otherwise successful parse (the
-summary or the SharePoint upload failed). That is not an error — the app records
-the candidate and flags a warning on the results screen.
 
 If a CV takes longer than the Request trigger's synchronous window, Azure
 answers **202 Accepted** with a `Location` header instead. The Django client
-polls that URL until the run finishes, so slow CVs are not lost.
-
-## Differences from the intake workflow
-
-1. **Retry policy.** `cv-parse-single` trims both OpenAI calls to
-   `count 2 / PT10S` so one CV finishes inside the synchronous response
-   window. The intake flow's `Summary_completion` has also been trimmed to
-   `count 2`, but keeps a `PT20S` interval since it isn't racing a synchronous
-   HTTP response; `Extract_completion` there is still `count 5 / PT20S`.
-2. **Error handling.** See below — success is decided by the data, not by the
-   scope's status.
-3. **No SP call, no Excel agency lookup.** Vacancy and source come from the
-   upload form.
-
-Both flows now build the summary from `body('AnalyzeCV')?['analyzeResult']?['content']`
-(the text Form Recognizer extracted) rather than raw decoded PDF bytes — that
-was ported back into the intake flow after this doc originally called it out.
+polls that URL until the run finishes, so slow uploads are not lost.
 
 ## Why the graph looks like this
 
-Two rules are load-bearing; changing them re-introduces bugs that were found in
-testing.
-
-**`Summary_completion` and `Should_upload_to_SharePoint` both run straight after
-`Parse_JSON`, in parallel.** The obvious chain — SharePoint after Summary, with
-`runAfter: [Succeeded, Failed, TimedOut, Skipped]` so an optional summary can't
-block the upload — is a trap. A scope takes its status from its *terminal*
-actions, so a last action that runs no matter what makes the scope report
-**Succeeded even when `AnalyzeCV` failed**. A junk file then came back as
-`{"status":"ok"}` with every field empty in 0.8 s, and the app would have created
-a candidate with a placeholder email — exactly the row this design exists to
-prevent. Hanging both off `Parse_JSON` also means a file that can't be read is
-never uploaded to SharePoint.
-
-**Success is decided by `Extracted_text`, not by the scope status.**
-`Extracted_text` concatenates Name + Email + Education; if all three are empty
-(actions skipped, or Form Recognizer read nothing) the `Respond` condition takes
-the else branch and returns `status: error` with the first failed action's
-message. This also keeps the response correct when a *non-essential* step fails:
-if only `Summary_completion` fails the scope is Failed, but the fields are there,
-so the CV still succeeds with an empty `Summary`. Django turns an empty `Summary`
-or `CV_Link` into a warning on the results screen rather than an error.
-
-Note `concat` rather than `coalesce` in `Extracted_text`: `coalesce` only skips
-*null*, so an empty-string `Name` would shadow a perfectly good `Email`.
+**Success is decided by whether a link came back, not by the scope status.**
+If `upload_to_sharepoint` was requested and `Should_upload_to_SharePoint`'s
+actions produced no link (`Create_file_1` or the sharing-link step failed),
+`Respond` takes the else branch and returns `status: error` with the first
+failed action's message, instead of a misleadingly-`ok` empty response.
 
 ## Extending the extracted fields
 
-The extraction is limited by what **`MyCVModel`** (Form Recognizer custom model)
-has labelled: `NAME`, `EMAIL`, `MOBILE NO`, `EDUCATION`. To capture skills,
-experience, current company or location, label those fields in `MyCVModel`
-first, then add them to the `Extract_completion` system prompt, the `Parse_JSON`
-schema and `Response_Success` here, and map them in
-`candidates/cv_parser.py::map_to_candidate_fields`.
+CV *reading* (Skills, Experience, Summary, everything beyond a SharePoint
+link) is Django's job now - see `candidates/cv_extraction.py` and the
+`cv-parse-single` section above. To add a new field there, extend its
+`RESPONSE_JSON_SCHEMA` + `SYSTEM_PROMPT` and map the result in
+`candidates/services.py::create_from_parsed_cv`; nothing here needs to change.
+
+The careers-mailbox intake workflow (`mailbox_intake.json`) still reads CVs
+the old way - Form Recognizer's **`MyCVModel`** custom model, labelled only for
+`NAME`, `EMAIL`, `MOBILE NO`, `EDUCATION` - pending the same move to
+`cv_extraction.py` that `cv-parse-single` just got.

@@ -197,6 +197,14 @@ AZURE_OPENAI_SCORING_DEPLOYMENT = os.environ.get("AZURE_OPENAI_SCORING_DEPLOYMEN
 AZURE_OPENAI_API_VERSION = os.environ.get("AZURE_OPENAI_API_VERSION", "2024-08-01-preview")
 SCORE_CANDIDATES_TIMEOUT = int(os.environ.get("SCORE_CANDIDATES_TIMEOUT", "60"))
 
+# --- CV Extract API -> CV-Automation-Flow-Final Logic App -------------------
+# Shared secret for candidates.views.CVExtractAPIView (POST /api/cv/extract/),
+# checked against the X-Api-Key header. This endpoint is called by a Logic
+# App, not a browser, so it can't use the normal session login - treat this
+# key as a password, same as the Logic App SAS URLs above. Unset = the
+# endpoint refuses every request with 401.
+CV_EXTRACT_API_KEY = os.environ.get("CV_EXTRACT_API_KEY", "")
+
 # --- CV storage (Azure Blob) ------------------------------------------------
 # Candidates from the careers-mailbox intake flow have their CV written to
 # this container (in addition to the existing SharePoint copy); Candidate.

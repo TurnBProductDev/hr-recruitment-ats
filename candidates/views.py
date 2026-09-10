@@ -1,3 +1,5 @@
+import base64
+import json
 import logging
 
 from django.conf import settings
@@ -10,12 +12,13 @@ from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.clickjacking import xframe_options_exempt
+from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import DetailView, ListView, UpdateView
 
 from interviews.models import Interview, InterviewReschedule, InterviewRequest
 from jobs.models import Job
 
-from . import bulk, cv_parser, cv_storage, match_scoring, rejection_emails, screening_questions, scoring, services
+from . import bulk, cv_extraction, cv_parser, cv_storage, match_scoring, rejection_emails, screening_questions, scoring, services
 from .forms import (
     BulkUploadForm,
     CandidateApplicationForm,
@@ -1585,6 +1588,55 @@ class BulkUploadRetryView(GroupRequiredMixin, View):
         else:
             messages.info(request, 'Nothing to retry in this batch.')
         return redirect('candidate_bulk_progress', pk=batch.pk)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class CVExtractAPIView(View):
+    """POST a CV (+ optional email context) here, get back every field
+    candidates/cv_extraction.py can read from it, as JSON.
+
+    Built for CV-Automation-Flow-Final (see logic_apps/README.md) - the
+    careers-mailbox intake Logic App's equivalent of what Bulk Upload CV
+    already does in-process via candidates/bulk.py, so that flow can also
+    stop depending on Form Recognizer. Called by a Logic App, not a browser,
+    so it authenticates via a shared X-Api-Key header (CV_EXTRACT_API_KEY)
+    rather than a Django session, and is CSRF-exempt like any other
+    machine-to-machine JSON endpoint.
+    """
+
+    def post(self, request):
+        api_key = getattr(settings, 'CV_EXTRACT_API_KEY', '')
+        if not api_key or request.headers.get('X-Api-Key') != api_key:
+            return JsonResponse({'status': 'error', 'message': 'Unauthorized.'}, status=401)
+
+        try:
+            payload = json.loads(request.body or b'{}')
+        except ValueError:
+            return JsonResponse({'status': 'error', 'message': 'Invalid JSON body.'}, status=400)
+
+        content_b64 = payload.get('content_base64')
+        if not content_b64:
+            return JsonResponse({'status': 'error', 'message': 'content_base64 is required.'}, status=400)
+        try:
+            content = base64.b64decode(content_b64, validate=True)
+        except (ValueError, TypeError):
+            return JsonResponse({'status': 'error', 'message': 'content_base64 is not valid base64.'}, status=400)
+
+        email_context = None
+        if payload.get('email_subject') or payload.get('email_body'):
+            email_context = (f"Email Subject: {payload.get('email_subject') or ''}\n\n"
+                             f"Email Body: {payload.get('email_body') or ''}")
+
+        try:
+            fields = cv_extraction.extract_profile(
+                content, role_hint=payload.get('role_hint'), source_hint=payload.get('source_hint'),
+                email_context=email_context)
+        except cv_extraction.CVExtractionError as exc:
+            # HTTP 200 with status: error, same convention as the Logic Apps
+            # this replaces - the caller reads the body, not the status code.
+            return JsonResponse({'status': 'error', 'message': str(exc)})
+
+        return JsonResponse({'status': 'ok', **fields})
 
 
 class ScoreCandidatesView(GroupRequiredMixin, View):

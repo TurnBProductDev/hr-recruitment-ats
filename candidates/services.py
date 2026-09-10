@@ -9,6 +9,7 @@ from .models import (
     Blacklist,
     Candidate,
     CandidateEducation,
+    CandidateExperience,
     CandidateStatusHistory,
     EmailRegistry,
 )
@@ -130,7 +131,18 @@ def create_from_parsed_cv(fields, job, source, user=None, performed_by=None, rem
         full_name=fields.get('full_name') or 'Unnamed Candidate',
         email=email or placeholder_email(),
         phone=fields.get('phone'),
+        dob=fields.get('dob'),
+        current_location=fields.get('current_location'),
         qualification=fields.get('qualification'),
+        last_role=fields.get('last_role'),
+        last_company=fields.get('last_company'),
+        total_experience_years=fields.get('total_experience_years'),
+        skills=fields.get('skills'),
+        linkedin=fields.get('linkedin'),
+        portfolio_url=fields.get('portfolio_url'),
+        notice_period=fields.get('notice_period'),
+        expected_salary=fields.get('expected_salary'),
+        current_salary=fields.get('current_salary'),
         cv_summary=fields.get('cv_summary'),
         resume_url=fields.get('resume_url'),
         role_applied=fields.get('role_applied') or (job.title if job else None),
@@ -151,10 +163,24 @@ def create_from_parsed_cv(fields, job, source, user=None, performed_by=None, rem
             candidate=candidate, qualification=qualification,
             institution=institution, year_completed=year,
         )
+        candidate.institution = institution
+        candidate.save(update_fields=['institution'])
 
-    # The Logic App only extracts Name/Email/Mobile/Education (see
-    # logic_apps/README.md); pull last_role/last_company/experience/skills back
-    # out of the AI CV Summary it also produced, best-effort.
+    # Structured job history - present when the CV was read by
+    # candidates/cv_extraction.py (see its 'experience' list); the older
+    # Logic-App path never populated this, hence the .get with a default.
+    for entry in fields.get('experience') or []:
+        CandidateExperience.objects.create(
+            candidate=candidate, company_name=entry['company_name'],
+            designation=entry.get('designation'), start_date=entry.get('start_date'),
+            end_date=entry.get('end_date'), skills=entry.get('skills'),
+        )
+
+    # Best-effort backfill for whatever's still blank (the older Logic-App
+    # path only extracted Name/Email/Mobile/Education - see
+    # logic_apps/README.md - so this pulls last_role/last_company/experience/
+    # skills back out of the AI CV Summary). A no-op, zero extra API calls,
+    # for candidates read by cv_extraction.py since nothing is left blank.
     profile_extraction.apply_missing_fields(candidate)
 
     record_creation(candidate, user=user, remarks=remarks, performed_by=performed_by)

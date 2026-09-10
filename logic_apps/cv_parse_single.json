@@ -40,152 +40,9 @@
                 "type": "Scope",
                 "runAfter": {},
                 "actions": {
-                    "AnalyzeCV": {
-                        "type": "ApiConnection",
-                        "runAfter": {},
-                        "inputs": {
-                            "host": {
-                                "connection": {
-                                    "name": "@parameters('$connections')['formrecognizer']['connectionId']"
-                                }
-                            },
-                            "method": "post",
-                            "body": "@base64ToBinary(triggerBody()?['content_base64'])",
-                            "path": "/documentModels/@{encodeURIComponent('MyCVModel')}:analyze",
-                            "queries": {
-                                "api-version": "2023-07-31"
-                            }
-                        }
-                    },
-                    "Set_CV_text": {
-                        "type": "Compose",
-                        "inputs": "@if(greater(length(coalesce(body('AnalyzeCV')?['analyzeResult']?['content'], '')), 12000), substring(coalesce(body('AnalyzeCV')?['analyzeResult']?['content'], ''), 0, 12000), coalesce(body('AnalyzeCV')?['analyzeResult']?['content'], ''))",
-                        "runAfter": {
-                            "AnalyzeCV": [
-                                "Succeeded"
-                            ]
-                        }
-                    },
-                    "Extract_completion": {
-                        "type": "ApiConnection",
-                        "operationOptions": "DisableAsyncPattern",
-                        "runAfter": {
-                            "Set_CV_text": [
-                                "Succeeded"
-                            ]
-                        },
-                        "inputs": {
-                            "host": {
-                                "connection": {
-                                    "name": "@parameters('$connections')['azureopenai']['connectionId']"
-                                }
-                            },
-                            "method": "post",
-                            "body": {
-                                "messages": [
-                                    {
-                                        "role": "system",
-                                        "content": "You are an HR Data Extraction Specialist. Clean and format candidate data provided in the labels below.\n\nCRITICAL RULES:\n1. Name: Use the 'Name' label.\n2. Role Applied: Identify the job title from 'Email Subject' or 'Email Body'. Return only the title. Default to 'General Application' if not found.\n3. Email Address: Use the 'Email' label. CLEANING: Remove all internal spaces and return in lowercase.\n4. Mobile Number: Use the 'Mobile' label. STANDARDIZATION: Format as +91-XXXXXXXXXX (Indian) or +[CountryCode]-XXXXXXXXX.\n5. Education: Use the 'Education' label. Identify highest degree and college and year of passout. FORMAT: 'Degree - College Name - Year' (e.g., 'MBA - DC School of Management & Technology - 2019').\n6. Source: Identify the source from 'Email Subject'. Return 'LinkedIn' if it is LinkedIn, 'Referral' if it is Referral, 'Indeed' if it is Indeed, 'Naukri' if it is Naukri. Else default to 'Careers'.\n\nOUTPUT REQUIREMENT: Return ONLY a raw JSON object with keys: Name, Role_Applied, Email, Mobile, Education, Source. No markdown formatting."
-                                    },
-                                    {
-                                        "role": "user",
-                                        "content": "Email Subject: @{coalesce(triggerBody()?['role_hint'], 'General Application')}\n\nEmail Body: Bulk CV upload from the ATS. Source: @{coalesce(triggerBody()?['source_hint'], 'Careers')}. File name: @{triggerBody()?['filename']}\n\nName: @{body('AnalyzeCV')?['analyzeResult']?['documents']?[0]?['fields']?['NAME']?['valueString']}\n\nEmail: @{body('AnalyzeCV')?['analyzeResult']?['documents']?[0]?['fields']?['EMAIL']?['valueString']}\n\nMobile: @{body('AnalyzeCV')?['analyzeResult']?['documents']?[0]?['fields']?['MOBILE NO']?['valueString']}\n\nEducation: @{body('AnalyzeCV')?['analyzeResult']?['documents']?[0]?['fields']?['EDUCATION']?['valueString']}"
-                                    }
-                                ],
-                                "temperature": 0
-                            },
-                            "path": "/2024-02-15-preview/deployments/@{encodeURIComponent('cv-data-agent')}/chat/completions",
-                            "queries": {
-                                "api-version": "2024-02-01"
-                            },
-                            "retryPolicy": {
-                                "type": "exponential",
-                                "count": 2,
-                                "interval": "PT10S"
-                            }
-                        }
-                    },
-                    "Parse_JSON": {
-                        "type": "ParseJson",
-                        "runAfter": {
-                            "Extract_completion": [
-                                "Succeeded"
-                            ]
-                        },
-                        "inputs": {
-                            "content": "@body('Extract_completion')?['choices']?[0]?['message']?['content']",
-                            "schema": {
-                                "type": "object",
-                                "properties": {
-                                    "Name": {
-                                        "type": "string"
-                                    },
-                                    "Role_Applied": {
-                                        "type": "string"
-                                    },
-                                    "Email": {
-                                        "type": "string"
-                                    },
-                                    "Mobile": {
-                                        "type": "string"
-                                    },
-                                    "Education": {
-                                        "type": "string"
-                                    },
-                                    "Source": {
-                                        "type": "string"
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "Summary_completion": {
-                        "type": "ApiConnection",
-                        "operationOptions": "DisableAsyncPattern",
-                        "runAfter": {
-                            "Parse_JSON": [
-                                "Succeeded"
-                            ]
-                        },
-                        "inputs": {
-                            "host": {
-                                "connection": {
-                                    "name": "@parameters('$connections')['azureopenai']['connectionId']"
-                                }
-                            },
-                            "method": "post",
-                            "body": {
-                                "messages": [
-                                    {
-                                        "role": "system",
-                                        "content": "You are an expert HR Analyst. Your task is to analyze the provided CV text and generate a highly scannable candidate summary.\n\nFollow these strict constraints:\n\nBase the summary strictly on the provided text. Do not invent, infer, or hallucinate information.\n\nMaintain a factual, neutral tone.\n\nOutput only the requested sections below exactly as formatted. Do not include introductory or concluding remarks.\n\n### Candidate Overview\nProvide a 2-3 sentence factual summary of the candidate's core professional identity, primary domain expertise, and total years of relevant experience.\n\n### Core Technical Competencies\nCreate a simple markdown table categorizing the candidate's key skills (e.g., AI/ML, Backend, Cloud). Keep the categories and text concise.\n\n### Professional Experience Highlights\nExtract 3-4 bullet points detailing the candidate's most impactful work experiences. Focus on specific tools used, project scopes, and measurable outcomes.\n\n### Education, Logistics & Career Continuity\nProvide a bulleted list covering:\n\nCurrent location.\n\nHighest educational degree and relevant certifications.\n\nCareer Gaps: Analyze the timeline of education and employment. Explicitly state any career gaps (periods of 3+ months without activity). If the timeline is continuous, state: \"No significant career gaps identified.\""
-                                    },
-                                    {
-                                        "role": "user",
-                                        "content": "Role Applied: @{body('Parse_JSON')?['Role_Applied']}\n\nCV:\n@{outputs('Set_CV_text')}"
-                                    }
-                                ],
-                                "temperature": 0.3,
-                                "max_tokens": 900
-                            },
-                            "path": "/2024-02-15-preview/deployments/@{encodeURIComponent('cv-data-agent')}/chat/completions",
-                            "queries": {
-                                "api-version": "2024-02-01"
-                            },
-                            "retryPolicy": {
-                                "type": "exponential",
-                                "count": 2,
-                                "interval": "PT10S"
-                            }
-                        }
-                    },
                     "Should_upload_to_SharePoint": {
                         "type": "If",
-                        "runAfter": {
-                            "Parse_JSON": [
-                                "Succeeded"
-                            ]
-                        },
+                        "runAfter": {},
                         "expression": {
                             "and": [
                                 {
@@ -251,7 +108,7 @@
                     }
                 }
             },
-            "Extracted_text": {
+            "CV_link": {
                 "type": "Compose",
                 "runAfter": {
                     "Parse_CV": [
@@ -260,24 +117,30 @@
                         "TimedOut"
                     ]
                 },
-                "inputs": "@concat(coalesce(body('Parse_JSON')?['Name'], ''), coalesce(body('Parse_JSON')?['Email'], ''), coalesce(body('Parse_JSON')?['Education'], ''))"
+                "inputs": "@coalesce(body('Create_sharing_link_for_a_file_or_folder')?['link']?['webUrl'], '')"
             },
             "Respond": {
                 "type": "If",
                 "runAfter": {
-                    "Extracted_text": [
+                    "CV_link": [
                         "Succeeded"
                     ]
                 },
                 "expression": {
-                    "and": [
+                    "or": [
                         {
                             "not": {
                                 "equals": [
-                                    "@outputs('Extracted_text')",
+                                    "@outputs('CV_link')",
                                     ""
                                 ]
                             }
+                        },
+                        {
+                            "equals": [
+                                "@coalesce(triggerBody()?['upload_to_sharepoint'], true)",
+                                false
+                            ]
                         }
                     ]
                 },
@@ -293,14 +156,7 @@
                             },
                             "body": {
                                 "status": "ok",
-                                "Name": "@{body('Parse_JSON')?['Name']}",
-                                "Email": "@{body('Parse_JSON')?['Email']}",
-                                "Mobile": "@{body('Parse_JSON')?['Mobile']}",
-                                "Education": "@{body('Parse_JSON')?['Education']}",
-                                "Role_Applied": "@{body('Parse_JSON')?['Role_Applied']}",
-                                "Source": "@{body('Parse_JSON')?['Source']}",
-                                "Summary": "@{body('Summary_completion')?['choices']?[0]?['message']?['content']}",
-                                "CV_Link": "@{body('Create_sharing_link_for_a_file_or_folder')?['link']?['webUrl']}"
+                                "CV_Link": "@{outputs('CV_link')}"
                             }
                         }
                     }
@@ -334,7 +190,7 @@
                                 "body": {
                                     "status": "error",
                                     "action": "@{first(body('Failed_actions'))?['name']}",
-                                    "message": "@{coalesce(first(body('Failed_actions'))?['error']?['message'], first(body('Failed_actions'))?['outputs']?['body']?['error']?['message'], 'Nothing could be read from this CV.')}"
+                                    "message": "@{coalesce(first(body('Failed_actions'))?['error']?['message'], first(body('Failed_actions'))?['outputs']?['body']?['error']?['message'], 'Could not file this CV to SharePoint.')}"
                                 }
                             }
                         }
@@ -354,18 +210,6 @@
         "$connections": {
             "type": "Object",
             "value": {
-                "formrecognizer": {
-                    "id": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/providers/Microsoft.Web/locations/centralindia/managedApis/formrecognizer",
-                    "connectionId": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/resourceGroups/HRMS/providers/Microsoft.Web/connections/formrecognizer",
-                    "connectionName": "formrecognizer",
-                    "connectionProperties": {}
-                },
-                "azureopenai": {
-                    "id": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/providers/Microsoft.Web/locations/centralindia/managedApis/azureopenai",
-                    "connectionId": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/resourceGroups/HRMS/providers/Microsoft.Web/connections/azureopenai",
-                    "connectionName": "azureopenai",
-                    "connectionProperties": {}
-                },
                 "sharepointonline-1": {
                     "id": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/providers/Microsoft.Web/locations/centralindia/managedApis/sharepointonline",
                     "connectionId": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/resourceGroups/HRMS/providers/Microsoft.Web/connections/sharepointonline-2",

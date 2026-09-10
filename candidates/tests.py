@@ -4,6 +4,8 @@ upload -> parse -> candidate pipeline.
 Run against sqlite so the live Azure DB is never touched:
     DB_ENGINE=sqlite python manage.py test candidates
 """
+import base64
+import datetime
 import json
 from unittest import mock
 
@@ -18,7 +20,8 @@ from django.utils import timezone
 from interviews.models import Interview, InterviewRequest
 from jobs.models import Job
 
-from . import bulk, cv_parser, logic_app_mail, rejection_emails, screening_questions, services
+from . import bulk, cv_extraction, cv_parser, logic_app_mail, rejection_emails, screening_questions, services
+from .cv_extraction import CVExtractionError
 from .cv_parser import CVParseError
 from .models import BulkUploadBatch, BulkUploadItem, Candidate, CommunicationLog, EmailRegistry
 from .permissions import HIRING_MANAGER, HR_ADMIN, INTERVIEWER, RECRUITER
@@ -35,6 +38,28 @@ PARSED = {
     'Source': 'Careers',
     'Summary': 'Five years in analytics.',
     'CV_Link': 'https://sharepoint.example/cv.pdf',
+}
+
+# candidates.cv_extraction.extract_profile's return shape - see BulkProcessingTests.
+PROFILE = {
+    'full_name': 'Asha Menon',
+    'email': 'asha.menon@example.com',
+    'phone': '+91-9876543210',
+    'dob': None,
+    'current_location': None,
+    'linkedin': None,
+    'portfolio_url': None,
+    'qualification': 'MBA - DC School of Management & Technology - 2019',
+    'last_role': None,
+    'last_company': None,
+    'total_experience_years': None,
+    'skills': None,
+    'notice_period': None,
+    'expected_salary': None,
+    'current_salary': None,
+    'role_applied': 'Data Analyst',
+    'cv_summary': 'Five years in analytics.',
+    'experience': [],
 }
 
 
@@ -61,6 +86,52 @@ class SplitEducationTests(TestCase):
 
     def test_blank(self):
         self.assertEqual(cv_parser.split_education(''), (None, None, None))
+
+
+class CVExtractionHelperTests(TestCase):
+    """Pure-Python helpers in candidates/cv_extraction.py that clean up
+    whatever Azure OpenAI returns - no network calls, so these run without
+    mocking anything."""
+
+    def test_clean_strips_and_drops_nullish_values(self):
+        self.assertEqual(cv_extraction._clean('  Python, SQL  '), 'Python, SQL')
+        for nullish in ('', '  ', 'null', 'None', 'N/A', 'Not mentioned'):
+            self.assertIsNone(cv_extraction._clean(nullish))
+        self.assertIsNone(cv_extraction._clean(None))
+        self.assertIsNone(cv_extraction._clean(42))  # not a string at all
+
+    def test_clean_respects_limit(self):
+        self.assertEqual(cv_extraction._clean('abcdef', limit=3), 'abc')
+
+    def test_clean_decimal(self):
+        self.assertEqual(cv_extraction._clean_decimal('5.567'), 5.6)
+        self.assertEqual(cv_extraction._clean_decimal(3), 3.0)
+        self.assertIsNone(cv_extraction._clean_decimal(None))
+        self.assertIsNone(cv_extraction._clean_decimal('not a number'))
+
+    def test_clean_date_formats(self):
+        self.assertEqual(cv_extraction._clean_date('2024-03-15'), datetime.date(2024, 3, 15))
+        self.assertEqual(cv_extraction._clean_date('2024-03'), datetime.date(2024, 3, 1))
+        self.assertEqual(cv_extraction._clean_date('2024'), datetime.date(2024, 1, 1))
+        self.assertIsNone(cv_extraction._clean_date('Present'))
+        self.assertIsNone(cv_extraction._clean_date(None))
+        self.assertIsNone(cv_extraction._clean_date('2024-13'))  # invalid month, never raises
+
+    def test_clean_experience_drops_entries_with_no_company(self):
+        entries = cv_extraction._clean_experience([
+            {'company_name': 'Acme Corp', 'designation': 'Analyst',
+             'start_date': '2022-01', 'end_date': None, 'skills': 'SQL'},
+            {'company_name': '', 'designation': 'Ghost Role'},  # no company - dropped
+            'not even a dict',  # dropped
+        ])
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]['company_name'], 'Acme Corp')
+        self.assertEqual(entries[0]['start_date'], datetime.date(2022, 1, 1))
+        self.assertIsNone(entries[0]['end_date'])
+
+    def test_clean_experience_caps_at_thirty(self):
+        raw = [{'company_name': f'Co {i}'} for i in range(40)]
+        self.assertEqual(len(cv_extraction._clean_experience(raw)), 30)
 
 
 class MapFieldsTests(TestCase):
@@ -204,8 +275,15 @@ class BulkProcessingTests(TestCase):
             batch=self.batch, filename='Asha_Menon_CV.pdf',
             cv_file=SimpleUploadedFile('Asha_Menon_CV.pdf', b'%PDF-1.4 fake'))
 
+    def _mock_sharepoint(self, link='https://sharepoint.example/cv.pdf'):
+        """CV filing (candidates.bulk._file_to_sharepoint) is independent of
+        CV reading now - patch it separately so each test only asserts what
+        it actually cares about."""
+        return mock.patch('candidates.bulk._file_to_sharepoint', return_value=link)
+
     def test_success_creates_candidate_with_parsed_fields(self):
-        with mock.patch('candidates.bulk.cv_parser.parse_cv', return_value=PARSED):
+        with mock.patch('candidates.bulk.cv_extraction.extract_profile', return_value=PROFILE), \
+             self._mock_sharepoint():
             bulk.process_item(self.item)
 
         self.item.refresh_from_db()
@@ -226,27 +304,43 @@ class BulkProcessingTests(TestCase):
         self.assertTrue(EmailRegistry.objects.filter(email='asha.menon@example.com').exists())
         self.assertTrue(candidate.resume_blob_url)
 
+    def test_experience_entries_become_candidateexperience_rows(self):
+        profile = {**PROFILE, 'experience': [
+            {'company_name': 'Acme Corp', 'designation': 'Analyst',
+             'start_date': None, 'end_date': None, 'skills': 'SQL, Power BI'},
+        ]}
+        with mock.patch('candidates.bulk.cv_extraction.extract_profile', return_value=profile), \
+             self._mock_sharepoint():
+            bulk.process_item(self.item)
+
+        self.item.refresh_from_db()
+        experience = self.item.candidate.experience_set.get()
+        self.assertEqual(experience.company_name, 'Acme Corp')
+        self.assertEqual(experience.designation, 'Analyst')
+        self.assertEqual(experience.skills, 'SQL, Power BI')
+
     def test_failure_creates_no_candidate(self):
-        with mock.patch('candidates.bulk.cv_parser.parse_cv',
-                        side_effect=CVParseError('Password-protected PDF.')):
+        with mock.patch('candidates.bulk.cv_extraction.extract_profile',
+                        side_effect=CVExtractionError('Could not read this CV - the file may be corrupted.')):
             bulk.process_item(self.item)
 
         self.item.refresh_from_db()
         self.assertEqual(self.item.status, BulkUploadItem.Status.ERROR)
-        self.assertIn('Password-protected', self.item.error_message)
+        self.assertIn('could not read this cv', self.item.error_message.lower())
         self.assertIsNone(self.item.candidate)
         self.assertEqual(Candidate.objects.count(), 0)
 
     def test_unexpected_error_is_contained(self):
-        with mock.patch('candidates.bulk.cv_parser.parse_cv', side_effect=ValueError('boom')):
+        with mock.patch('candidates.bulk.cv_extraction.extract_profile', side_effect=ValueError('boom')):
             bulk.process_item(self.item)
         self.item.refresh_from_db()
         self.assertEqual(self.item.status, BulkUploadItem.Status.ERROR)
         self.assertEqual(Candidate.objects.count(), 0)
 
     def test_missing_email_still_creates_a_flagged_candidate(self):
-        with mock.patch('candidates.bulk.cv_parser.parse_cv',
-                        return_value={**PARSED, 'Email': ''}):
+        with mock.patch('candidates.bulk.cv_extraction.extract_profile',
+                        return_value={**PROFILE, 'email': None}), \
+             self._mock_sharepoint():
             bulk.process_item(self.item)
 
         self.item.refresh_from_db()
@@ -260,7 +354,8 @@ class BulkProcessingTests(TestCase):
         first = Candidate.objects.create(full_name='Asha', email='asha.menon@example.com', job=self.job)
         services.register_application(first)
 
-        with mock.patch('candidates.bulk.cv_parser.parse_cv', return_value=PARSED):
+        with mock.patch('candidates.bulk.cv_extraction.extract_profile', return_value=PROFILE), \
+             self._mock_sharepoint():
             bulk.process_item(self.item)
 
         self.item.refresh_from_db()
@@ -269,9 +364,9 @@ class BulkProcessingTests(TestCase):
 
     def test_an_already_claimed_item_is_not_parsed_twice(self):
         BulkUploadItem.objects.filter(pk=self.item.pk).update(status=BulkUploadItem.Status.PARSING)
-        with mock.patch('candidates.bulk.cv_parser.parse_cv', return_value=PARSED) as parse:
+        with mock.patch('candidates.bulk.cv_extraction.extract_profile', return_value=PROFILE) as extract:
             self.assertIsNone(bulk.process_item(self.item))
-        parse.assert_not_called()
+        extract.assert_not_called()
         self.assertEqual(Candidate.objects.count(), 0)
 
     def test_summarise_counts(self):
@@ -284,6 +379,72 @@ class BulkProcessingTests(TestCase):
         _, counts = bulk.summarise(self.batch)
         self.assertEqual(counts, {'total': 3, 'success': 1, 'error': 1, 'waiting': 1,
                                   'done': 2, 'finished': False})
+
+
+@override_settings(CV_EXTRACT_API_KEY='test-key')
+class CVExtractAPIViewTests(TestCase):
+    """candidates.views.CVExtractAPIView - the machine-to-machine endpoint
+    CV-Automation-Flow-Final calls instead of Form Recognizer. No Django
+    session/CSRF involved - it's a Logic App, not a browser."""
+
+    def _post(self, body, api_key='test-key'):
+        headers = {'X-Api-Key': api_key} if api_key is not None else {}
+        return self.client.post(
+            reverse('cv_extract_api'), data=json.dumps(body), content_type='application/json',
+            **{f'HTTP_{k.upper().replace("-", "_")}': v for k, v in headers.items()})
+
+    def test_wrong_or_missing_api_key_is_rejected(self):
+        response = self._post({'content_base64': 'eA=='}, api_key='nope')
+        self.assertEqual(response.status_code, 401)
+        response = self._post({'content_base64': 'eA=='}, api_key=None)
+        self.assertEqual(response.status_code, 401)
+
+    @override_settings(CV_EXTRACT_API_KEY='')
+    def test_unconfigured_api_key_rejects_everything(self):
+        response = self._post({'content_base64': 'eA=='}, api_key='anything')
+        self.assertEqual(response.status_code, 401)
+
+    def test_invalid_json_body(self):
+        response = self.client.post(
+            reverse('cv_extract_api'), data='not json', content_type='application/json',
+            HTTP_X_API_KEY='test-key')
+        self.assertEqual(response.status_code, 400)
+
+    def test_missing_content_base64(self):
+        response = self._post({})
+        self.assertEqual(response.status_code, 400)
+
+    def test_invalid_base64(self):
+        response = self._post({'content_base64': 'not-valid-base64!!'})
+        self.assertEqual(response.status_code, 400)
+
+    def test_success_returns_extracted_profile(self):
+        with mock.patch('candidates.views.cv_extraction.extract_profile', return_value=PROFILE) as extract:
+            response = self._post({
+                'content_base64': base64.b64encode(b'%PDF-1.4 fake').decode(),
+                'email_subject': 'Application for Data Analyst',
+                'email_body': 'Please find my CV attached.',
+                'source_hint': 'Naukri',
+            })
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data['status'], 'ok')
+        self.assertEqual(data['full_name'], 'Asha Menon')
+        # Email subject/body reached extract_profile as email_context, not lost.
+        call_kwargs = extract.call_args.kwargs
+        self.assertIn('Application for Data Analyst', call_kwargs['email_context'])
+        self.assertEqual(call_kwargs['source_hint'], 'Naukri')
+
+    def test_extraction_error_returns_ok_http_status_with_error_body(self):
+        """Same convention as the old Logic Apps: HTTP 200, status: error in
+        the body - the caller reads the body, not the status code."""
+        with mock.patch('candidates.views.cv_extraction.extract_profile',
+                        side_effect=CVExtractionError('Could not read this CV - the file may be corrupted.')):
+            response = self._post({'content_base64': base64.b64encode(b'junk').decode()})
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data['status'], 'error')
+        self.assertIn('could not read this cv', data['message'].lower())
 
 
 class BackButtonTests(TestCase):

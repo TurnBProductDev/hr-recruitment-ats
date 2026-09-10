@@ -10,6 +10,7 @@ A thread is enough here - the app runs as a single container and the batch is at
 most a couple of dozen CVs. Progress lives in the database, not in memory, so a
 restart mid-batch is visible on the results screen instead of silently lost.
 """
+import json
 import logging
 import os
 import re
@@ -22,8 +23,8 @@ from django.db import connection
 from django.db.models import F
 from django.utils import timezone
 
-from . import cv_parser, services
-from .cv_parser import CVParseError
+from . import cv_extraction, cv_parser, services
+from .cv_extraction import CVExtractionError
 from .models import BulkUploadBatch, BulkUploadItem
 
 logger = logging.getLogger(__name__)
@@ -65,8 +66,28 @@ def _run_batch(batch_id):
         connection.close()
 
 
+def _file_to_sharepoint(item, batch, content):
+    """Best-effort: file the CV to SharePoint via the (now filing-only)
+    cv-parse-single Logic App and return its share link, or None. CV reading
+    itself (candidates/cv_extraction.py) no longer depends on this - a
+    SharePoint hiccup is a warning on the results screen, not a failed item,
+    same as before."""
+    if not cv_parser.is_configured():
+        return None
+    try:
+        data = cv_parser.parse_cv(
+            # Unique but still readable in the SharePoint "Resume Received" folder.
+            filename=f'{item.pk}_{item.filename}', content=content,
+            role_hint=batch.job.title if batch.job else None, source_hint=batch.source,
+        )
+    except cv_parser.CVParseError as exc:
+        logger.warning('Could not file CV to SharePoint for item %s: %s', item.pk, exc)
+        return None
+    return (data.get('CV_Link') or '').strip() or None
+
+
 def process_item(item, batch=None):
-    """Parse one CV and create its Candidate. Never raises - the outcome is
+    """Read one CV and create its Candidate. Never raises - the outcome is
     always written back onto the item.
 
     Returns None if another worker already claimed this item, so a second Retry
@@ -83,31 +104,40 @@ def process_item(item, batch=None):
         with item.cv_file.open('rb') as fh:
             content = fh.read()
 
-        data = cv_parser.parse_cv(
-            # Unique but still readable in the SharePoint "Resume Received" folder.
-            filename=f'{item.pk}_{item.filename}',
-            content=content,
+        fields = cv_extraction.extract_profile(
+            content,
             role_hint=batch.job.title if batch.job else None,
             source_hint=batch.source,
         )
-        fields, warning = cv_parser.map_to_candidate_fields(
-            data, fallback_name=name_from_filename(item.filename))
+        if not fields.get('full_name'):
+            fields['full_name'] = name_from_filename(item.filename)
+
+        warnings = []
+        if not fields.get('email'):
+            warnings.append('No usable email address found in the CV - please add one.')
+        if not fields.get('cv_summary'):
+            warnings.append('No AI summary was produced.')
+
+        fields['resume_url'] = _file_to_sharepoint(item, batch, content)
+        if getattr(settings, 'CV_PARSER_UPLOAD_TO_SHAREPOINT', True) and not fields['resume_url']:
+            warnings.append('CV was not filed to SharePoint - no CV link.')
 
         candidate = services.create_from_parsed_cv(
             fields, job=batch.job, source=batch.source,
             user=batch.created_by, performed_by=batch.performed_by,
-            remarks='Created via Bulk Upload CV (CV parsed by Logic App)',
+            remarks='Created via Bulk Upload CV (read directly by Azure OpenAI)',
         )
-        # Keep a copy of the file on the candidate itself, as the old bulk
-        # upload did - resume_url points at the SharePoint copy.
+        # Keep a copy of the file on the candidate itself, as before -
+        # resume_url points at the SharePoint copy when filing succeeded.
         candidate.resume_blob_url.save(item.filename, ContentFile(content), save=True)
 
         item.candidate = candidate
-        item.parsed_json = cv_parser.dump_response(data)
-        item.warning = warning
+        item.parsed_json = json.dumps(
+            {k: v for k, v in fields.items() if k != 'experience'})[:8000]
+        item.warning = ' · '.join(warnings)[:255] or None
         item.error_message = None
         item.status = STATUS.SUCCESS
-    except CVParseError as exc:
+    except CVExtractionError as exc:
         item.status = STATUS.ERROR
         item.error_message = str(exc)
     except Exception as exc:  # noqa: BLE001 - one bad CV must not stop the batch
