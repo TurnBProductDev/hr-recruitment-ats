@@ -23,10 +23,6 @@
           <div class="col-12"><label class="form-label">Description</label>{{ form.description }}</div>
           <div class="col-12"><label class="form-label">Requirements</label>{{ form.requirements }}</div>
           <div class="col-12">
-            <label class="form-label">Must-Have Requirements</label>{{ form.must_have_requirements }}
-            <div class="form-text">One per line. A candidate missing one weighs heavily against their overall fit score, not just a side note.</div>
-          </div>
-          <div class="col-12">
             <label class="form-label">Job Description File</label>{{ form.jd_file }}
             {% if object.jd_file %}<div class="small mt-1"><a href="{{ object.jd_file.url }}" target="_blank">Current JD</a></div>{% endif %}
           </div>

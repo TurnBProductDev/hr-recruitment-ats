@@ -18,20 +18,22 @@ class BootstrapFormMixin:
 class JobForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:
         model = Job
-        # job_type is deliberately excluded - Score Candidates judges fit
-        # holistically now rather than weighing skills/experience/education
-        # by a per-job-type rubric, so there is no "Scoring Profile" to pick
-        # (see candidates/match_scoring.py). The field/column stays on the
-        # model for old rows; it just has nothing left reading it.
+        # job_type and must_have_requirements are deliberately excluded -
+        # Score Candidates judges fit holistically now (see
+        # candidates/match_scoring.py) rather than weighing skills/experience/
+        # education by a per-job-type rubric or gating on a rigid must-have
+        # checklist; the model already treats a stated must-have as a serious
+        # mark against a candidate when it isn't evidenced. Both fields/
+        # columns stay on the model for old rows; nothing reads job_type
+        # anymore, and must_have_requirements is only ever read from existing
+        # data now (nothing new can be entered here).
         fields = ['job_code', 'title', 'location', 'openings', 'description', 'requirements',
-                  'must_have_requirements', 'status', 'opening_date', 'closing_date', 'jd_file']
+                  'status', 'opening_date', 'closing_date', 'jd_file']
         labels = {'job_code': 'Job Code'}
         widgets = {
             'job_code': forms.TextInput(attrs={'placeholder': 'e.g. HRBP-2026 (auto if blank)'}),
             'description': forms.Textarea(attrs={'rows': 4}),
             'requirements': forms.Textarea(attrs={'rows': 4}),
-            'must_have_requirements': forms.Textarea(
-                attrs={'rows': 3, 'placeholder': 'One requirement per line, e.g.\nMust have a valid driving licence\n5+ years in a regulated industry'}),
             'opening_date': forms.DateInput(attrs={'type': 'date'}),
             'closing_date': forms.DateInput(attrs={'type': 'date'}),
         }
