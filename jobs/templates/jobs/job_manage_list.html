@@ -44,7 +44,7 @@
     <div class="vac-subtitle">{{ jobs|length }} vacanc{{ jobs|length|pluralize:"y,ies" }}</div>
   </div>
   <div class="vac-head-actions">
-    {% if is_hr_admin %}
+    {% if is_hr_admin or is_recruiter %}
     <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#rejectClosedModal">
       <i class="bi bi-x-octagon"></i> Reject candidates of closed vacancies
     </button>
@@ -53,7 +53,7 @@
   </div>
 </div>
 
-{% if is_hr_admin %}
+{% if is_hr_admin or is_recruiter %}
 <div class="modal fade" id="rejectClosedModal" tabindex="-1">
   <div class="modal-dialog">
     <form method="post" action="{% url 'candidate_reject_closed' %}">

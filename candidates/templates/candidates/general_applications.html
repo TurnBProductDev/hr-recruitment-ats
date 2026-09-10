@@ -98,7 +98,7 @@
       <div class="ga-export-slot" id="exportSlot"></div>
     </div>
 
-    {% if is_hr_admin %}
+    {% if is_hr_admin or is_recruiter %}
     <div id="bulkBar" class="ga-bulkbar">
       <span><strong id="bulkCount">0</strong> selected</span>
       <div class="bulk-actions">
@@ -119,7 +119,7 @@
       <table id="generalTable" class="table table-hover align-middle w-100">
         <thead>
           <tr>
-            {% if is_hr_admin %}<th class="no-export" style="width:2rem">
+            {% if is_hr_admin or is_recruiter %}<th class="no-export" style="width:2rem">
               <input type="checkbox" class="form-check-input" id="selectAll" title="Select all on this page">
             </th>{% endif %}
             <th>Candidate</th><th>Applied Position</th><th>Source</th><th>Applied</th><th>Status</th><th class="text-end">Actions</th>
@@ -128,7 +128,7 @@
         <tbody>
           {% for c in candidates %}
           <tr>
-            {% if is_hr_admin %}<td class="no-export">
+            {% if is_hr_admin or is_recruiter %}<td class="no-export">
               <input type="checkbox" class="form-check-input row-select" value="{{ c.id }}"
                      aria-label="Select {{ c.full_name }}">
             </td>{% endif %}
@@ -149,7 +149,7 @@
             <td class="text-nowrap text-end">
               {# Re-assigning the vacancy lives on the candidate's own page, which has the vacancy picker. #}
               <a href="{% url 'candidate_timeline' c.id %}" class="btn btn-sm btn-outline-app">View</a>
-              {% if c.status != 'REJECTED' and c.status != 'BLACKLISTED' or is_hr_admin %}
+              {% if c.status != 'REJECTED' and c.status != 'BLACKLISTED' or is_hr_admin or is_recruiter %}
               <div class="dropdown d-inline-block">
                 <button class="btn btn-sm btn-outline-app kebab-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">&#8942;</button>
                 <ul class="dropdown-menu dropdown-menu-end">
@@ -159,7 +159,7 @@
                               data-title="Reject {{ c.full_name }}" data-require="1"
                               data-btn="btn-outline-danger" data-label="Reject">Reject</button></li>
                   {% endif %}
-                  {% if is_hr_admin %}
+                  {% if is_hr_admin or is_recruiter %}
                     {% if c.status != 'REJECTED' and c.status != 'BLACKLISTED' %}<li><hr class="dropdown-divider"></li>{% endif %}
                     <li><button type="button" class="dropdown-item text-danger act"
                                 data-action="{% url 'candidate_delete' c.id %}"
@@ -247,7 +247,7 @@ $(function () {
     bootstrap.Modal.getOrCreateInstance(document.getElementById('actionModal')).show(this);
   });
 
-  {% if is_hr_admin %}
+  {% if is_hr_admin or is_recruiter %}
   // --- Multi-select bulk bar -------------------------------------------------
   function selectedIds() {
     return $('#generalTable').find('.row-select:checked').map(function () { return this.value; }).get();

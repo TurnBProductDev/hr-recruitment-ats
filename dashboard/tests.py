@@ -204,10 +204,19 @@ class UserManagementTests(TestCase):
         data.update(overrides)
         return self.client.post(reverse('user_add'), data)
 
-    def test_non_admin_cannot_reach_the_users_page(self):
+    def test_recruiter_can_also_reach_the_users_page(self):
+        """Recruiter has the same create/modify access as Admin throughout
+        the main HR app, Users management included."""
         recruiter = get_user_model().objects.create_user('rec', 'rec@turnb.com', 'pw')
         recruiter.groups.add(Group.objects.get_or_create(name=RECRUITER)[0])
         self.client.force_login(recruiter)
+        response = self.client.get(reverse('user_list'))
+        self.assertEqual(response.status_code, 200)
+
+    def test_other_roles_cannot_reach_the_users_page(self):
+        viewer = get_user_model().objects.create_user('view', 'view@turnb.com', 'pw')
+        viewer.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
+        self.client.force_login(viewer)
         response = self.client.get(reverse('user_list'))
         self.assertEqual(response.status_code, 403)
 
@@ -283,12 +292,12 @@ class UserManagementTests(TestCase):
     def test_admin_can_step_down_once_another_admin_exists(self):
         """The rule is 'at least one Admin remains', not 'never touch your
         own account' - once a second Admin exists, self-demotion is fine.
-        fetch_redirect_response=False: stepping down immediately loses this
-        session access to the Users page it's redirected to (expected - a
-        Recruiter can't reach it), so following the redirect would 403."""
+        Recruiter can reach the Users page too, so this redirect target
+        loads fine post-demotion - unlike the deactivate case below, there's
+        no session-login side effect here worth skipping the fetch for."""
         self._second_admin()
         response = self._edit_admin(self.admin.pk, role=RECRUITER)
-        self.assertRedirects(response, reverse('user_list'), fetch_redirect_response=False)
+        self.assertRedirects(response, reverse('user_list'))
         self.admin.refresh_from_db()
         self.assertFalse(self.admin.groups.filter(name=HR_ADMIN).exists())
 

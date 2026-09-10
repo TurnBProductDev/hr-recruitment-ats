@@ -1310,8 +1310,8 @@ class CandidateRevertLastActionView(GroupRequiredMixin, View):
 
 
 class CandidateDeleteView(GroupRequiredMixin, View):
-    """Permanently delete a candidate and all their related records (HR Admin only)."""
-    allowed_groups = (HR_ADMIN,)
+    """Permanently delete a candidate and all their related records."""
+    allowed_groups = (HR_ADMIN, RECRUITER)
 
     def post(self, request, pk):
         candidate = get_object_or_404(Candidate, pk=pk)
@@ -1420,8 +1420,8 @@ class CandidateBulkBlacklistView(GroupRequiredMixin, View):
 
 class CandidateBulkDeleteView(GroupRequiredMixin, View):
     """Delete several candidates at once, ticked on the Candidate Repository
-    (HR Admin only, same as deleting one)."""
-    allowed_groups = (HR_ADMIN,)
+    (same access as deleting one)."""
+    allowed_groups = (HR_ADMIN, RECRUITER)
 
     def post(self, request):
         ids = request.POST.getlist('ids')
@@ -1442,7 +1442,7 @@ class CandidateBulkDeleteView(GroupRequiredMixin, View):
 class BulkRejectClosedVacanciesView(GroupRequiredMixin, View):
     """Move every still-active candidate under a CLOSED vacancy to Rejected.
     Hired and already-terminal candidates are left untouched."""
-    allowed_groups = (HR_ADMIN,)
+    allowed_groups = (HR_ADMIN, RECRUITER)
     ACTIVE = (STATUS.OPEN, STATUS.SHORTLISTED, STATUS.ROUND1, STATUS.INTERVIEW, STATUS.FINAL_SELECTION)
 
     def post(self, request):

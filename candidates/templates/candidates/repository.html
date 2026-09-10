@@ -196,7 +196,7 @@
       <div class="repo-export-slot" id="exportSlot"></div>
     </div>
 
-    {% if is_hr_admin %}
+    {% if is_hr_admin or is_recruiter %}
     <div id="bulkBar" class="repo-bulkbar">
       <span><strong id="bulkCount">0</strong> selected</span>
       <div class="bulk-actions">
@@ -234,7 +234,7 @@
       <table id="candidateTable" class="table table-hover align-middle w-100">
         <thead>
           <tr>
-            {% if is_hr_admin %}<th class="no-export" style="width:2rem">
+            {% if is_hr_admin or is_recruiter %}<th class="no-export" style="width:2rem">
               <input type="checkbox" class="form-check-input" id="selectAll" title="Select all on this page">
             </th>{% endif %}
             <th>Candidate</th><th>Role</th><th>Score</th><th>Exp.</th><th>Applied</th><th>Status</th><th class="text-end">Actions</th>
@@ -243,7 +243,7 @@
         <tbody>
           {% for c in candidates %}
           <tr>
-            {% if is_hr_admin %}<td class="no-export">
+            {% if is_hr_admin or is_recruiter %}<td class="no-export">
               <input type="checkbox" class="form-check-input row-select" value="{{ c.id }}"
                      aria-label="Select {{ c.full_name }}">
             </td>{% endif %}
@@ -292,7 +292,7 @@
               {% elif tab == 'rejected' %}
                 <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url 'candidate_shortlist' c.id %}" data-title="Move {{ c.full_name }} to Qualified" data-msg="Decision changed? This moves the candidate into the Qualified pipeline.">Move to Qualified</button>
               {% endif %}
-              {% if tab in 'open,shortlisted,round1,interview,final_selection' or is_hr_admin %}
+              {% if tab in 'open,shortlisted,round1,interview,final_selection' or is_hr_admin or is_recruiter %}
               <div class="dropdown d-inline-block">
                 <button class="btn btn-sm btn-outline-app kebab-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">&#8942;</button>
                 <ul class="dropdown-menu dropdown-menu-end">
@@ -302,7 +302,7 @@
                   <li><button type="button" class="dropdown-item text-danger act" data-action="{% url 'candidate_reject' c.id %}" data-title="Reject {{ c.full_name }}" data-require="1" data-btn="btn-outline-danger" data-label="Reject">Reject</button></li>
                   <li><button type="button" class="dropdown-item act" data-action="{% url 'candidate_blacklist' c.id %}" data-title="Blacklist {{ c.full_name }}" data-require="1" data-btn="btn-dark" data-label="Blacklist">Blacklist</button></li>
                   {% endif %}
-                  {% if is_hr_admin %}
+                  {% if is_hr_admin or is_recruiter %}
                     {% if tab in 'open,shortlisted,round1,interview,final_selection' %}<li><hr class="dropdown-divider"></li>{% endif %}
                     <li><button type="button" class="dropdown-item text-danger act" data-action="{% url 'candidate_delete' c.id %}" data-title="Delete {{ c.full_name }}?" data-nofields="1" data-btn="btn-danger" data-label="Delete permanently" data-msg="This permanently deletes the candidate and all their interviews, notes and history. This cannot be undone.">Delete</button></li>
                   {% endif %}
@@ -369,7 +369,7 @@ $(function () {
   // DataTables' default position, so it sits with the rest of the filters.
   table.buttons().container().appendTo('#exportSlot');
 
-  {% if is_hr_admin %}
+  {% if is_hr_admin or is_recruiter %}
   // --- Multi-select bulk bar -------------------------------------------------
   function selectedIds() {
     return $('#candidateTable').find('.row-select:checked').map(function () { return this.value; }).get();

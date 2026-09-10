@@ -10,7 +10,7 @@ from django.urls import reverse
 from django.views import View
 from django.views.generic import CreateView, ListView, UpdateView
 
-from candidates.permissions import ALL_GROUPS, HR_ADMIN, GroupRequiredMixin
+from candidates.permissions import ALL_GROUPS, HR_ADMIN, RECRUITER, GroupRequiredMixin
 
 from .user_forms import ROLE_LABELS, UserAccountForm
 
@@ -21,7 +21,7 @@ class UserListView(GroupRequiredMixin, ListView):
     model = User
     template_name = 'dashboard/user_list.html'
     context_object_name = 'accounts'
-    allowed_groups = (HR_ADMIN,)
+    allowed_groups = (HR_ADMIN, RECRUITER)
 
     def get_queryset(self):
         return (User.objects.filter(groups__name__in=ALL_GROUPS).distinct()
@@ -40,7 +40,7 @@ class UserCreateView(GroupRequiredMixin, CreateView):
     model = User
     form_class = UserAccountForm
     template_name = 'dashboard/user_form.html'
-    allowed_groups = (HR_ADMIN,)
+    allowed_groups = (HR_ADMIN, RECRUITER)
 
     def form_valid(self, form):
         response = super().form_valid(form)
@@ -62,7 +62,7 @@ class UserUpdateView(GroupRequiredMixin, UpdateView):
     model = User
     form_class = UserAccountForm
     template_name = 'dashboard/user_form.html'
-    allowed_groups = (HR_ADMIN,)
+    allowed_groups = (HR_ADMIN, RECRUITER)
 
     def get_object(self, queryset=None):
         obj = super().get_object(queryset)
@@ -94,7 +94,7 @@ class UserUpdateView(GroupRequiredMixin, UpdateView):
 class UserToggleActiveView(GroupRequiredMixin, View):
     """One-click Deactivate/Activate from the list, for when a full Edit
     isn't needed - a departed employee's access can be pulled in one click."""
-    allowed_groups = (HR_ADMIN,)
+    allowed_groups = (HR_ADMIN, RECRUITER)
 
     def post(self, request, pk):
         account = get_object_or_404(User, pk=pk)

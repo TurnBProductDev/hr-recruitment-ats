@@ -408,10 +408,19 @@ class BulkDeleteTests(TestCase):
         self.client.post(reverse('candidate_bulk_delete'), {'ids': []})
         self.assertEqual(Candidate.objects.count(), 3)
 
-    def test_non_admins_cannot_bulk_delete(self):
+    def test_recruiters_can_bulk_delete_too(self):
         recruiter = get_user_model().objects.create_user('rec', 'rec@example.com', 'pw')
         recruiter.groups.add(Group.objects.get_or_create(name=RECRUITER)[0])
         self.client.force_login(recruiter)
+        response = self.client.post(reverse('candidate_bulk_delete'),
+                                    {'ids': [self.candidates[0].pk]})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Candidate.objects.count(), 2)
+
+    def test_other_roles_cannot_bulk_delete(self):
+        viewer = get_user_model().objects.create_user('view', 'view@example.com', 'pw')
+        viewer.groups.add(Group.objects.get_or_create(name=HIRING_MANAGER)[0])
+        self.client.force_login(viewer)
         response = self.client.post(reverse('candidate_bulk_delete'),
                                     {'ids': [self.candidates[0].pk]})
         self.assertEqual(response.status_code, 403)

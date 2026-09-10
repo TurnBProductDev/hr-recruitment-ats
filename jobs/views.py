@@ -4,7 +4,7 @@ from django.urls import reverse, reverse_lazy
 from django.views import View
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
 
-from candidates.permissions import HR_ADMIN, GroupRequiredMixin
+from candidates.permissions import HR_ADMIN, RECRUITER, GroupRequiredMixin
 
 from .forms import JobForm
 from .models import Job
@@ -62,7 +62,7 @@ class JobCreateView(GroupRequiredMixin, CreateView):
     model = Job
     form_class = JobForm
     template_name = 'jobs/job_form.html'
-    allowed_groups = (HR_ADMIN,)
+    allowed_groups = (HR_ADMIN, RECRUITER)
     success_url = reverse_lazy('job_manage_list')
 
     def form_valid(self, form):
@@ -75,7 +75,7 @@ class JobUpdateView(GroupRequiredMixin, UpdateView):
     model = Job
     form_class = JobForm
     template_name = 'jobs/job_form.html'
-    allowed_groups = (HR_ADMIN,)
+    allowed_groups = (HR_ADMIN, RECRUITER)
     success_url = reverse_lazy('job_manage_list')
 
     def get_context_data(self, **kwargs):
@@ -89,7 +89,7 @@ class JobUpdateView(GroupRequiredMixin, UpdateView):
 
 
 class JobCloseView(GroupRequiredMixin, View):
-    allowed_groups = (HR_ADMIN,)
+    allowed_groups = (HR_ADMIN, RECRUITER)
 
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk)
@@ -100,7 +100,7 @@ class JobCloseView(GroupRequiredMixin, View):
 
 
 class JobArchiveView(GroupRequiredMixin, View):
-    allowed_groups = (HR_ADMIN,)
+    allowed_groups = (HR_ADMIN, RECRUITER)
 
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk)
@@ -111,7 +111,7 @@ class JobArchiveView(GroupRequiredMixin, View):
 
 
 class JobReopenView(GroupRequiredMixin, View):
-    allowed_groups = (HR_ADMIN,)
+    allowed_groups = (HR_ADMIN, RECRUITER)
 
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk)
