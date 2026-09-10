@@ -172,6 +172,15 @@ CV_PARSER_TIMEOUT = int(os.environ.get("CV_PARSER_TIMEOUT", "180"))
 # folder and returns a sharing link (stored on the candidate as resume_url).
 CV_PARSER_UPLOAD_TO_SHAREPOINT = os.environ.get("CV_PARSER_UPLOAD_TO_SHAREPOINT", "True") == "True"
 BULK_UPLOAD_MAX_FILES = int(os.environ.get("BULK_UPLOAD_MAX_FILES", "25"))
+
+# --- Outbound email -> `Send-Email-Notifier` Logic App ----------------------
+# HTTP POST URL of a small Logic App that sends mail via the same Office 365
+# connection already authorized for careers@turnb.com (reused from the CV
+# Logic Apps) - no SMTP password needed. Contains a SAS signature, so keep it
+# in app settings / .env, never in the repo, same as LOGIC_APP_CV_PARSER_URL
+# above. Unset = interview invites/rejections/interviewer notifications are
+# not sent (see candidates/logic_app_mail.py).
+LOGIC_APP_EMAIL_SENDER_URL = os.environ.get("LOGIC_APP_EMAIL_SENDER_URL", "")
 BULK_UPLOAD_MAX_MB = int(os.environ.get("BULK_UPLOAD_MAX_MB", "10"))
 
 # --- Score Candidates -> Azure OpenAI (direct) ------------------------------

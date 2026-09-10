@@ -8,12 +8,15 @@ takes whatever text is actually submitted rather than recomputing it.
 Recipient/CC are always derived server-side (never trusted from the
 client), since who gets CC'd is a fixed business rule, not user input.
 """
+import base64
+
 from django.conf import settings
-from django.core.mail import EmailMessage
 from django.utils import timezone
 from django.utils.dateformat import format as django_date_format
 
 from icalendar import Calendar, Event, vCalAddress, vText
+
+from candidates import logic_app_mail
 
 from .models import INTERVIEW_DURATION
 
@@ -124,9 +127,11 @@ def send_invite(interview, *, to_email, cc_emails, subject, body, sender):
         attendee_emails=[to_email] + list(cc_emails),
         summary=subject, description=body,
     )
-    email = EmailMessage(
-        subject=subject, body=body, from_email=from_email,
-        to=[to_email], cc=list(cc_emails),
+    logic_app_mail.send_email(
+        to_email=to_email, cc_emails=cc_emails, subject=subject, body=body,
+        attachments=[{
+            'Name': 'interview-invite.ics',
+            'ContentBytes': base64.b64encode(ics_bytes).decode('ascii'),
+            'ContentType': 'text/calendar',
+        }],
     )
-    email.attach('interview-invite.ics', ics_bytes, 'text/calendar; method=REQUEST; charset=UTF-8')
-    email.send(fail_silently=False)

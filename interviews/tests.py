@@ -17,7 +17,7 @@ from candidates.models import Candidate
 from candidates.permissions import HR_ADMIN, INTERVIEWER, RECRUITER
 from jobs.models import Job
 
-from . import graph_client
+from . import graph_client, invites, slot_emails
 from .graph_client import GraphError
 from .models import INTERVIEW_DURATION, Interview, InterviewReschedule, InterviewRequest
 
@@ -948,3 +948,48 @@ class AdminPortalSessionModeTests(TestCase):
         self.client.post(reverse('login'), {'username': 'admin2', 'password': 'pw'})
         response = self.client.get(reverse('interview_result', args=[self.interview.pk]))
         self.assertContains(response, reverse('candidate_timeline', args=[self.candidate.pk]))
+
+
+@override_settings(LOGIC_APP_EMAIL_SENDER_URL='https://logic.example/send-email')
+class InviteAndSlotEmailTests(TestCase):
+    """interviews/invites.py and interviews/slot_emails.py both send through
+    the Send-Email-Notifier Logic App (candidates/logic_app_mail.py), not
+    Django's own mail backend - same as candidates/rejection_emails.py."""
+
+    def setUp(self):
+        self.job = Job.objects.create(job_code='J1', title='Program Manager')
+        self.interviewer = get_user_model().objects.create_user(
+            'panel', 'panel@turnb.com', 'pw', first_name='Sreejith', last_name='K R')
+        self.interviewer.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
+        self.candidate = Candidate.objects.create(
+            full_name='Rose E G', email='rose@example.com', job=self.job)
+        self.interview = Interview.objects.create(
+            candidate=self.candidate, interviewer=self.interviewer,
+            round_type=Interview.RoundType.ROUND1,
+            scheduled_date=timezone.now() + timezone.timedelta(days=1))
+
+    def _ok_response(self):
+        return mock.Mock(status_code=200, text='')
+
+    def test_send_invite_posts_an_ics_attachment(self):
+        with mock.patch('candidates.logic_app_mail.requests.post',
+                        return_value=self._ok_response()) as post:
+            invites.send_invite(
+                self.interview, to_email='rose@example.com', cc_emails=['careers@turnb.com'],
+                subject='Interview Invite', body='See you then.', sender=self.interviewer)
+        payload = post.call_args.kwargs['json']
+        self.assertEqual(payload['to'], 'rose@example.com')
+        self.assertEqual(payload['subject'], 'Interview Invite')
+        self.assertEqual(len(payload['attachments']), 1)
+        self.assertEqual(payload['attachments'][0]['Name'], 'interview-invite.ics')
+
+    def test_notify_interviewer_new_request(self):
+        request_obj = InterviewRequest.objects.create(
+            candidate=self.candidate, round_type=Interview.RoundType.ROUND1,
+            interviewer=self.interviewer)
+        with mock.patch('candidates.logic_app_mail.requests.post',
+                        return_value=self._ok_response()) as post:
+            slot_emails.notify_interviewer_new_request(request_obj)
+        payload = post.call_args.kwargs['json']
+        self.assertEqual(payload['to'], self.interviewer.email)
+        self.assertIn(self.candidate.full_name, payload['body'])

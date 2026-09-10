@@ -11,7 +11,7 @@ from django.utils.html import format_html
 from django.views import View
 from django.views.generic import CreateView, ListView, UpdateView
 
-from candidates import services
+from candidates import logic_app_mail, services
 from candidates.models import Candidate, Note
 from candidates.permissions import (
     ANY_STAFF, HIRING_MANAGER, HR_ADMIN, INTERVIEWER, RECRUITER, GroupRequiredMixin, in_interviewer_portal,
@@ -174,7 +174,10 @@ class InterviewAllocateView(GroupRequiredMixin, CreateView):
             message=f'Propose 2-3 one-hour slots for {self.candidate.full_name} '
                     f'({self.object.get_round_type_display()}).',
             url=reverse('interviewer_propose_slots', args=[self.object.pk]))
-        slot_emails.notify_interviewer_new_request(self.object)
+        try:
+            slot_emails.notify_interviewer_new_request(self.object)
+        except logic_app_mail.EmailSendError as exc:
+            logger.warning('Could not email the new-allocation notice for request %s: %s', self.object.pk, exc)
         if _is_ajax(self.request):
             return HttpResponse(format_html(
                 '<div class="alert alert-success mb-0">Interviewer allocated - {} will propose available slots.</div>',
@@ -258,7 +261,10 @@ class InterviewRequestNewSlotsView(GroupRequiredMixin, View):
             request_obj.interviewer, title=f'New slots needed - {request_obj.candidate.full_name}',
             message=note or 'None of the proposed slots worked for HR - please propose new ones.',
             url=reverse('interviewer_propose_slots', args=[request_obj.pk]))
-        slot_emails.notify_interviewer_new_slots_needed(request_obj, note=note)
+        try:
+            slot_emails.notify_interviewer_new_slots_needed(request_obj, note=note)
+        except logic_app_mail.EmailSendError as exc:
+            logger.warning('Could not email the new-slots-needed notice for request %s: %s', request_obj.pk, exc)
         messages.success(request, 'Asked the interviewer to propose new slots.')
         return redirect('candidate_timeline', pk=request_obj.candidate_id)
 

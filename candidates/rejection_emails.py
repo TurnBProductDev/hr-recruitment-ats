@@ -12,7 +12,8 @@ HR user reviews and can edit before sending, with the recipient/CC always
 derived server-side rather than trusted from the client.
 """
 from django.conf import settings
-from django.core.mail import EmailMessage
+
+from . import logic_app_mail
 
 
 def default_subject(candidate):
@@ -51,6 +52,4 @@ def default_cc_list():
 def send_rejection_email(*, to_email, cc_emails, subject, body):
     """Send the rejection email. Raises on failure - the caller decides how
     to surface that (never silently swallowed)."""
-    from_email = getattr(settings, 'INTERVIEW_INVITE_FROM_EMAIL', None) or settings.DEFAULT_FROM_EMAIL
-    email = EmailMessage(subject=subject, body=body, from_email=from_email, to=[to_email], cc=list(cc_emails))
-    email.send(fail_silently=False)
+    logic_app_mail.send_email(to_email=to_email, cc_emails=cc_emails, subject=subject, body=body)

@@ -5,6 +5,8 @@ as-is). Everything else in the app (dashboard, candidate repository, job
 management, the full interview scheduler, ...) is off-limits to this role -
 see candidates.permissions.ANY_STAFF, which deliberately excludes Interviewer.
 """
+import logging
+
 from django.contrib import messages
 from django.contrib.auth import views as auth_views
 from django.shortcuts import get_object_or_404, redirect, render
@@ -15,12 +17,15 @@ from django.views.generic import DetailView, ListView
 
 from notifications import services as notifications
 
+from candidates import logic_app_mail
 from candidates.models import Candidate
 from candidates.permissions import HR_ADMIN, INTERVIEWER, PORTAL_SESSION_KEY, GroupRequiredMixin
 
 from . import slot_emails
 from .forms import InterviewSlotProposalForm
 from .models import Interview, InterviewRequest, InterviewSlot
+
+logger = logging.getLogger(__name__)
 
 
 def _is_admin(user):
@@ -164,7 +169,10 @@ class InterviewProposeSlotsView(GroupRequiredMixin, View):
                 message=f'{request_obj.interviewer.get_full_name() or request_obj.interviewer.get_username()} '
                         f'proposed slots for {request_obj.get_round_type_display()} - pick one to confirm.',
                 url=reverse('candidate_timeline', args=[request_obj.candidate_id]))
-        slot_emails.notify_hr_slots_proposed(request_obj)
+        try:
+            slot_emails.notify_hr_slots_proposed(request_obj)
+        except logic_app_mail.EmailSendError as exc:
+            logger.warning('Could not email the slots-proposed notice for request %s: %s', request_obj.pk, exc)
         messages.success(request, 'Slots submitted - HR will pick one and confirm the interview.')
         return redirect('interviewer_home')
 

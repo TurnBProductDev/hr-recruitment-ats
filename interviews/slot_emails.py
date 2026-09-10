@@ -1,22 +1,17 @@
-"""Emails for the interviewer-proposes-slots flow (InterviewRequest). Sent the
-same way as interviews/invites.py and candidates/rejection_emails.py - plain
-Django EmailMessage, console backend in dev until real SMTP is configured -
-and always paired with an in-app notifications.services.notify() call at the
+"""Emails for the interviewer-proposes-slots flow (InterviewRequest). Sent
+via the Send-Email-Notifier Logic App (see candidates/logic_app_mail.py) -
+always paired with an in-app notifications.services.notify() call at the
 call site, never sent alone.
 """
-from django.conf import settings
-from django.core.mail import EmailMessage
 from django.utils import timezone
+
+from candidates import logic_app_mail
 
 
 def _role_name(candidate):
     if candidate.job and candidate.job.title:
         return candidate.job.title
     return candidate.role_applied or 'the role'
-
-
-def _from_email():
-    return getattr(settings, 'INTERVIEW_INVITE_FROM_EMAIL', None) or settings.DEFAULT_FROM_EMAIL
 
 
 def notify_interviewer_new_request(interview_request):
@@ -35,7 +30,7 @@ def notify_interviewer_new_request(interview_request):
         f'available, so HR can pick one and schedule the interview.\n\n'
         f'Regards,\nHireB'
     )
-    EmailMessage(subject=subject, body=body, from_email=_from_email(), to=[interviewer.email]).send(fail_silently=False)
+    logic_app_mail.send_email(to_email=interviewer.email, subject=subject, body=body)
 
 
 def notify_hr_slots_proposed(interview_request):
@@ -56,7 +51,7 @@ def notify_hr_slots_proposed(interview_request):
         f'Please pick one from the candidate\'s profile to confirm the interview.\n\n'
         f'Regards,\nHireB'
     )
-    EmailMessage(subject=subject, body=body, from_email=_from_email(), to=[hr_user.email]).send(fail_silently=False)
+    logic_app_mail.send_email(to_email=hr_user.email, subject=subject, body=body)
 
 
 def notify_interviewer_new_slots_needed(interview_request, note=''):
@@ -74,4 +69,4 @@ def notify_interviewer_new_slots_needed(interview_request, note=''):
         f'{chr(10) + chr(10) + "Note from HR: " + note if note else ""}\n\n'
         f'Regards,\nHireB'
     )
-    EmailMessage(subject=subject, body=body, from_email=_from_email(), to=[interviewer.email]).send(fail_silently=False)
+    logic_app_mail.send_email(to_email=interviewer.email, subject=subject, body=body)

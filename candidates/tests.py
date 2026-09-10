@@ -18,7 +18,7 @@ from django.utils import timezone
 from interviews.models import Interview, InterviewRequest
 from jobs.models import Job
 
-from . import bulk, cv_parser, rejection_emails, screening_questions, services
+from . import bulk, cv_parser, logic_app_mail, rejection_emails, screening_questions, services
 from .cv_parser import CVParseError
 from .models import BulkUploadBatch, BulkUploadItem, Candidate, CommunicationLog, EmailRegistry
 from .permissions import HIRING_MANAGER, HR_ADMIN, INTERVIEWER, RECRUITER
@@ -146,6 +146,53 @@ class ParseCVTests(TestCase):
     def test_unconfigured_is_a_clear_error(self):
         with self.assertRaises(CVParseError) as ctx:
             cv_parser.parse_cv('cv.pdf', b'bytes')
+        self.assertIn('not configured', str(ctx.exception))
+
+
+@override_settings(LOGIC_APP_EMAIL_SENDER_URL='https://logic.example/send-email')
+class LogicAppMailTests(TestCase):
+    """Every outbound email goes through the Send-Email-Notifier Logic App
+    (see candidates/logic_app_mail.py) instead of Django's own mail backend -
+    same request/error-handling shape as candidates/cv_parser.py."""
+
+    def _response(self, status_code=200, text=''):
+        return mock.Mock(status_code=status_code, text=text)
+
+    def test_posts_the_expected_payload(self):
+        with mock.patch('candidates.logic_app_mail.requests.post',
+                        return_value=self._response()) as post:
+            logic_app_mail.send_email(
+                to_email='rose@example.com', subject='Hello', body='Body text.',
+                cc_emails=['careers@turnb.com', 'amrita@turnb.com'])
+        payload = post.call_args.kwargs['json']
+        self.assertEqual(payload['to'], 'rose@example.com')
+        self.assertEqual(payload['subject'], 'Hello')
+        self.assertEqual(payload['body'], 'Body text.')
+        self.assertEqual(payload['cc'], 'careers@turnb.com; amrita@turnb.com')
+
+    def test_no_cc_sends_an_empty_string(self):
+        with mock.patch('candidates.logic_app_mail.requests.post', return_value=self._response()) as post:
+            logic_app_mail.send_email(to_email='rose@example.com', subject='Hello', body='Body text.')
+        self.assertEqual(post.call_args.kwargs['json']['cc'], '')
+
+    def test_attachments_are_passed_through(self):
+        attachments = [{'Name': 'invite.ics', 'ContentBytes': 'YWJj', 'ContentType': 'text/calendar'}]
+        with mock.patch('candidates.logic_app_mail.requests.post', return_value=self._response()) as post:
+            logic_app_mail.send_email(
+                to_email='rose@example.com', subject='Hello', body='Body.', attachments=attachments)
+        self.assertEqual(post.call_args.kwargs['json']['attachments'], attachments)
+
+    def test_http_error_is_reported(self):
+        with mock.patch('candidates.logic_app_mail.requests.post',
+                        return_value=self._response(status_code=502, text='Bad gateway')):
+            with self.assertRaises(logic_app_mail.EmailSendError) as ctx:
+                logic_app_mail.send_email(to_email='rose@example.com', subject='Hello', body='Body.')
+        self.assertIn('502', str(ctx.exception))
+
+    @override_settings(LOGIC_APP_EMAIL_SENDER_URL='')
+    def test_unconfigured_is_a_clear_error(self):
+        with self.assertRaises(logic_app_mail.EmailSendError) as ctx:
+            logic_app_mail.send_email(to_email='rose@example.com', subject='Hello', body='Body.')
         self.assertIn('not configured', str(ctx.exception))
 
 
@@ -1449,22 +1496,23 @@ class RejectionEmailPopupTests(TestCase):
         self.assertContains(response, 'Amrita.Sunilkumar@turnb.com')
 
     def test_send_rejects_the_candidate_and_emails_them(self):
-        response = self.client.post(reverse('candidate_send_rejection', args=[self.candidate.pk]), {
-            'to_email': 'rose@example.com', 'subject': 'Custom subject', 'body': 'Custom body.',
-            'reason': 'Did not meet the bar.', 'next': reverse('candidate_timeline', args=[self.candidate.pk]),
-        })
+        with mock.patch('candidates.views.rejection_emails.send_rejection_email') as send:
+            response = self.client.post(reverse('candidate_send_rejection', args=[self.candidate.pk]), {
+                'to_email': 'rose@example.com', 'subject': 'Custom subject', 'body': 'Custom body.',
+                'reason': 'Did not meet the bar.', 'next': reverse('candidate_timeline', args=[self.candidate.pk]),
+            })
         self.assertRedirects(response, reverse('candidate_timeline', args=[self.candidate.pk]))
         self.candidate.refresh_from_db()
         self.assertEqual(self.candidate.status, Candidate.Status.REJECTED)
         self.assertEqual(self.candidate.history.latest('changed_at').remarks, 'Did not meet the bar.')
 
-        self.assertEqual(len(mail.outbox), 1)
-        sent = mail.outbox[0]
-        self.assertEqual(sent.to, ['rose@example.com'])
-        self.assertEqual(sent.subject, 'Custom subject')
-        self.assertEqual(sent.body, 'Custom body.')
-        self.assertIn('careers@turnb.com', sent.cc)
-        self.assertIn('Amrita.Sunilkumar@turnb.com', sent.cc)
+        send.assert_called_once()
+        kwargs = send.call_args.kwargs
+        self.assertEqual(kwargs['to_email'], 'rose@example.com')
+        self.assertEqual(kwargs['subject'], 'Custom subject')
+        self.assertEqual(kwargs['body'], 'Custom body.')
+        self.assertIn('careers@turnb.com', kwargs['cc_emails'])
+        self.assertIn('Amrita.Sunilkumar@turnb.com', kwargs['cc_emails'])
 
     def test_send_settles_a_pending_interview_result_as_fail(self):
         interview = Interview.objects.create(
@@ -1498,10 +1546,11 @@ class RejectionEmailPopupTests(TestCase):
         self.assertEqual(self.candidate.status, Candidate.Status.REJECTED)
 
     def test_ajax_send_returns_json(self):
-        response = self.client.post(
-            reverse('candidate_send_rejection', args=[self.candidate.pk]),
-            {'to_email': 'rose@example.com', 'subject': 'S', 'body': 'B'},
-            HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        with mock.patch('candidates.views.rejection_emails.send_rejection_email'):
+            response = self.client.post(
+                reverse('candidate_send_rejection', args=[self.candidate.pk]),
+                {'to_email': 'rose@example.com', 'subject': 'S', 'body': 'B'},
+                HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {'ok': True})
 
