@@ -1,123 +1,228 @@
 {
-  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
-  "actions": {
-    "Condition": {
-      "actions": {
-        "For_each": {
-          "actions": {
-            "Condition_1": {
-              "actions": {
-                "Call_CV_Extract_API": {
-                  "inputs": {
-                    "method": "POST",
-                    "uri": "@parameters('djangoApiUrl')",
-                    "headers": {
-                      "Content-Type": "application/json",
-                      "X-Api-Key": "@parameters('djangoApiKey')"
-                    },
-                    "body": {
-                      "content_base64": "@base64(body('Get_Attachment_(V2)')?['contentBytes'])",
-                      "email_subject": "@triggerBody()?['subject']",
-                      "email_body": "@outputs('Html_to_text')?['body']"
-                    },
-                    "retryPolicy": {
-                      "type": "exponential",
-                      "count": 2,
-                      "interval": "PT10S"
-                    }
-                  },
-                  "runAfter": {},
-                  "type": "Http"
-                },
-                "Parse_extract_response": {
-                  "inputs": {
-                    "content": "@body('Call_CV_Extract_API')",
-                    "schema": {
-                      "type": "object",
-                      "properties": {
-                        "status": { "type": "string" },
-                        "message": { "type": "string" },
-                        "source": { "type": ["string", "null"] },
-                        "full_name": { "type": ["string", "null"] },
-                        "email": { "type": ["string", "null"] },
-                        "phone": { "type": ["string", "null"] },
-                        "dob": { "type": ["string", "null"] },
-                        "current_location": { "type": ["string", "null"] },
-                        "linkedin": { "type": ["string", "null"] },
-                        "portfolio_url": { "type": ["string", "null"] },
-                        "qualification": { "type": ["string", "null"] },
-                        "last_role": { "type": ["string", "null"] },
-                        "last_company": { "type": ["string", "null"] },
-                        "total_experience_years": { "type": ["number", "null"] },
-                        "skills": { "type": ["string", "null"] },
-                        "notice_period": { "type": ["string", "null"] },
-                        "expected_salary": { "type": ["string", "null"] },
-                        "current_salary": { "type": ["string", "null"] },
-                        "role_applied": { "type": ["string", "null"] },
-                        "cv_summary": { "type": ["string", "null"] },
-                        "experience": { "type": "array" }
-                      }
-                    }
-                  },
-                  "runAfter": {
-                    "Call_CV_Extract_API": [
-                      "Succeeded"
-                    ]
-                  },
-                  "type": "ParseJson"
-                },
-                "Condition_2": {
-                  "actions": {
-                    "Execute_stored_procedure_(V2)": {
-                      "inputs": {
-                        "body": {
-                          "cv_link": "@if(equals(actions('Create_blob')?['status'], 'Succeeded'), concat('https://hirebcvfiles.blob.core.windows.net/candidate-cvs/', encodeURIComponent(body('Get_Attachment_(V2)')?['name'])), body('Create_sharing_link_for_a_file_or_folder')?['link']?['webUrl'])",
-                          "cv_summary": "@coalesce(body('Parse_extract_response')?['cv_summary'], '')",
-                          "education": "@body('Parse_extract_response')?['qualification']",
-                          "email": "@body('Parse_extract_response')?['email']",
-                          "full_name": "@body('Parse_extract_response')?['full_name']",
-                          "mail_date": "@formatDateTime(triggerOutputs()?['body/receivedDateTime'], 'yyyy-MM-dd')",
-                          "phone": "@body('Parse_extract_response')?['phone']",
-                          "role_applied": "@body('Parse_extract_response')?['role_applied']",
-                          "source": "@first(body('Filter_array'))?['Agency Name']",
-                          "linkedin": "@body('Parse_extract_response')?['linkedin']",
-                          "portfolio_url": "@body('Parse_extract_response')?['portfolio_url']",
-                          "current_location": "@body('Parse_extract_response')?['current_location']",
-                          "dob": "@body('Parse_extract_response')?['dob']",
-                          "last_role": "@body('Parse_extract_response')?['last_role']",
-                          "last_company": "@body('Parse_extract_response')?['last_company']",
-                          "total_experience_years": "@body('Parse_extract_response')?['total_experience_years']",
-                          "skills": "@body('Parse_extract_response')?['skills']",
-                          "notice_period": "@body('Parse_extract_response')?['notice_period']",
-                          "expected_salary": "@body('Parse_extract_response')?['expected_salary']",
-                          "current_salary": "@body('Parse_extract_response')?['current_salary']",
-                          "experience_json": "@string(coalesce(body('Parse_extract_response')?['experience'], createArray()))"
-                        },
-                        "host": {
-                          "connection": {
-                            "name": "@parameters('$connections')['sql']['connectionId']"
-                          }
-                        },
-                        "method": "post",
-                        "path": "/v2/datasets/@{encodeURIComponent(encodeURIComponent('default'))},@{encodeURIComponent(encodeURIComponent('default'))}/procedures/@{encodeURIComponent(encodeURIComponent('[dbo].[sp_intake_add_candidate]'))}"
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "When_a_new_email_arrives_(V3)": {
+        "inputs": {
+          "fetch": {
+            "method": "get",
+            "pathTemplate": {
+              "template": "/v3/Mail/OnNewEmail"
+            },
+            "queries": {
+              "fetchOnlyWithAttachment": true,
+              "folderPath": "Id::AQMkADA2YTU5NjVmLWU3MjgtNDk5AS1hN2ExLWNkNWNhMjRkM2ZlNAAuAAADUkGdCUm1vEq75ji2GhgRwgEA_82QtF4kQUKmGgt8NH9htAAAAgEMAAAA",
+              "includeAttachments": true
+            }
+          },
+          "host": {
+            "connection": {
+              "name": "@parameters('$connections')['office365']['connectionId']"
+            }
+          },
+          "subscribe": {
+            "body": {
+              "NotificationUrl": "@listCallbackUrl()"
+            },
+            "method": "post",
+            "pathTemplate": {
+              "template": "/GraphMailSubscriptionPoke/$subscriptions"
+            },
+            "queries": {
+              "fetchOnlyWithAttachment": true,
+              "folderPath": "Id::AQMkADA2YTU5NjVmLWU3MjgtNDk5AS1hN2ExLWNkNWNhMjRkM2ZlNAAuAAADUkGdCUm1vEq75ji2GhgRwgEA_82QtF4kQUKmGgt8NH9htAAAAgEMAAAA"
+            }
+          }
+        },
+        "metadata": {
+          "Id::AQMkADA2YTU5NjVmLWU3MjgtNDk5AS1hN2ExLWNkNWNhMjRkM2ZlNAAuAAADUkGdCUm1vEq75ji2GhgRwgEA_82QtF4kQUKmGgt8NH9htAAAAgEMAAAA": "Inbox"
+        },
+        "runtimeConfiguration": {
+          "concurrency": {
+            "runs": 1
+          }
+        },
+        "splitOn": "@triggerBody()?['value']",
+        "type": "ApiConnectionNotification"
+      }
+    },
+    "actions": {
+      "Condition": {
+        "actions": {
+          "For_each": {
+            "actions": {
+              "Condition_1": {
+                "actions": {
+                  "Call_CV_Extract_API": {
+                    "inputs": {
+                      "method": "POST",
+                      "uri": "@parameters('djangoApiUrl')",
+                      "headers": {
+                        "Content-Type": "application/json",
+                        "X-Api-Key": "@parameters('djangoApiKey')"
                       },
-                      "type": "ApiConnection"
-                    }
+                      "body": {
+                        "content_base64": "@body('Get_Attachment_(V2)')?['contentBytes']",
+                        "email_subject": "@triggerBody()?['subject']",
+                        "email_body": "@outputs('Html_to_text')?['body']"
+                      },
+                      "retryPolicy": {
+                        "type": "exponential",
+                        "count": 2,
+                        "interval": "PT10S"
+                      }
+                    },
+                    "runAfter": {},
+                    "type": "Http"
                   },
-                  "else": {
+                  "Parse_extract_response": {
+                    "inputs": {
+                      "content": "@body('Call_CV_Extract_API')",
+                      "schema": {
+                        "type": "object",
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "full_name": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "email": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "phone": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "dob": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "current_location": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "linkedin": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "portfolio_url": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "qualification": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "last_role": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "last_company": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "total_experience_years": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "skills": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "notice_period": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "expected_salary": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "current_salary": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "role_applied": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "cv_summary": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "experience": {
+                            "type": "array"
+                          }
+                        }
+                      }
+                    },
+                    "runAfter": {
+                      "Call_CV_Extract_API": [
+                        "Succeeded"
+                      ]
+                    },
+                    "type": "ParseJson"
+                  },
+                  "Condition_2": {
                     "actions": {
-                      "Execute_stored_procedure_(V2)_1": {
+                      "Execute_stored_procedure_(V2)": {
                         "inputs": {
                           "body": {
                             "cv_link": "@if(equals(actions('Create_blob')?['status'], 'Succeeded'), concat('https://hirebcvfiles.blob.core.windows.net/candidate-cvs/', encodeURIComponent(body('Get_Attachment_(V2)')?['name'])), body('Create_sharing_link_for_a_file_or_folder')?['link']?['webUrl'])",
                             "cv_summary": "@coalesce(body('Parse_extract_response')?['cv_summary'], '')",
                             "education": "@body('Parse_extract_response')?['qualification']",
-                            "email": "@body('Parse_extract_response')?['email']",
-                            "full_name": "@body('Parse_extract_response')?['full_name']",
+                            "email": "@coalesce(body('Parse_extract_response')?['email'], concat('pending-', guid(), '@placeholder.local'))",
+                            "full_name": "@coalesce(body('Parse_extract_response')?['full_name'], body('Get_Attachment_(V2)')?['name'], 'Unnamed Candidate')",
                             "mail_date": "@formatDateTime(triggerOutputs()?['body/receivedDateTime'], 'yyyy-MM-dd')",
                             "phone": "@body('Parse_extract_response')?['phone']",
                             "role_applied": "@body('Parse_extract_response')?['role_applied']",
-                            "source": "@coalesce(body('Parse_extract_response')?['source'], 'Careers')",
+                            "source": "@first(body('Filter_array'))?['Agency Name']",
                             "linkedin": "@body('Parse_extract_response')?['linkedin']",
                             "portfolio_url": "@body('Parse_extract_response')?['portfolio_url']",
                             "current_location": "@body('Parse_extract_response')?['current_location']",
@@ -129,7 +234,7 @@
                             "notice_period": "@body('Parse_extract_response')?['notice_period']",
                             "expected_salary": "@body('Parse_extract_response')?['expected_salary']",
                             "current_salary": "@body('Parse_extract_response')?['current_salary']",
-                            "experience_json": "@string(coalesce(body('Parse_extract_response')?['experience'], createArray()))"
+                            "experience_json": "@string(coalesce(body('Parse_extract_response')?['experience'], json('[]')))"
                           },
                           "host": {
                             "connection": {
@@ -141,336 +246,392 @@
                         },
                         "type": "ApiConnection"
                       }
-                    }
-                  },
-                  "expression": {
-                    "and": [
-                      {
-                        "greater": [
-                          "@length(body('Filter_array'))",
-                          0
-                        ]
-                      }
-                    ]
-                  },
-                  "runAfter": {
-                    "Create_blob": [
-                      "Succeeded",
-                      "Failed",
-                      "TimedOut",
-                      "Skipped"
-                    ],
-                    "Filter_array": [
-                      "Succeeded"
-                    ]
-                  },
-                  "type": "If"
-                },
-                "Create_file_1": {
-                  "inputs": {
-                    "body": "@base64ToBinary(body('Get_Attachment_(V2)')?['contentBytes'])",
-                    "host": {
-                      "connection": {
-                        "name": "@parameters('$connections')['sharepointonline-1']['connectionId']"
-                      }
                     },
-                    "method": "post",
-                    "path": "/datasets/@{encodeURIComponent(encodeURIComponent('https://netorg519925.sharepoint.com/sites/TeamHR'))}/files",
-                    "queries": {
-                      "folderPath": "/Shared Documents/General/HR - Docs/TurnB - HR/Recruitment/Resume Received",
-                      "name": "@body('Get_Attachment_(V2)')?['name']",
-                      "queryParametersSingleEncoded": true
-                    }
-                  },
-                  "runAfter": {
-                    "Parse_extract_response": [
-                      "Succeeded",
-                      "Failed",
-                      "TimedOut",
-                      "Skipped"
-                    ]
-                  },
-                  "runtimeConfiguration": {
-                    "contentTransfer": {
-                      "transferMode": "Chunked"
-                    }
-                  },
-                  "type": "ApiConnection"
-                },
-                "Create_blob": {
-                  "inputs": {
-                    "body": "@base64ToBinary(body('Get_Attachment_(V2)')?['contentBytes'])",
-                    "host": {
-                      "connection": {
-                        "name": "@parameters('$connections')['azureblob']['connectionId']"
+                    "else": {
+                      "actions": {
+                        "Execute_stored_procedure_(V2)_1": {
+                          "inputs": {
+                            "body": {
+                              "cv_link": "@if(equals(actions('Create_blob')?['status'], 'Succeeded'), concat('https://hirebcvfiles.blob.core.windows.net/candidate-cvs/', encodeURIComponent(body('Get_Attachment_(V2)')?['name'])), body('Create_sharing_link_for_a_file_or_folder')?['link']?['webUrl'])",
+                              "cv_summary": "@coalesce(body('Parse_extract_response')?['cv_summary'], '')",
+                              "education": "@body('Parse_extract_response')?['qualification']",
+                              "email": "@coalesce(body('Parse_extract_response')?['email'], concat('pending-', guid(), '@placeholder.local'))",
+                              "full_name": "@coalesce(body('Parse_extract_response')?['full_name'], body('Get_Attachment_(V2)')?['name'], 'Unnamed Candidate')",
+                              "mail_date": "@formatDateTime(triggerOutputs()?['body/receivedDateTime'], 'yyyy-MM-dd')",
+                              "phone": "@body('Parse_extract_response')?['phone']",
+                              "role_applied": "@body('Parse_extract_response')?['role_applied']",
+                              "source": "@coalesce(body('Parse_extract_response')?['source'], 'Careers')",
+                              "linkedin": "@body('Parse_extract_response')?['linkedin']",
+                              "portfolio_url": "@body('Parse_extract_response')?['portfolio_url']",
+                              "current_location": "@body('Parse_extract_response')?['current_location']",
+                              "dob": "@body('Parse_extract_response')?['dob']",
+                              "last_role": "@body('Parse_extract_response')?['last_role']",
+                              "last_company": "@body('Parse_extract_response')?['last_company']",
+                              "total_experience_years": "@body('Parse_extract_response')?['total_experience_years']",
+                              "skills": "@body('Parse_extract_response')?['skills']",
+                              "notice_period": "@body('Parse_extract_response')?['notice_period']",
+                              "expected_salary": "@body('Parse_extract_response')?['expected_salary']",
+                              "current_salary": "@body('Parse_extract_response')?['current_salary']",
+                              "experience_json": "@string(coalesce(body('Parse_extract_response')?['experience'], json('[]')))"
+                            },
+                            "host": {
+                              "connection": {
+                                "name": "@parameters('$connections')['sql']['connectionId']"
+                              }
+                            },
+                            "method": "post",
+                            "path": "/v2/datasets/@{encodeURIComponent(encodeURIComponent('default'))},@{encodeURIComponent(encodeURIComponent('default'))}/procedures/@{encodeURIComponent(encodeURIComponent('[dbo].[sp_intake_add_candidate]'))}"
+                          },
+                          "type": "ApiConnection"
+                        }
                       }
                     },
-                    "method": "post",
-                    "path": "/datasets/default/files",
-                    "queries": {
-                      "folderPath": "/candidate-cvs",
-                      "name": "@body('Get_Attachment_(V2)')?['name']",
-                      "queryParametersSingleEncoded": true
-                    }
-                  },
-                  "runAfter": {
-                    "Parse_extract_response": [
-                      "Succeeded",
-                      "Failed",
-                      "TimedOut",
-                      "Skipped"
-                    ]
-                  },
-                  "runtimeConfiguration": {
-                    "contentTransfer": {
-                      "transferMode": "Chunked"
-                    }
-                  },
-                  "type": "ApiConnection"
-                },
-                "Create_sharing_link_for_a_file_or_folder": {
-                  "inputs": {
-                    "body": {
-                      "scope": "organization",
-                      "type": "edit"
+                    "expression": {
+                      "and": [
+                        {
+                          "greater": [
+                            "@length(body('Filter_array'))",
+                            0
+                          ]
+                        }
+                      ]
                     },
-                    "host": {
-                      "connection": {
-                        "name": "@parameters('$connections')['sharepointonline']['connectionId']"
-                      }
+                    "runAfter": {
+                      "Create_blob": [
+                        "Succeeded",
+                        "Failed",
+                        "TimedOut",
+                        "Skipped"
+                      ],
+                      "Filter_array": [
+                        "Succeeded"
+                      ]
                     },
-                    "method": "post",
-                    "path": "/datasets/@{encodeURIComponent(encodeURIComponent('https://netorg519925.sharepoint.com/sites/TeamHR'))}/codeless/_api/v2.0/sites/root/lists/@{encodeURIComponent(encodeURIComponent('55178891-31a8-46cc-9a03-23970fab1fcd'))}/items/@{encodeURIComponent(encodeURIComponent(body('Create_file_1')?['ItemId']))}/driveItem/createLink"
+                    "type": "If"
                   },
-                  "runAfter": {
-                    "Create_file_1": [
-                      "Succeeded"
-                    ]
-                  },
-                  "type": "ApiConnection"
-                },
-                "Filter_array": {
-                  "inputs": {
-                    "from": "@body('List_rows_present_in_a_table')?['value']",
-                    "where": "@endsWith(triggerBody()?['from'], item()?['EMAIL IDs'])"
-                  },
-                  "runAfter": {
-                    "List_rows_present_in_a_table": [
-                      "Succeeded"
-                    ]
-                  },
-                  "type": "Query"
-                },
-                "List_rows_present_in_a_table": {
-                  "inputs": {
-                    "host": {
-                      "connection": {
-                        "name": "@parameters('$connections')['excelonlinebusiness']['connectionId']"
-                      }
-                    },
-                    "method": "get",
-                    "path": "/drives/@{encodeURIComponent('b!wKeoKu8tDk6vvSyxANYWq9--QEGIUO9Hn9Ho_75eTFyRiBdVqDHMRpoDI5cPqx_N')}/files/@{encodeURIComponent(encodeURIComponent('017OMLUA3R2KFNYYBHNJGYGHHFXWIJSHU6'))}/tables/@{encodeURIComponent('{7A04E27E-3A4E-4D27-8DB4-B7ECA0FEDBAA}')}/items",
-                    "queries": {
-                      "source": "groups/d2a9fd4f-4485-4772-976c-877eca4547e2"
-                    }
-                  },
-                  "metadata": {
-                    "017OMLUA3R2KFNYYBHNJGYGHHFXWIJSHU6": "/General/HR - Docs/TurnB - HR/Recruitment/Resume Received Data/Book.xlsx"
-                  },
-                  "runAfter": {
-                    "Create_sharing_link_for_a_file_or_folder": [
-                      "Succeeded"
-                    ]
-                  },
-                  "type": "ApiConnection"
-                }
-              },
-              "else": {
-                "actions": {}
-              },
-              "expression": {
-                "and": [
-                  {
-                    "or": [
-                      {
-                        "endsWith": [
-                          "@body('Get_Attachment_(V2)')?['name']",
-                          ".pdf"
-                        ]
+                  "Create_file_1": {
+                    "inputs": {
+                      "body": "@base64ToBinary(body('Get_Attachment_(V2)')?['contentBytes'])",
+                      "host": {
+                        "connection": {
+                          "name": "@parameters('$connections')['sharepointonline-1']['connectionId']"
+                        }
                       },
-                      {
-                        "endsWith": [
-                          "@body('Get_Attachment_(V2)')?['name']",
-                          ".docx"
-                        ]
-                      },
-                      {
-                        "endsWith": [
-                          "@body('Get_Attachment_(V2)')?['name']",
-                          ".doc"
-                        ]
+                      "method": "post",
+                      "path": "/datasets/@{encodeURIComponent(encodeURIComponent('https://netorg519925.sharepoint.com/sites/TeamHR'))}/files",
+                      "queries": {
+                        "folderPath": "/Shared Documents/General/HR - Docs/TurnB - HR/Recruitment/Resume Received",
+                        "name": "@body('Get_Attachment_(V2)')?['name']",
+                        "queryParametersSingleEncoded": true
                       }
-                    ]
-                  },
-                  {
-                    "not": {
-                      "startsWith": [
-                        "@body('Get_Attachment_(V2)')?['name']",
-                        "Cover letter"
+                    },
+                    "runAfter": {
+                      "Parse_extract_response": [
+                        "Succeeded",
+                        "Failed",
+                        "TimedOut",
+                        "Skipped"
                       ]
-                    }
+                    },
+                    "runtimeConfiguration": {
+                      "contentTransfer": {
+                        "transferMode": "Chunked"
+                      }
+                    },
+                    "type": "ApiConnection"
                   },
-                  {
-                    "not": {
-                      "startsWith": [
-                        "@body('Get_Attachment_(V2)')?['name']",
-                        "cover letter"
+                  "Create_blob": {
+                    "inputs": {
+                      "body": "@base64ToBinary(body('Get_Attachment_(V2)')?['contentBytes'])",
+                      "host": {
+                        "connection": {
+                          "name": "@parameters('$connections')['azureblob']['connectionId']"
+                        }
+                      },
+                      "method": "post",
+                      "path": "/datasets/default/files",
+                      "queries": {
+                        "folderPath": "/candidate-cvs",
+                        "name": "@body('Get_Attachment_(V2)')?['name']",
+                        "queryParametersSingleEncoded": true
+                      }
+                    },
+                    "runAfter": {
+                      "Parse_extract_response": [
+                        "Succeeded",
+                        "Failed",
+                        "TimedOut",
+                        "Skipped"
                       ]
-                    }
+                    },
+                    "runtimeConfiguration": {
+                      "contentTransfer": {
+                        "transferMode": "Chunked"
+                      }
+                    },
+                    "type": "ApiConnection"
                   },
-                  {
-                    "not": {
-                      "endsWith": [
-                        "@body('Get_Attachment_(V2)')?['name']",
-                        "cover letter.docx"
+                  "Create_sharing_link_for_a_file_or_folder": {
+                    "inputs": {
+                      "body": {
+                        "scope": "organization",
+                        "type": "edit"
+                      },
+                      "host": {
+                        "connection": {
+                          "name": "@parameters('$connections')['sharepointonline']['connectionId']"
+                        }
+                      },
+                      "method": "post",
+                      "path": "/datasets/@{encodeURIComponent(encodeURIComponent('https://netorg519925.sharepoint.com/sites/TeamHR'))}/codeless/_api/v2.0/sites/root/lists/@{encodeURIComponent(encodeURIComponent('55178891-31a8-46cc-9a03-23970fab1fcd'))}/items/@{encodeURIComponent(encodeURIComponent(body('Create_file_1')?['ItemId']))}/driveItem/createLink"
+                    },
+                    "runAfter": {
+                      "Create_file_1": [
+                        "Succeeded"
                       ]
-                    }
-                  }
-                ]
-              },
-              "runAfter": {
-                "Get_Attachment_(V2)": [
-                  "Succeeded"
-                ]
-              },
-              "type": "If"
-            },
-            "Get_Attachment_(V2)": {
-              "inputs": {
-                "host": {
-                  "connection": {
-                    "name": "@parameters('$connections')['office365-2']['connectionId']"
+                    },
+                    "type": "ApiConnection"
+                  },
+                  "Filter_array": {
+                    "inputs": {
+                      "from": "@body('List_rows_present_in_a_table')?['value']",
+                      "where": "@endsWith(triggerBody()?['from'], item()?['EMAIL IDs'])"
+                    },
+                    "runAfter": {
+                      "List_rows_present_in_a_table": [
+                        "Succeeded"
+                      ]
+                    },
+                    "type": "Query"
+                  },
+                  "List_rows_present_in_a_table": {
+                    "inputs": {
+                      "host": {
+                        "connection": {
+                          "name": "@parameters('$connections')['excelonlinebusiness']['connectionId']"
+                        }
+                      },
+                      "method": "get",
+                      "path": "/drives/@{encodeURIComponent('b!wKeoKu8tDk6vvSyxANYWq9--QEGIUO9Hn9Ho_75eTFyRiBdVqDHMRpoDI5cPqx_N')}/files/@{encodeURIComponent(encodeURIComponent('017OMLUA3R2KFNYYBHNJGYGHHFXWIJSHU6'))}/tables/@{encodeURIComponent('{7A04E27E-3A4E-4D27-8DB4-B7ECA0FEDBAA}')}/items",
+                      "queries": {
+                        "source": "groups/d2a9fd4f-4485-4772-976c-877eca4547e2"
+                      }
+                    },
+                    "metadata": {
+                      "017OMLUA3R2KFNYYBHNJGYGHHFXWIJSHU6": "/General/HR - Docs/TurnB - HR/Recruitment/Resume Received Data/Book.xlsx"
+                    },
+                    "runAfter": {
+                      "Create_sharing_link_for_a_file_or_folder": [
+                        "Succeeded"
+                      ]
+                    },
+                    "type": "ApiConnection"
                   }
                 },
-                "method": "get",
-                "path": "/codeless/v1.0/me/messages/@{encodeURIComponent(triggerBody()?['id'])}/attachments/@{encodeURIComponent(item()?['id'])}"
+                "else": {
+                  "actions": {}
+                },
+                "expression": {
+                  "and": [
+                    {
+                      "or": [
+                        {
+                          "endsWith": [
+                            "@body('Get_Attachment_(V2)')?['name']",
+                            ".pdf"
+                          ]
+                        },
+                        {
+                          "endsWith": [
+                            "@body('Get_Attachment_(V2)')?['name']",
+                            ".docx"
+                          ]
+                        },
+                        {
+                          "endsWith": [
+                            "@body('Get_Attachment_(V2)')?['name']",
+                            ".doc"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "not": {
+                        "startsWith": [
+                          "@body('Get_Attachment_(V2)')?['name']",
+                          "Cover letter"
+                        ]
+                      }
+                    },
+                    {
+                      "not": {
+                        "startsWith": [
+                          "@body('Get_Attachment_(V2)')?['name']",
+                          "cover letter"
+                        ]
+                      }
+                    },
+                    {
+                      "not": {
+                        "endsWith": [
+                          "@body('Get_Attachment_(V2)')?['name']",
+                          "cover letter.docx"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "runAfter": {
+                  "Get_Attachment_(V2)": [
+                    "Succeeded"
+                  ]
+                },
+                "type": "If"
               },
-              "type": "ApiConnection"
-            }
-          },
-          "foreach": "@triggerBody()?['attachments']",
-          "runAfter": {
-            "Html_to_text": [
-              "Succeeded"
-            ]
-          },
-          "runtimeConfiguration": {
-            "concurrency": {
-              "repetitions": 1
-            }
-          },
-          "type": "Foreach"
-        },
-        "Html_to_text": {
-          "inputs": {
-            "body": "<p class=\"editor-paragraph\">@{triggerBody()?['body']}@{triggerBody()?['subject']}</p>",
-            "host": {
-              "connection": {
-                "name": "@parameters('$connections')['conversionservice-1']['connectionId']"
+              "Get_Attachment_(V2)": {
+                "inputs": {
+                  "host": {
+                    "connection": {
+                      "name": "@parameters('$connections')['office365-2']['connectionId']"
+                    }
+                  },
+                  "method": "get",
+                  "path": "/codeless/v1.0/me/messages/@{encodeURIComponent(triggerBody()?['id'])}/attachments/@{encodeURIComponent(item()?['id'])}"
+                },
+                "type": "ApiConnection"
               }
             },
-            "method": "post",
-            "path": "/html2text"
-          },
-          "type": "ApiConnection"
-        }
-      },
-      "else": {
-        "actions": {}
-      },
-      "expression": {
-        "and": [
-          {
-            "not": {
-              "endsWith": [
-                "@triggerBody()?['from']",
-                "indeedemail.com"
+            "foreach": "@triggerBody()?['attachments']",
+            "runAfter": {
+              "Html_to_text": [
+                "Succeeded"
               ]
-            }
+            },
+            "runtimeConfiguration": {
+              "concurrency": {
+                "repetitions": 1
+              }
+            },
+            "type": "Foreach"
           },
-          {
-            "not": {
-              "startsWith": [
-                "@triggerBody()?['subject']",
-                "Off-Campus Recruitment Drive"
-              ]
-            }
+          "Html_to_text": {
+            "inputs": {
+              "body": "<p class=\"editor-paragraph\">@{triggerBody()?['body']}@{triggerBody()?['subject']}</p>",
+              "host": {
+                "connection": {
+                  "name": "@parameters('$connections')['conversionservice-1']['connectionId']"
+                }
+              },
+              "method": "post",
+              "path": "/html2text"
+            },
+            "type": "ApiConnection"
           }
-        ]
+        },
+        "else": {
+          "actions": {}
+        },
+        "expression": {
+          "and": [
+            {
+              "not": {
+                "endsWith": [
+                  "@triggerBody()?['from']",
+                  "indeedemail.com"
+                ]
+              }
+            },
+            {
+              "not": {
+                "startsWith": [
+                  "@triggerBody()?['subject']",
+                  "Off-Campus Recruitment Drive"
+                ]
+              }
+            }
+          ]
+        },
+        "runAfter": {},
+        "type": "If"
+      }
+    },
+    "outputs": {},
+    "parameters": {
+      "$connections": {
+        "defaultValue": {},
+        "type": "Object"
       },
-      "runAfter": {},
-      "type": "If"
+      "djangoApiUrl": {
+        "defaultValue": "https://turnb-hrms-ats-dtd8bebedsb9bhbt.centralindia-01.azurewebsites.net/api/cv/extract/",
+        "type": "String"
+      },
+      "djangoApiKey": {
+        "defaultValue": "",
+        "type": "SecureString"
+      }
     }
   },
-  "contentVersion": "1.0.0.0",
-  "outputs": {},
   "parameters": {
     "$connections": {
-      "defaultValue": {},
-      "type": "Object"
+      "type": "Object",
+      "value": {
+        "azureblob": {
+          "connectionId": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/resourceGroups/HRMS/providers/Microsoft.Web/connections/azureblob-cv",
+          "connectionName": "azureblob-cv",
+          "connectionProperties": {},
+          "id": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/providers/Microsoft.Web/locations/centralindia/managedApis/azureblob"
+        },
+        "conversionservice-1": {
+          "connectionId": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/resourceGroups/HRMS/providers/Microsoft.Web/connections/conversionservice-1",
+          "connectionName": "conversionservice-1",
+          "connectionProperties": {},
+          "id": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/providers/Microsoft.Web/locations/centralindia/managedApis/conversionservice"
+        },
+        "excelonlinebusiness": {
+          "connectionId": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/resourceGroups/HRMS/providers/Microsoft.Web/connections/excelonlinebusiness-2",
+          "connectionName": "excelonlinebusiness-2",
+          "connectionProperties": {},
+          "id": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/providers/Microsoft.Web/locations/centralindia/managedApis/excelonlinebusiness"
+        },
+        "office365": {
+          "connectionId": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/resourceGroups/HRMS/providers/Microsoft.Web/connections/office365-3",
+          "connectionName": "office365-3",
+          "connectionProperties": {},
+          "id": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/providers/Microsoft.Web/locations/centralindia/managedApis/office365"
+        },
+        "office365-2": {
+          "connectionId": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/resourceGroups/HRMS/providers/Microsoft.Web/connections/office365-3",
+          "connectionName": "office365-3",
+          "connectionProperties": {},
+          "id": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/providers/Microsoft.Web/locations/centralindia/managedApis/office365"
+        },
+        "sharepointonline": {
+          "connectionId": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/resourceGroups/HRMS/providers/Microsoft.Web/connections/sharepointonline-2",
+          "connectionName": "sharepointonline-2",
+          "connectionProperties": {},
+          "id": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/providers/Microsoft.Web/locations/centralindia/managedApis/sharepointonline"
+        },
+        "sharepointonline-1": {
+          "connectionId": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/resourceGroups/HRMS/providers/Microsoft.Web/connections/sharepointonline-2",
+          "connectionName": "sharepointonline-2",
+          "connectionProperties": {},
+          "id": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/providers/Microsoft.Web/locations/centralindia/managedApis/sharepointonline"
+        },
+        "sql": {
+          "connectionId": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/resourceGroups/HRMS/providers/Microsoft.Web/connections/sql",
+          "connectionName": "sql",
+          "connectionProperties": {},
+          "id": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/providers/Microsoft.Web/locations/centralindia/managedApis/sql"
+        }
+      }
     },
     "djangoApiUrl": {
-      "defaultValue": "https://turnb-hrms-ats.azurewebsites.net/api/cv/extract/",
-      "type": "String"
+      "type": "String",
+      "value": "https://turnb-hrms-ats-dtd8bebedsb9bhbt.centralindia-01.azurewebsites.net/api/cv/extract/"
     },
     "djangoApiKey": {
-      "defaultValue": "",
-      "type": "SecureString"
-    }
-  },
-  "triggers": {
-    "When_a_new_email_arrives_(V3)": {
-      "inputs": {
-        "fetch": {
-          "method": "get",
-          "pathTemplate": {
-            "template": "/v3/Mail/OnNewEmail"
-          },
-          "queries": {
-            "fetchOnlyWithAttachment": true,
-            "folderPath": "Id::AQMkADA2YTU5NjVmLWU3MjgtNDk5AS1hN2ExLWNkNWNhMjRkM2ZlNAAuAAADUkGdCUm1vEq75ji2GhgRwgEA_82QtF4kQUKmGgt8NH9htAAAAgEMAAAA",
-            "includeAttachments": true
-          }
-        },
-        "host": {
-          "connection": {
-            "name": "@parameters('$connections')['office365']['connectionId']"
-          }
-        },
-        "subscribe": {
-          "body": {
-            "NotificationUrl": "@listCallbackUrl()"
-          },
-          "method": "post",
-          "pathTemplate": {
-            "template": "/GraphMailSubscriptionPoke/$subscriptions"
-          },
-          "queries": {
-            "fetchOnlyWithAttachment": true,
-            "folderPath": "Id::AQMkADA2YTU5NjVmLWU3MjgtNDk5AS1hN2ExLWNkNWNhMjRkM2ZlNAAuAAADUkGdCUm1vEq75ji2GhgRwgEA_82QtF4kQUKmGgt8NH9htAAAAgEMAAAA"
-          }
-        }
-      },
-      "metadata": {
-        "Id::AQMkADA2YTU5NjVmLWU3MjgtNDk5AS1hN2ExLWNkNWNhMjRkM2ZlNAAuAAADUkGdCUm1vEq75ji2GhgRwgEA_82QtF4kQUKmGgt8NH9htAAAAgEMAAAA": "Inbox"
-      },
-      "runtimeConfiguration": {
-        "concurrency": {
-          "runs": 1
-        }
-      },
-      "splitOn": "@triggerBody()?['value']",
-      "type": "ApiConnectionNotification"
+      "type": "SecureString",
+      "value": "DN9U0zqUY6uRRgWTOaVvSbTr80BFGF5qIRca3vAVGok"
     }
   }
 }
