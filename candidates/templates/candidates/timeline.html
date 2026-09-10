@@ -37,12 +37,11 @@
 .field-value { font-size:.8rem; color:#2b3238; }
 .field-value.text-muted { color:#b7c0be !important; }
 
-/* Match Score: big numeral + subscore grid, coloured by score_tier (matches the Repository score meter) */
+/* Match Score: big numeral, coloured by score_tier (matches the Repository score meter) */
 .match-score-num { font-size:2.1rem; font-weight:700; line-height:1; }
 .match-score-high { color: var(--primary-green); }
 .match-score-mid { color: #8a6a12; }
 .match-score-low { color: #dc3545; }
-.match-subscore-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px 24px; padding:12px 0; margin:12px 0; border-top:1px solid var(--border-color); border-bottom:1px solid var(--border-color); font-size:.8rem; }
 
 /* Candidate Details / AI-Scan / Hiring: top-level page sections */
 .profile-sections { display:flex; flex-direction:column; gap:32px; }
@@ -367,31 +366,21 @@ html { scroll-behavior: smooth; }
             </div>
             <div class="pd-meta text-muted mt-1">{{ candidate.job.title|default:"the mapped vacancy" }} &middot; {{ candidate.match_scored_at|date:"d M Y" }}</div>
 
-            <div class="match-subscore-grid">
-              <div class="d-flex justify-content-between"><span class="text-muted">Skills</span><span class="fw-semibold font-monospace">{{ b.skills_score|default_if_none:"-" }}/{{ b.weights.skills|default:30 }}</span></div>
-              <div class="d-flex justify-content-between"><span class="text-muted">Experience</span><span class="fw-semibold font-monospace">{{ b.experience_score|default_if_none:"-" }}/{{ b.weights.experience|default:30 }}</span></div>
-              <div class="d-flex justify-content-between"><span class="text-muted">Education</span><span class="fw-semibold font-monospace">{{ b.education_score|default_if_none:"-" }}/{{ b.weights.education|default:30 }}</span></div>
-              <div class="d-flex justify-content-between"><span class="text-muted">Overall Fit</span><span class="fw-semibold font-monospace">{{ b.fit_score|default_if_none:"-" }}/{{ b.weights.fit|default:10 }}</span></div>
-            </div>
-
-            {% if b.disqualifiers %}
-            <div class="mb-1">
-              <div class="pd-subhead" style="color:#dc3545;">Must-Have Not Confirmed</div>
+            {% if b.likes %}
+            <div class="mb-1 mt-2">
+              <div class="pd-subhead" style="color: var(--dark-green);">Likes</div>
               <ul class="pd-body mb-0 ps-3">
-                {% for item in b.disqualifiers %}<li>{{ item }}</li>{% endfor %}
+                {% for item in b.likes %}<li>{{ item }}</li>{% endfor %}
               </ul>
             </div>
             {% endif %}
-            {% if b.matched_skills %}
+            {% if b.not_matched %}
             <div class="mb-1">
-              <div class="pd-subhead" style="color: var(--dark-green);">Matched</div>
-              <div class="pd-body">
-                {% for skill, evidence in b.matched_skills|matched_skill_pairs %}<span {% if evidence %}title="{{ evidence }}"{% endif %}>{{ skill }}</span>{% if not forloop.last %}, {% endif %}{% endfor %}
-              </div>
+              <div class="pd-subhead" style="color:#dc3545;">Not Matched</div>
+              <ul class="pd-body mb-0 ps-3">
+                {% for item in b.not_matched %}<li>{{ item }}</li>{% endfor %}
+              </ul>
             </div>
-            {% endif %}
-            {% if b.missing_skills %}
-            <div class="pd-body"><span class="pd-subhead" style="color:#dc3545;">Missing</span> {{ b.missing_skills|join:", " }}</div>
             {% endif %}
             {% endwith %}
             {% if candidate.match_rationale %}<p class="pd-body text-muted fst-italic mt-3 mb-0">{{ candidate.match_rationale }}</p>{% endif %}

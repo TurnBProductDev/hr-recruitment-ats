@@ -1,5 +1,4 @@
 {% extends "hr_base.html" %}
-{% load candidates_extras %}
 {% block title %}Score Candidates - {{ job.title }}{% endblock %}
 {% block content %}
 <h3 class="mb-1">Score Candidates</h3>
@@ -28,7 +27,7 @@
   <div class="table-responsive">
   <table class="table table-hover align-middle w-100">
     <thead>
-      <tr><th>Candidate</th><th>Status</th><th>Score</th><th>Matched Skills</th><th>Rationale</th><th></th></tr>
+      <tr><th>Candidate</th><th>Status</th><th>Score</th><th>Likes</th><th>Rationale</th><th></th></tr>
     </thead>
     <tbody>
       {% for c in candidates %}
@@ -49,7 +48,7 @@
           {% else %}—{% endif %}
         </td>
         <td class="small">
-          {{ c.match_breakdown_parsed.matched_skills|skill_names|default:"-" }}
+          {{ c.match_breakdown_parsed.likes|join:"; "|default:"-"|truncatechars:120 }}
         </td>
         <td class="small">
           {% if c.match_error %}<span class="text-danger">{{ c.match_error }}</span>

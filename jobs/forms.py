@@ -18,9 +18,14 @@ class BootstrapFormMixin:
 class JobForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:
         model = Job
+        # job_type is deliberately excluded - Score Candidates judges fit
+        # holistically now rather than weighing skills/experience/education
+        # by a per-job-type rubric, so there is no "Scoring Profile" to pick
+        # (see candidates/match_scoring.py). The field/column stays on the
+        # model for old rows; it just has nothing left reading it.
         fields = ['job_code', 'title', 'location', 'openings', 'description', 'requirements',
-                  'job_type', 'must_have_requirements', 'status', 'opening_date', 'closing_date', 'jd_file']
-        labels = {'job_code': 'Job Code', 'job_type': 'Scoring Profile'}
+                  'must_have_requirements', 'status', 'opening_date', 'closing_date', 'jd_file']
+        labels = {'job_code': 'Job Code'}
         widgets = {
             'job_code': forms.TextInput(attrs={'placeholder': 'e.g. HRBP-2026 (auto if blank)'}),
             'description': forms.Textarea(attrs={'rows': 4}),
