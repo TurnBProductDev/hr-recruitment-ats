@@ -103,6 +103,74 @@ class SummaryTableTests(TestCase):
         self.assertEqual(row['open'] + row['shortlisted'] + row['rejected'] + row['hired'], row['total'])
 
 
+class OpenVacanciesDefaultScopeTests(TestCase):
+    """A fresh arrival at the dashboard (no query string at all) defaults to
+    Open vacancies only - the 'scoped' hidden field only appears once the
+    filter form has actually been submitted, so its absence is what marks
+    "first visit" vs "the user explicitly unchecked the switch this
+    request." See HRDashboardView.get_context_data."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser('hr3', 'hr3@example.com', 'pw')
+        self.client.force_login(self.user)
+        self.open_job = Job.objects.create(title='Open Role', status=Job.Status.OPEN)
+        self.closed_job = Job.objects.create(title='Closed Role', status=Job.Status.CLOSED)
+        Candidate.objects.create(full_name='Open Candidate', email='open@example.com', job=self.open_job)
+        Candidate.objects.create(full_name='Closed Candidate', email='closed@example.com', job=self.closed_job)
+
+    def test_fresh_visit_defaults_to_open_vacancies_only(self):
+        response = self.client.get(reverse('hr_dashboard'))
+        self.assertEqual(response.context['scope'], 'open')
+        self.assertEqual(response.context['summary']['total'], 1)
+
+    def test_explicitly_unchecking_shows_every_vacancy(self):
+        response = self.client.get(f"{reverse('hr_dashboard')}?scoped=1")
+        self.assertEqual(response.context['scope'], '')
+        self.assertEqual(response.context['summary']['total'], 2)
+
+    def test_explicitly_checking_is_still_respected(self):
+        response = self.client.get(f"{reverse('hr_dashboard')}?scoped=1&scope=open")
+        self.assertEqual(response.context['scope'], 'open')
+        self.assertEqual(response.context['summary']['total'], 1)
+
+
+class GeneralApplicationAndFutureProspectsExcludedTests(TestCase):
+    """Neither General Application candidates nor Future Prospects (a hold
+    taken before ever being screened) count toward any dashboard number -
+    each gets its own separate, always-visible count instead (the top-right
+    quick links on the Summary page)."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser('hr4', 'hr4@example.com', 'pw')
+        self.client.force_login(self.user)
+        self.job = Job.objects.create(title='Program Manager')
+        self.general = Job.objects.create(title='General Application')
+        Candidate.objects.create(full_name='Mapped', email='mapped@example.com', job=self.job)
+        Candidate.objects.create(full_name='Unmapped', email='unmapped@example.com', job=self.general)
+        Candidate.objects.create(
+            full_name='Future Prospect', email='prospect@example.com', job=self.job,
+            status=Candidate.Status.SCREENING_HOLD, hold_from_status=Candidate.Status.OPEN)
+
+    def _get(self):
+        return self.client.get(f"{reverse('hr_dashboard')}?scoped=1")  # scope off - see every vacancy
+
+    def test_summary_total_excludes_both(self):
+        response = self._get()
+        self.assertEqual(response.context['summary']['total'], 1)  # just 'Mapped'
+
+    def test_by_job_never_lists_general_application(self):
+        response = self._get()
+        titles = [row['job__title'] for row in response.context['by_job']]
+        self.assertNotIn('General Application', titles)
+
+    def test_side_counts_are_shown_regardless_of_filters(self):
+        response = self._get()
+        self.assertEqual(response.context['general_applications_count'], 1)
+        self.assertEqual(response.context['future_prospects_count'], 1)
+        self.assertContains(response, reverse('candidate_general_applications'))
+        self.assertContains(response, reverse('candidate_future_prospects'))
+
+
 class OverviewFunnelTests(TestCase):
     def setUp(self):
         self.job = Job.objects.create(title='Engineer', openings=3)
@@ -132,17 +200,21 @@ class OverviewFunnelTests(TestCase):
         content = self._get().content.decode()
         self.assertLess(content.index('>Openings<'), content.index('>Total Candidates<'))
 
-    def test_initial_hold_is_folded_into_the_single_rejected_segment(self):
+    def test_initial_hold_is_excluded_from_the_funnel_entirely(self):
+        """Future Prospects (a hold taken before ever being screened) is left
+        out of every dashboard number now, not folded into Rejected - it has
+        its own count shown separately (ctx['future_prospects_count']) and
+        its own page instead. See dashboard.views.HRDashboardView's `base`
+        queryset, which excludes dashboard.views.INITIAL_HOLD outright."""
         Candidate.objects.create(
             full_name='Held Early', email='held-early@example.com', job=self.job,
             status=Candidate.Status.SCREENING_HOLD, hold_from_status=Candidate.Status.OPEN)
         response = self._get()
         cv_screening = response.context['funnel'][0]
-        # One merged "Rejected" drop, not a separate Future Prospects card/segment.
-        self.assertEqual(len(cv_screening['drops']), 1)
         label, count, flow, cat = cv_screening['drops'][0]
         self.assertEqual((label, flow, cat), ('Rejected', 'screened_out', 'red'))
-        self.assertEqual(count, 1)
+        self.assertEqual(count, 0)  # excluded from the funnel, not folded in as a rejection
+        self.assertEqual(response.context['future_prospects_count'], 1)
 
     def test_unable_to_connect_is_folded_into_yet_to_call(self):
         response = self._get()

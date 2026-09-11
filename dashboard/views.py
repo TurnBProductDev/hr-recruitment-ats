@@ -8,6 +8,7 @@ from django.views.generic import TemplateView
 from candidates.flows import flow_count
 from candidates.models import Candidate, CandidateStatusHistory
 from candidates.permissions import ANY_STAFF, GroupRequiredMixin
+from candidates.views import GENERAL_APPLICATION
 from interviews.models import Interview
 from jobs.models import Job
 
@@ -74,12 +75,30 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         job_id = self.request.GET.get('job') or ''
-        scope = self.request.GET.get('scope', '')
+        # 'scoped' only appears once the filter form has actually been
+        # submitted (it's a hidden field on it) - an unchecked checkbox isn't
+        # sent at all, so that's indistinguishable from a fresh visit with no
+        # query string otherwise. Every fresh arrival at the dashboard (nav
+        # link, a drill-down back-link, ...) defaults to Open vacancies only;
+        # explicitly unchecking it during this session is still respected for
+        # that request.
+        if 'scoped' in self.request.GET:
+            scope = self.request.GET.get('scope', '')
+        else:
+            scope = 'open'
         base = Candidate.objects.all()
         if job_id:
             base = base.filter(job_id=job_id)
         if scope == 'open':   # only candidates under currently-open vacancies
             base = base.filter(job__status=Job.Status.OPEN, job__is_archived=False)
+        # General Application candidates aren't mapped to a role, and Future
+        # Prospects (a hold taken before ever being screened) is tracked as
+        # its own pool to revisit later - see candidates.views.GENERAL_APPLICATION
+        # and FutureProspectsListView. Neither counts as an active application,
+        # so both are left out of every dashboard number; their own counts are
+        # shown separately (ctx['general_applications_count']/['future_prospects_count'])
+        # instead of folded into Rejected/Total the way Future Prospects used to be.
+        base = base.exclude(job__title__iexact=GENERAL_APPLICATION).exclude(INITIAL_HOLD)
 
         job_list = Job.objects.all().order_by('title')
         if scope == 'open':
@@ -88,6 +107,9 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
         ctx['selected_job'] = job_id
         ctx['scope'] = scope
         ctx['view'] = self.request.GET.get('view', 'summary')
+        ctx['general_applications_count'] = Candidate.objects.filter(
+            job__title__iexact=GENERAL_APPLICATION).count()
+        ctx['future_prospects_count'] = Candidate.objects.filter(INITIAL_HOLD).count()
 
         # ---------- Summary ----------
         # Open vacancies, not candidates - always the global count regardless of
