@@ -107,14 +107,23 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
 .sm-kpi-subval .lbl { font-size: .66rem; }
 .sm-kpi-subval .val { font-size: 1rem; margin-top: 2px; }
 
-.sm-thead { display: flex; align-items: center; gap: 14px; padding: 10px 0 8px; border-bottom: 1px solid #e2ebeb; font-size: .68rem; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: #6b7a7a; }
-.sm-row { display: flex; align-items: center; gap: 14px; padding: 13px 0; border-bottom: 1px solid #eef2f2; }
+/* Grid, not flex: a fixed track per column means a long Role/Source name
+   (wrapping to several lines) can never squeeze its neighbours narrower on
+   just that one row - every row's columns line up under the header no
+   matter how long any one row's name is. minmax(0,1fr) on the name column
+   is required, not just 1fr - a grid item's default min-width:auto would
+   otherwise let a long unbroken name blow the track out wider than the
+   header instead of wrapping inside it. */
+.sm-thead { display: grid; align-items: center; gap: 14px; padding: 10px 0 8px; border-bottom: 1px solid #e2ebeb; font-size: .68rem; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: #6b7a7a; }
+.sm-row { display: grid; align-items: center; gap: 14px; padding: 13px 0; border-bottom: 1px solid #eef2f2; }
 .sm-row:last-child { border-bottom: none; }
-.sm-col-name { flex: 1; font-size: .85rem; font-weight: 500; color: #1f2a2a; }
-.sm-col-num { width: 82px; text-align: center; font-size: .8rem; font-weight: 600; color: #1f2a2a; }
-.sm-col-plain { width: 70px; text-align: center; font-size: .78rem; color: #1f2a2a; }
-.sm-col-short { width: 88px; text-align: center; font-size: .78rem; font-weight: 600; color: #0e6f6b; }
-.sm-col-hired { width: 56px; text-align: center; font-size: .78rem; color: #8a9a9a; }
+.sm-thead-job, .sm-row-job { grid-template-columns: minmax(0, 1fr) 70px 82px 70px 88px 70px 56px; }
+.sm-thead-source, .sm-row-source { grid-template-columns: minmax(0, 1fr) 82px 70px 88px 70px 56px; }
+.sm-col-name { min-width: 0; font-size: .85rem; font-weight: 500; color: #1f2a2a; }
+.sm-col-num { text-align: center; font-size: .8rem; font-weight: 600; color: #1f2a2a; }
+.sm-col-plain { text-align: center; font-size: .78rem; color: #1f2a2a; }
+.sm-col-short { text-align: center; font-size: .78rem; font-weight: 600; color: #0e6f6b; }
+.sm-col-hired { text-align: center; font-size: .78rem; color: #8a9a9a; }
 
 /* ---- Daily View tab: date-range picker + bar chart ---- */
 .daily-range { position: relative; }
@@ -264,7 +273,7 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
       <div class="col-lg-6">
         <div class="fnl-panel">
           <div class="fnl-panel-head sm-panel-head"><h5>By Job / Role</h5></div>
-          <div class="sm-thead">
+          <div class="sm-thead sm-thead-job">
             <span class="sm-col-name">Role</span>
             <span class="sm-col-plain">Openings</span>
             <span class="sm-col-num">Applicants</span>
@@ -274,7 +283,7 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
             <span class="sm-col-hired">Hired</span>
           </div>
           {% for r in by_job %}
-          <div class="sm-row">
+          <div class="sm-row sm-row-job">
             <span class="sm-col-name">{{ r.job__title|default:"Unassigned" }}</span>
             <span class="sm-col-plain">{{ r.openings|default:0 }}</span>
             <span class="sm-col-num">{{ r.total }}</span>
@@ -289,7 +298,7 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
       <div class="col-lg-6">
         <div class="fnl-panel">
           <div class="fnl-panel-head sm-panel-head"><h5>By Source</h5></div>
-          <div class="sm-thead">
+          <div class="sm-thead sm-thead-source">
             <span class="sm-col-name">Source</span>
             <span class="sm-col-num">Applicants</span>
             <span class="sm-col-plain">Unattended</span>
@@ -298,7 +307,7 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
             <span class="sm-col-hired">Hired</span>
           </div>
           {% for r in by_source %}
-          <div class="sm-row">
+          <div class="sm-row sm-row-source">
             <span class="sm-col-name">{{ r.source }}</span>
             <span class="sm-col-num">{{ r.total }}</span>
             <span class="sm-col-plain">{{ r.open }}</span>
