@@ -2,10 +2,11 @@ import base64
 import json
 import logging
 
+import openpyxl
 from django.conf import settings
 from django.contrib import messages
 from django.db.models import Count, Exists, F, Max, OuterRef, Q, Subquery
-from django.http import Http404, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -271,6 +272,24 @@ SCORE_BANDS = [
 SCORE_BAND_FILTERS = {key: lookup for key, _, lookup in SCORE_BANDS}
 
 
+# Candidate list pages (Repository, All Candidates, General Applications,
+# Future Prospects) render this many rows per request instead of the whole
+# filtered result - these tables use client-side DataTables for in-page
+# sort/search/paging on top of that, so this is the outer, DB/render-cost
+# bound, not the only paging a user sees. Export to Excel deliberately
+# ignores this (see _ExcelExportMixin) - it must return every matching row.
+CANDIDATE_LIST_PAGE_SIZE = 100
+
+
+def _querystring_without_page(request):
+    """The current filters as a query string, without `page` - used to build
+    pagination links (each appends its own page=N) and the Export to Excel
+    link (which should keep the same filters, but isn't itself paginated)."""
+    params = request.GET.copy()
+    params.pop('page', None)
+    return params.urlencode()
+
+
 LIST_URL_SESSION_KEY = 'last_candidate_list_url'
 
 
@@ -393,6 +412,7 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
     template_name = 'candidates/repository.html'
     context_object_name = 'candidates'
     allowed_groups = ANY_STAFF
+    paginate_by = CANDIDATE_LIST_PAGE_SIZE
 
     def get_tab(self):
         return self.request.GET.get('tab', 'open')
@@ -531,6 +551,7 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
         for key in ('tab', 'hide_reapply', 'hide_called', 'status'):
             params.pop(key, None)
         ctx['preserved_qs'] = params.urlencode()
+        ctx['querystring'] = _querystring_without_page(self.request)
         u = self.request.user
         ctx['is_hr_admin'] = u.is_superuser or u.groups.filter(name=HR_ADMIN).exists()
         return ctx
@@ -543,9 +564,15 @@ class AllCandidatesListView(RemembersListUrlMixin, GroupRequiredMixin, ListView)
     template_name = 'candidates/all_candidates.html'
     context_object_name = 'candidates'
     allowed_groups = ANY_STAFF
+    paginate_by = CANDIDATE_LIST_PAGE_SIZE
 
     def get_queryset(self):
         return Candidate.objects.select_related('job').order_by('full_name')
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx['querystring'] = _querystring_without_page(self.request)
+        return ctx
 
 
 GENERAL_APPLICATION = 'General Application'
@@ -561,6 +588,7 @@ class GeneralApplicationsListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
     template_name = 'candidates/general_applications.html'
     context_object_name = 'candidates'
     allowed_groups = ANY_STAFF
+    paginate_by = CANDIDATE_LIST_PAGE_SIZE
 
     def base_queryset(self):
         return (Candidate.objects.select_related('job')
@@ -596,6 +624,7 @@ class GeneralApplicationsListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
         ctx['selected_roles'] = self.selected_roles()
         ctx['q'] = self.request.GET.get('q', '')
         ctx['total'] = base.count()
+        ctx['querystring'] = _querystring_without_page(self.request)
         u = self.request.user
         ctx['is_hr_admin'] = u.is_superuser or u.groups.filter(name=HR_ADMIN).exists()
         return ctx
@@ -610,6 +639,7 @@ class FutureProspectsListView(RemembersListUrlMixin, GroupRequiredMixin, ListVie
     template_name = 'candidates/future_prospects.html'
     context_object_name = 'candidates'
     allowed_groups = ANY_STAFF
+    paginate_by = CANDIDATE_LIST_PAGE_SIZE
 
     def base_queryset(self):
         return Candidate.objects.select_related('job').filter(
@@ -633,9 +663,95 @@ class FutureProspectsListView(RemembersListUrlMixin, GroupRequiredMixin, ListVie
         ctx = super().get_context_data(**kwargs)
         ctx['q'] = self.request.GET.get('q', '')
         ctx['total'] = self.base_queryset().count()
+        ctx['querystring'] = _querystring_without_page(self.request)
         u = self.request.user
         ctx['is_hr_admin'] = u.is_superuser or u.groups.filter(name=HR_ADMIN).exists()
         return ctx
+
+
+class _ExcelExportMixin:
+    """GET returns an .xlsx of every row `list_view_class`'s own
+    get_queryset() matches under the request's current filters - built by
+    instantiating that ListView and calling get_queryset() directly, which
+    never applies pagination (only ListView.get()/paginate_queryset() does).
+    Export to Excel must cover the whole filtered list, independent of how
+    many pages the on-screen table is split into (see
+    CANDIDATE_LIST_PAGE_SIZE)."""
+    list_view_class = None
+    filename = 'export.xlsx'
+    columns = ()  # (header, attribute name or callable(obj) -> value)
+
+    def get(self, request, *args, **kwargs):
+        source = self.list_view_class()
+        source.request = request
+        source.args = args
+        source.kwargs = kwargs
+        queryset = source.get_queryset()
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append([header for header, _ in self.columns])
+        for obj in queryset:
+            row = []
+            for _, getter in self.columns:
+                value = getter(obj) if callable(getter) else getattr(obj, getter, '')
+                row.append('' if value is None else str(value))
+            ws.append(row)
+
+        response = HttpResponse(
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = f'attachment; filename="{self.filename}"'
+        wb.save(response)
+        return response
+
+
+class CandidateRepositoryExportView(GroupRequiredMixin, _ExcelExportMixin, View):
+    allowed_groups = ANY_STAFF
+    list_view_class = CandidateRepositoryListView
+    filename = 'candidate_repository.xlsx'
+    columns = (
+        ('Name', 'full_name'), ('Email', 'email'), ('Candidate Code', 'candidate_code'),
+        ('Role', lambda c: c.job.title if c.job else ''),
+        ('Score', lambda c: c.match_score if c.match_score is not None else ''),
+        ('Experience (yrs)', 'total_experience_years'),
+        ('Applied', lambda c: c.created_at.strftime('%Y-%m-%d') if c.created_at else ''),
+        ('Status', 'status_label'),
+    )
+
+
+class AllCandidatesExportView(GroupRequiredMixin, _ExcelExportMixin, View):
+    allowed_groups = ANY_STAFF
+    list_view_class = AllCandidatesListView
+    filename = 'all_candidates.xlsx'
+    columns = (
+        ('Name', 'full_name'), ('Email', 'email'),
+        ('Job', lambda c: c.job.title if c.job else ''), ('Status', 'status_label'),
+    )
+
+
+class GeneralApplicationsExportView(GroupRequiredMixin, _ExcelExportMixin, View):
+    allowed_groups = ANY_STAFF
+    list_view_class = GeneralApplicationsListView
+    filename = 'general_applications.xlsx'
+    columns = (
+        ('Name', 'full_name'), ('Email', 'email'), ('Candidate Code', 'candidate_code'),
+        ('Applied Position', lambda c: c.role_applied or 'Not captured'),
+        ('Source', lambda c: c.source or ''),
+        ('Applied', lambda c: c.created_at.strftime('%Y-%m-%d') if c.created_at else ''),
+        ('Status', 'status_label'),
+    )
+
+
+class FutureProspectsExportView(GroupRequiredMixin, _ExcelExportMixin, View):
+    allowed_groups = ANY_STAFF
+    list_view_class = FutureProspectsListView
+    filename = 'future_prospects.xlsx'
+    columns = (
+        ('Name', 'full_name'), ('Email', 'email'), ('Candidate Code', 'candidate_code'),
+        ('Role', lambda c: c.job.title if c.job else ''),
+        ('Held At', lambda c: c.held_at.strftime('%Y-%m-%d') if c.held_at else ''),
+        ('Hold Reason', lambda c: c.hold_reason or ''),
+    )
 
 
 class CandidateTimelineView(GroupRequiredMixin, DetailView):
@@ -1002,6 +1118,9 @@ class CandidateSetStatusView(GroupRequiredMixin, View):
             return redirect('candidate_timeline', pk=pk)
         reason = request.POST.get('reason', '').strip()
         performed_by = _performed_by(request)
+
+        _settle_round_interview(candidate, target)
+
         if target == STATUS.BLACKLISTED:
             services.blacklist_candidate(candidate, reason, user=request.user, performed_by=performed_by)
         else:
@@ -1087,11 +1206,11 @@ class AddCommunicationLogView(GroupRequiredMixin, View):
 class CandidateScreeningQuestionsView(GroupRequiredMixin, View):
     """10 Tele Screening call questions, generated once from the candidate's
     CV and reused after that (Candidate.screening_questions) - reachable from
-    the Tele Screening stage card, from later stages once generated (so
-    nothing is lost once the candidate moves on), and from the Interviewer
-    portal so an interviewer preparing for Round 1+ can still refer back to
-    them. ALL_GROUPS (not ANY_STAFF) so Interviewer can reach this too."""
-    allowed_groups = ALL_GROUPS
+    the Tele Screening stage card, and from later stages once generated (so
+    nothing is lost once the candidate moves on). HR/Recruiter/Hiring Manager
+    only (the default ANY_STAFF) - not exposed to the Interviewer portal;
+    Generate/View Questions was removed from there so an Interviewer can't
+    view or trigger generation for a candidate they aren't interviewing."""
 
     def get(self, request, pk):
         candidate = get_object_or_404(Candidate, pk=pk)

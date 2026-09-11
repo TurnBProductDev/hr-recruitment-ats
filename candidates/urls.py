@@ -12,11 +12,17 @@ urlpatterns = [
 
     # HR admin: Candidate Repository
     path('hr/candidates/', views.CandidateRepositoryListView.as_view(), name='candidate_repository'),
+    path('hr/candidates/export/', views.CandidateRepositoryExportView.as_view(), name='candidate_repository_export'),
     path('hr/candidates/all/', views.AllCandidatesListView.as_view(), name='candidate_all'),
+    path('hr/candidates/all/export/', views.AllCandidatesExportView.as_view(), name='candidate_all_export'),
     path('hr/candidates/general-applications/', views.GeneralApplicationsListView.as_view(),
          name='candidate_general_applications'),
+    path('hr/candidates/general-applications/export/', views.GeneralApplicationsExportView.as_view(),
+         name='candidate_general_applications_export'),
     path('hr/candidates/future-prospects/', views.FutureProspectsListView.as_view(),
          name='candidate_future_prospects'),
+    path('hr/candidates/future-prospects/export/', views.FutureProspectsExportView.as_view(),
+         name='candidate_future_prospects_export'),
     path('hr/candidates/delete-selected/', views.CandidateBulkDeleteView.as_view(),
          name='candidate_bulk_delete'),
     path('hr/candidates/reject-selected/', views.CandidateBulkRejectView.as_view(),

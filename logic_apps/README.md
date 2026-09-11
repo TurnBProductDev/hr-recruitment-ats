@@ -50,6 +50,19 @@ expected/current salary, and an `experience_json` array for structured
 `CV-Automation-Flow` working unchanged for as long as it stayed live, calling
 the procedure with only its original parameter set.
 
+### `djangoApiKey` is never committed here - it's blank in this file on purpose
+
+`cv_automation_flow_final.json`'s top-level `parameters.djangoApiKey.value` is
+always `""` in this repo. The real value only lives in two places: the
+`CV_EXTRACT_API_KEY` App Service setting, and the Logic App's own live
+parameter in Azure (set once via the CLI, never through this file). If you
+redeploy this JSON via `az logic workflow update`, **first patch a real key
+into a local copy** - deploying the checked-in blank value breaks
+`CV-Automation-Flow-Final` by wiping the live key. (A key was accidentally
+committed here in plaintext once, in commits `9027aed`/`f9e5d82` - it was
+rotated on 2026-09-11 and that old value is dead. Don't repeat that: never put
+the real value back in this file.)
+
 ### Deploying changes to `CV-Automation-Flow-Final` - use the CLI, not Code View
 
 The Portal's Logic app designer Code View **silently drops the request body**

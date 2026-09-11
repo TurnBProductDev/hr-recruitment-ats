@@ -193,7 +193,9 @@
         </div>
       </div>
       <button type="submit" class="btn btn-sm btn-outline-app"><i class="bi bi-search"></i> Search</button>
-      <div class="repo-export-slot" id="exportSlot"></div>
+      <a href="{% url 'candidate_repository_export' %}?{{ querystring }}" class="btn btn-sm btn-outline-app repo-export-slot">
+        <i class="bi bi-file-earmark-excel"></i> Export to Excel
+      </a>
     </div>
 
     {% if is_hr_admin or is_recruiter %}
@@ -315,6 +317,7 @@
         </tbody>
       </table>
     </div>
+    {% include "candidates/_pagination.html" %}
   </div>
 </form>
 
@@ -357,17 +360,14 @@
 {% block extra_js %}
 <script>
 $(function () {
-  var table = $('#candidateTable').DataTable({
+  $('#candidateTable').DataTable({
     order: [], dom: 'rtip', pageLength: 25,
-    // The tick-box column is neither sortable nor worth exporting.
+    // The tick-box column is neither sortable nor exported (Export to Excel
+    // is a server-side link now, covering every filtered row - not just
+    // the ones on this page - see CandidateRepositoryExportView).
     columnDefs: [{ targets: 'no-export', orderable: false, searchable: false }],
-    language: { info: 'Showing _START_ to _END_ of _TOTAL_', infoEmpty: 'No candidates', zeroRecords: 'No candidates match this filter.' },
-    buttons: [{ extend: 'excelHtml5', text: '<i class="bi bi-file-earmark-excel"></i> Export to Excel',
-               className: 'btn btn-outline-app btn-sm', exportOptions: { columns: ':not(.no-export)' } }]
+    language: { info: 'Showing _START_ to _END_ of _TOTAL_', infoEmpty: 'No candidates', zeroRecords: 'No candidates match this filter.' }
   });
-  // Move the auto-generated Export button into our own toolbar row instead of
-  // DataTables' default position, so it sits with the rest of the filters.
-  table.buttons().container().appendTo('#exportSlot');
 
   {% if is_hr_admin or is_recruiter %}
   // --- Multi-select bulk bar -------------------------------------------------

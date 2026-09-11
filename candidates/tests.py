@@ -6,9 +6,11 @@ Run against sqlite so the live Azure DB is never touched:
 """
 import base64
 import datetime
+import io
 import json
 from unittest import mock
 
+import openpyxl
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core import mail
@@ -20,7 +22,7 @@ from django.utils import timezone
 from interviews.models import Interview, InterviewRequest
 from jobs.models import Job
 
-from . import bulk, cv_extraction, cv_parser, logic_app_mail, rejection_emails, screening_questions, services
+from . import bulk, cv_extraction, cv_parser, logic_app_mail, rejection_emails, screening_questions, services, views
 from .cv_extraction import CVExtractionError
 from .cv_parser import CVParseError
 from .models import BulkUploadBatch, BulkUploadItem, Candidate, CommunicationLog, EmailRegistry
@@ -1006,6 +1008,39 @@ class HoldNamingTests(TestCase):
         self.assertEqual(interview.status, Interview.Status.SCHEDULED)  # untouched
 
 
+class SetStatusSettlesTheOpenInterviewTests(TestCase):
+    """The generic 'Update status' dropdown (CandidateSetStatusView) used to
+    skip _settle_round_interview() - unlike the stage-card buttons
+    (CandidateStatusActionView) - leaving a Round 1/Round 2 interview stuck
+    "Pending" forever if HR decided via the dropdown instead. Now it settles
+    the same way: Cleared/advanced -> Pass, anything else (e.g. Rejected) ->
+    Fail."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('hr9', 'hr9@example.com', 'pw')
+        self.user.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.client.force_login(self.user)
+        self.candidate = Candidate.objects.create(
+            full_name='Rose E G', email='rose@example.com', status=Candidate.Status.ROUND1)
+        services.record_creation(self.candidate)
+        self.interview = Interview.objects.create(
+            candidate=self.candidate, round_type=Interview.RoundType.ROUND1,
+            status=Interview.Status.COMPLETED, scheduled_date=timezone.now())
+
+    def _set_status(self, status):
+        return self.client.post(reverse('candidate_set_status', args=[self.candidate.pk]), {'status': status})
+
+    def test_moving_to_the_next_round_settles_the_interview_as_pass(self):
+        self._set_status(Candidate.Status.INTERVIEW)
+        self.interview.refresh_from_db()
+        self.assertEqual(self.interview.result, Interview.Result.PASS_)
+
+    def test_rejecting_settles_the_interview_as_fail(self):
+        self._set_status(Candidate.Status.REJECTED)
+        self.interview.refresh_from_db()
+        self.assertEqual(self.interview.result, Interview.Result.FAIL)
+
+
 class HoldResumeActionTests(TestCase):
     """Taking a candidate off hold puts them back in the pipeline at the stage
     after the one they were held at - a Round 1 Hold resumes at Round 2."""
@@ -1521,7 +1556,9 @@ class ScreeningQuestionsGenerationTests(TestCase):
 class ScreeningQuestionsViewTests(TestCase):
     """The Tele Screening Questions popup: generated once, then reused - and
     still reachable (view button) once the candidate has moved past Tele
-    Screening, including from the Interviewer portal."""
+    Screening. HR/Recruiter/Hiring Manager only - not the Interviewer portal
+    (removed from there: an Interviewer could otherwise view or trigger
+    generation for a candidate they aren't interviewing, via this same URL)."""
 
     def setUp(self):
         self.user = get_user_model().objects.create_user('hr8', 'hr8@example.com', 'pw')
@@ -1564,7 +1601,7 @@ class ScreeningQuestionsViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'alert-danger')
 
-    def test_interviewer_can_view_questions_for_a_candidate_they_interview(self):
+    def test_interviewer_cannot_view_questions_even_for_a_candidate_they_interview(self):
         interviewer = get_user_model().objects.create_user('panel9', 'panel9@example.com', 'pw')
         interviewer.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
         self.candidate.screening_questions = screening_questions.dump_questions(['Q?'])
@@ -1574,8 +1611,7 @@ class ScreeningQuestionsViewTests(TestCase):
             scheduled_date=timezone.now() + timezone.timedelta(days=1))
         self.client.force_login(interviewer)
         response = self.client.get(reverse('candidate_screening_questions', args=[self.candidate.pk]))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Q?')
+        self.assertEqual(response.status_code, 403)
 
 
 class TeleScreeningMergedRemarksTests(TestCase):
@@ -1755,3 +1791,34 @@ class RejectionEmailPopupTests(TestCase):
         response = self.client.get(reverse('candidate_timeline', args=[c2.pk]))
         self.assertContains(response, reverse('candidate_reject', args=[c2.pk]))
         self.assertNotContains(response, 'data-bs-target="#rejectionModal"')
+
+
+class CandidateListPaginationAndExportTests(TestCase):
+    """Candidate lists cap what's rendered per page (CANDIDATE_LIST_PAGE_SIZE)
+    for query/render cost, but Export to Excel must still cover every row
+    matching the current filters, not just the visible page - see
+    views._ExcelExportMixin."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('hr10', 'hr10@example.com', 'pw')
+        self.user.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.client.force_login(self.user)
+        self.job = Job.objects.create(job_code='J1', title='Program Manager')
+        for i in range(5):
+            c = Candidate.objects.create(full_name=f'Candidate {i}', email=f'c{i}@example.com', job=self.job)
+            services.record_creation(c)
+
+    def test_the_list_page_is_capped_and_paginates(self):
+        with mock.patch.object(views.CandidateRepositoryListView, 'paginate_by', 2):
+            response = self.client.get(reverse('candidate_repository'))
+        self.assertTrue(response.context['is_paginated'])
+        self.assertEqual(len(response.context['candidates']), 2)
+        self.assertEqual(response.context['page_obj'].paginator.count, 5)
+
+    def test_export_to_excel_returns_every_matching_row_not_just_one_page(self):
+        with mock.patch.object(views.CandidateRepositoryListView, 'paginate_by', 2):
+            response = self.client.get(reverse('candidate_repository_export'))
+        self.assertEqual(response.status_code, 200)
+        wb = openpyxl.load_workbook(io.BytesIO(response.content))
+        ws = wb.active
+        self.assertEqual(ws.max_row, 6)  # header + all 5 candidates, not just one page's 2

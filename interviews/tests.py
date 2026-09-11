@@ -457,6 +457,8 @@ class InterviewerRecommendationTests(TestCase):
     def test_interviewer_pass_does_not_advance_the_candidate(self):
         interviewer = get_user_model().objects.create_user('panel', 'panel@turnb.com', 'pw')
         interviewer.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
+        self.interview.interviewer = interviewer
+        self.interview.save(update_fields=['interviewer'])
         self._submit(interviewer)
         self.interview.refresh_from_db()
         self.candidate.refresh_from_db()
@@ -467,6 +469,8 @@ class InterviewerRecommendationTests(TestCase):
     def test_interviewer_fail_does_not_reject_the_candidate(self):
         interviewer = get_user_model().objects.create_user('panel2', 'panel2@turnb.com', 'pw')
         interviewer.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
+        self.interview.interviewer = interviewer
+        self.interview.save(update_fields=['interviewer'])
         self._submit(interviewer, result=Interview.Result.FAIL)
         self.interview.refresh_from_db()
         self.candidate.refresh_from_db()
@@ -477,6 +481,8 @@ class InterviewerRecommendationTests(TestCase):
     def test_interviewer_feedback_is_prefilled_on_the_candidate_page(self):
         interviewer = get_user_model().objects.create_user('panel3', 'panel3@turnb.com', 'pw')
         interviewer.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
+        self.interview.interviewer = interviewer
+        self.interview.save(update_fields=['interviewer'])
         self._submit(interviewer, feedback='Great communication skills.')
         # _submit force_logs-in as the interviewer, who can't reach
         # candidate_timeline (ANY_STAFF only) - switch to an HR viewer, who
@@ -496,6 +502,32 @@ class InterviewerRecommendationTests(TestCase):
         self.assertEqual(self.interview.result, Interview.Result.PASS_)
         self.assertEqual(self.candidate.status, Candidate.Status.INTERVIEW)
 
+    def test_interviewer_cannot_record_a_result_on_another_interviewers_interview(self):
+        """IDOR fix: InterviewResultView.get_queryset() must scope a plain
+        Interviewer to interviews actually assigned to them - otherwise
+        changing the pk in the URL let one interviewer read and overwrite
+        another's feedback/result."""
+        owner = get_user_model().objects.create_user('owner', 'owner@turnb.com', 'pw')
+        owner.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
+        self.interview.interviewer = owner
+        self.interview.save(update_fields=['interviewer'])
+
+        outsider = get_user_model().objects.create_user('outsider', 'outsider@turnb.com', 'pw')
+        outsider.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
+
+        get_response = self._get_as(outsider)
+        self.assertEqual(get_response.status_code, 404)
+
+        response = self._submit(outsider, result=Interview.Result.FAIL, feedback='Sabotage.')
+        self.assertEqual(response.status_code, 404)
+        self.interview.refresh_from_db()
+        self.assertIsNone(self.interview.feedback)
+        self.assertEqual(self.interview.result, Interview.Result.PENDING)
+
+    def _get_as(self, user):
+        self.client.force_login(user)
+        return self.client.get(reverse('interview_result', args=[self.interview.pk]))
+
     def test_recruiter_can_now_reach_this_view_and_decide(self):
         """Pre-existing gap: InterviewSchedulerListView (ANY_STAFF, includes
         Recruiter) links every row to this same "Update Status" URL, but
@@ -512,6 +544,8 @@ class InterviewerRecommendationTests(TestCase):
     def test_interviewer_hold_is_a_recommendation_only(self):
         interviewer = get_user_model().objects.create_user('panel3', 'panel3@turnb.com', 'pw')
         interviewer.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
+        self.interview.interviewer = interviewer
+        self.interview.save(update_fields=['interviewer'])
         self._submit(interviewer, result=Interview.Result.HOLD, feedback='Notice period too long.')
         self.interview.refresh_from_db()
         self.candidate.refresh_from_db()

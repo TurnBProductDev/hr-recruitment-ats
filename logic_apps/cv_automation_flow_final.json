@@ -631,7 +631,7 @@
     },
     "djangoApiKey": {
       "type": "SecureString",
-      "value": "DN9U0zqUY6uRRgWTOaVvSbTr80BFGF5qIRca3vAVGok"
+      "value": ""
     }
   }
 }

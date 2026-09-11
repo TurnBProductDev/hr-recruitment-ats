@@ -438,6 +438,17 @@ class InterviewResultView(GroupRequiredMixin, UpdateView):
         user = self.request.user
         return user.is_superuser or user.groups.filter(name__in=(HR_ADMIN, RECRUITER, HIRING_MANAGER)).exists()
 
+    def get_queryset(self):
+        # HR/Recruiter/Hiring Manager can record a result on any interview;
+        # a plain Interviewer (allowed_groups includes INTERVIEWER, for the
+        # portal) must be scoped to interviews actually assigned to them -
+        # otherwise changing the pk in the URL would let one interviewer
+        # read and overwrite another's feedback/result.
+        qs = super().get_queryset()
+        if not self._can_decide_pipeline():
+            qs = qs.filter(interviewer=self.request.user)
+        return qs
+
     def form_valid(self, form):
         # Marking a result always completes the interview ("Round status
         # automatically updates as Done").
