@@ -1,5 +1,7 @@
 from django import forms
 
+from HR_management.widgets import BareClearableFileInput
+
 from .models import Job
 
 
@@ -36,6 +38,10 @@ class JobForm(BootstrapFormMixin, forms.ModelForm):
             'requirements': forms.Textarea(attrs={'rows': 4}),
             'opening_date': forms.DateInput(attrs={'type': 'date'}),
             'closing_date': forms.DateInput(attrs={'type': 'date'}),
+            # Plain <input type=file> - job_form.html renders its own
+            # filename/View/Clear row above this, so the default widget's
+            # "Currently: ... / Clear / Change:" markup would just duplicate it.
+            'jd_file': BareClearableFileInput,
         }
 
     def __init__(self, *args, **kwargs):
