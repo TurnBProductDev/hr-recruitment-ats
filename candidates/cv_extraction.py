@@ -22,11 +22,12 @@ import re
 import requests
 from django.conf import settings
 
+from HR_management import pdf_text
+
 logger = logging.getLogger(__name__)
 
 MIN_TEXT_CHARS = 200  # below this, treat the PDF as scanned and fall back to vision
 MAX_TEXT_CHARS = 12000  # mirrors the old Logic App's own cap on CV text sent to the model
-MAX_VISION_PAGES = 4  # caps cost/latency on an unusually long scanned CV
 
 _NULLISH = ('null', 'none', 'n/a', 'not found', 'not mentioned', 'not stated', '')
 
@@ -44,31 +45,6 @@ def _endpoint_url():
     deployment = settings.AZURE_OPENAI_SCORING_DEPLOYMENT
     api_version = settings.AZURE_OPENAI_API_VERSION
     return f'{endpoint}/openai/deployments/{deployment}/chat/completions?api-version={api_version}'
-
-
-def _pdf_text(content):
-    """The PDF's own embedded text layer - free, local, instant. Returns ''
-    for a scanned/image-only PDF (no text layer to read)."""
-    import fitz  # PyMuPDF - imported lazily; only needed when a CV is actually read
-    try:
-        with fitz.open(stream=content, filetype='pdf') as doc:
-            text = '\n'.join(page.get_text() for page in doc)
-    except Exception as exc:  # noqa: BLE001 - a malformed PDF must fall back, not crash the upload
-        logger.warning('Could not read the PDF text layer: %s', exc)
-        return ''
-    return text.strip()
-
-
-def _pdf_page_images(content, max_pages=MAX_VISION_PAGES):
-    """Fallback for a scanned/image-only CV: render each page to a PNG so the
-    vision-capable deployment can read it directly instead of a text layer."""
-    import fitz
-    images = []
-    with fitz.open(stream=content, filetype='pdf') as doc:
-        for page in doc[:max_pages]:
-            pixmap = page.get_pixmap(dpi=150)
-            images.append(pixmap.tobytes('png'))
-    return images
 
 
 RESPONSE_JSON_SCHEMA = {
@@ -237,11 +213,11 @@ def extract_profile(content, role_hint=None, source_hint=None, email_context=Non
         raise CVExtractionError(
             'CV reading is not configured - set AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_KEY.')
 
-    cv_text = _pdf_text(content)[:MAX_TEXT_CHARS]
+    cv_text = pdf_text.extract_text(content)[:MAX_TEXT_CHARS]
     page_images = []
     if len(cv_text) < MIN_TEXT_CHARS:
         try:
-            page_images = _pdf_page_images(content)
+            page_images = pdf_text.render_page_images(content)
         except Exception as exc:  # noqa: BLE001 - fall through with whatever text we have
             logger.warning('Could not render CV pages to images: %s', exc)
         if not cv_text and not page_images:

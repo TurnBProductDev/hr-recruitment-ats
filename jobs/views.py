@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
 from django.views import View
@@ -6,6 +7,7 @@ from django.views.generic import CreateView, DetailView, ListView, UpdateView
 
 from candidates.permissions import HR_ADMIN, RECRUITER, GroupRequiredMixin
 
+from . import jd_extraction
 from .forms import JobForm
 from .models import Job
 
@@ -86,6 +88,30 @@ class JobUpdateView(GroupRequiredMixin, UpdateView):
     def form_valid(self, form):
         messages.success(self.request, f'Vacancy "{form.instance.title}" updated.')
         return super().form_valid(form)
+
+
+class JobExtractJDView(GroupRequiredMixin, View):
+    """Called from the Vacancy form's JD file input the moment a file is
+    chosen (before Save) - reads it and returns Description/Requirements text
+    to pre-fill those fields, so HR edits an already-populated draft instead
+    of typing a JD from scratch. Never persists anything itself; the browser
+    fills the two textareas and the actual save still happens through the
+    normal form submit, same as everywhere else edits are reviewed before
+    being committed."""
+    allowed_groups = (HR_ADMIN, RECRUITER)
+
+    def post(self, request):
+        jd_file = request.FILES.get('jd_file')
+        if not jd_file:
+            return JsonResponse({'status': 'error', 'message': 'No file was uploaded.'}, status=400)
+
+        try:
+            fields = jd_extraction.extract_fields(
+                jd_file.read(), title_hint=(request.POST.get('title') or '').strip())
+        except jd_extraction.JDExtractionError as exc:
+            return JsonResponse({'status': 'error', 'message': str(exc)})
+
+        return JsonResponse({'status': 'ok', **fields})
 
 
 class JobCloseView(GroupRequiredMixin, View):

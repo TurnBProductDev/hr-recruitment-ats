@@ -89,6 +89,7 @@
           </div>
           {% endif %}
           {{ form.jd_file }}
+          <div id="jdExtractStatus" class="small mt-2"></div>
         </div>
 
         <div class="mt-4 d-flex gap-2">
@@ -137,4 +138,52 @@
 })();
 </script>
 {% endif %}
+<script>
+// The moment a JD file is chosen, read it and pre-fill Description/
+// Requirements - HR reviews/edits an already-populated draft instead of
+// typing a JD from scratch. Purely client-side pre-fill: nothing is saved
+// until the normal Save Changes submit, so a bad read just leaves the
+// fields as they were (or empty) rather than blocking anything.
+(function () {
+  var input = document.getElementById('id_jd_file');
+  var status = document.getElementById('jdExtractStatus');
+  var titleInput = document.getElementById('id_title');
+  var descField = document.getElementById('id_description');
+  var reqField = document.getElementById('id_requirements');
+  if (!input || !status || !descField || !reqField) return;
+
+  input.addEventListener('change', function () {
+    var file = input.files && input.files[0];
+    if (!file) return;
+
+    status.className = 'small mt-2 text-muted';
+    status.textContent = 'Reading the JD - Description/Requirements will fill in shortly…';
+
+    var formData = new FormData();
+    formData.append('jd_file', file);
+    formData.append('title', titleInput ? titleInput.value : '');
+    formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+
+    fetch('{% url "job_extract_jd" %}', {
+      method: 'POST', headers: {'X-Requested-With': 'XMLHttpRequest'}, body: formData,
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.status !== 'ok') {
+          status.className = 'small mt-2 text-danger';
+          status.textContent = data.message || 'Could not read this JD - fill in Description/Requirements manually.';
+          return;
+        }
+        if (data.description) { descField.value = data.description; }
+        if (data.requirements) { reqField.value = data.requirements; }
+        status.className = 'small mt-2 text-success';
+        status.textContent = 'Description and Requirements filled in from the JD - review and edit before saving.';
+      })
+      .catch(function () {
+        status.className = 'small mt-2 text-danger';
+        status.textContent = 'Could not reach the server - fill in Description/Requirements manually.';
+      });
+  });
+})();
+</script>
 {% endblock %}
