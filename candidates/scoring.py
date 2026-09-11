@@ -13,6 +13,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.db import connection
+from django.db.models import Q
 from django.utils import timezone
 
 from . import match_scoring, profile_extraction
@@ -22,8 +23,20 @@ from .models import Candidate
 logger = logging.getLogger(__name__)
 
 MS = Candidate.MatchState
+STATUS = Candidate.Status
 # A candidate is "pending" if never scored, or the last attempt failed.
 PENDING_STATES = (MS.PENDING, MS.ERROR)
+
+# Scope for "Rescore Everyone" (the Scoring Criteria page's rescore action)
+# and candidates.management.commands.rescore_candidates --pool all: every
+# candidate who's an active application right now - past screening and
+# still live (Active Pool), or freshly Open. Defined once here so the web
+# action and the CLI command read from the same definition instead of two
+# copies that could drift out of sync.
+_INITIAL_HOLD = Q(status=STATUS.SCREENING_HOLD, hold_from_status=STATUS.OPEN)
+ACTIVE_POOL = Q(status__in=(STATUS.SHORTLISTED, STATUS.ROUND1, STATUS.INTERVIEW,
+                            STATUS.FINAL_SELECTION)) | (Q(status=STATUS.SCREENING_HOLD) & ~_INITIAL_HOLD)
+OPEN_APPLICATIONS = Q(status=STATUS.OPEN)
 
 
 def start_job_scoring(job):
@@ -32,6 +45,42 @@ def start_job_scoring(job):
                               name=f'score-job-{job.pk}', daemon=True)
     thread.start()
     return thread
+
+
+def start_bulk_rescore():
+    """Force re-score every Active Pool / Open Applications candidate
+    (General Application excluded, since it's never mapped to a role -
+    nothing to score against) in the background - used from the Scoring
+    Criteria page after its text is edited, since an already-DONE score
+    doesn't refresh on its own (score_one() only claims PENDING_STATES).
+
+    Resets match_state to PENDING for the whole scope up front, then scores
+    a fixed snapshot of those candidates one at a time - unlike _run(job_id)
+    below, this doesn't keep re-querying "whatever is still pending", so a
+    candidate that fails and lands back in ERROR (still a PENDING_STATE)
+    can't make the run loop on it forever; every candidate in the batch is
+    attempted exactly once. Returns how many candidates were queued."""
+    from .views import GENERAL_APPLICATION  # local import - views.py imports this module
+    not_general = ~Q(job__isnull=True) & ~Q(job__title__iexact=GENERAL_APPLICATION)
+    qs = Candidate.objects.filter(ACTIVE_POOL | OPEN_APPLICATIONS).filter(not_general)
+
+    pks = list(qs.values_list('pk', flat=True))
+    Candidate.objects.filter(pk__in=pks).update(match_state=MS.PENDING)
+
+    thread = threading.Thread(target=_run_scope, args=(pks,), name='rescore-all', daemon=True)
+    thread.start()
+    return len(pks)
+
+
+def _run_scope(pks):
+    try:
+        for pk in pks:
+            candidate = (Candidate.objects.filter(pk=pk, match_state__in=PENDING_STATES)
+                        .select_related('job').first())
+            if candidate is not None:
+                score_one(candidate)
+    finally:
+        connection.close()
 
 
 def start_one(candidate):

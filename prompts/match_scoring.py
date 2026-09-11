@@ -3,9 +3,13 @@ overall_score (0-100) plus likes/not_matched/rationale, judging genuine role
 fit rather than keyword presence. See match_scoring.py's own module
 docstring for the full reasoning behind this shape.
 
-SYSTEM_PROMPT has one placeholder, {must_have_block}, filled in by
-match_scoring._build_system_prompt() with the job's must-have requirements
-(or '(none specified)') - the only part of the prompt that varies per call.
+SYSTEM_PROMPT has two placeholders, both filled in by
+match_scoring._build_system_prompt():
+- {must_have_block}: the job's must-have requirements (or '(none specified)').
+- {extra_criteria_block}: HR-editable criteria layered on top of the base
+  rubric (candidates.models.ScoringCriteria, edited from the web app at
+  candidates/views.py::ScoringCriteriaView) - empty string when nothing is
+  set, so the prompt reads identically to before that feature existed.
 """
 
 RESPONSE_JSON_SCHEMA = {
@@ -58,6 +62,7 @@ SYSTEM_PROMPT = (
     "footnote - reflect that in both the score and in not_matched.\n\n"
     "Must-have requirements for this role:\n"
     "{must_have_block}\n\n"
+    "{extra_criteria_block}"
     "Output:\n"
     "- overall_score: 0-100, your genuine read of whether this person could do this job now. Do not "
     "compute this as a sum of separate category scores - form one holistic judgment.\n"

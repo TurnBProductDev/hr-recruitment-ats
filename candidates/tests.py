@@ -22,10 +22,13 @@ from django.utils import timezone
 from interviews.models import Interview, InterviewRequest
 from jobs.models import Job
 
-from . import bulk, cv_extraction, cv_parser, logic_app_mail, rejection_emails, screening_questions, services, views
+from . import (
+    bulk, cv_extraction, cv_parser, logic_app_mail, match_scoring, rejection_emails,
+    screening_questions, scoring, services, views,
+)
 from .cv_extraction import CVExtractionError
 from .cv_parser import CVParseError
-from .models import BulkUploadBatch, BulkUploadItem, Candidate, CommunicationLog, EmailRegistry
+from .models import BulkUploadBatch, BulkUploadItem, Candidate, CommunicationLog, EmailRegistry, ScoringCriteria
 from .permissions import HIRING_MANAGER, HR_ADMIN, INTERVIEWER, RECRUITER
 from .screening_questions import ScreeningQuestionsError
 from .views import HOLD_TAB
@@ -1822,3 +1825,193 @@ class CandidateListPaginationAndExportTests(TestCase):
         wb = openpyxl.load_workbook(io.BytesIO(response.content))
         ws = wb.active
         self.assertEqual(ws.max_row, 6)  # header + all 5 candidates, not just one page's 2
+
+
+class ScoringCriteriaPromptAndCacheTests(TestCase):
+    """ScoringCriteria - HR-editable text layered on top of
+    match_scoring.py's base rubric - and its two effects: the prompt sent to
+    Azure OpenAI, and the scoring cache key (so editing it can't silently
+    keep serving a stale cached score)."""
+
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+
+    def test_load_creates_a_singleton_row(self):
+        self.assertEqual(ScoringCriteria.objects.count(), 0)
+        first = ScoringCriteria.load()
+        second = ScoringCriteria.load()
+        self.assertEqual(first.pk, second.pk)
+        self.assertEqual(ScoringCriteria.objects.count(), 1)
+
+    def test_prompt_includes_criteria_when_set(self):
+        prompt = match_scoring._build_system_prompt([], 'Weight AI/ML skills higher.')
+        self.assertIn('Weight AI/ML skills higher.', prompt)
+        self.assertIn('Additional scoring criteria set by HR', prompt)
+
+    def test_prompt_omits_the_block_entirely_when_blank(self):
+        prompt = match_scoring._build_system_prompt([], '')
+        self.assertNotIn('Additional scoring criteria set by HR', prompt)
+
+    def test_cache_key_changes_when_criteria_changes(self):
+        key_a = match_scoring.build_cache_key('job', 'candidate', [], '')
+        key_b = match_scoring.build_cache_key('job', 'candidate', [], 'Weight AI/ML skills higher.')
+        self.assertNotEqual(key_a, key_b)
+
+    def _openai_response(self, score=70):
+        body = {'choices': [{'message': {'content': json.dumps(
+            {'overall_score': score, 'likes': ['Good fit'], 'not_matched': [], 'rationale': 'Solid.'})}}]}
+        response = mock.Mock(status_code=200, text='')
+        response.json.return_value = body
+        return response
+
+    def test_score_candidate_sends_the_saved_criteria_to_azure_openai(self):
+        criteria = ScoringCriteria.load()
+        criteria.extra_instructions = 'Prefer candidates with hands-on AI/ML project experience.'
+        criteria.save()
+
+        job = Job.objects.create(job_code='J1', title='Analyst')
+        candidate = Candidate.objects.create(full_name='Test Candidate', email='test@example.com', job=job)
+
+        with self.settings(AZURE_OPENAI_ENDPOINT='https://example.test', AZURE_OPENAI_KEY='key'):
+            with mock.patch('candidates.match_scoring.requests.post',
+                            return_value=self._openai_response()) as post:
+                match_scoring.score_candidate(candidate, job)
+
+        system_message = post.call_args.kwargs['json']['messages'][0]['content']
+        self.assertIn('Prefer candidates with hands-on AI/ML project experience.', system_message)
+
+    def test_blank_criteria_never_shows_up_in_the_prompt(self):
+        job = Job.objects.create(job_code='J2', title='Analyst')
+        candidate = Candidate.objects.create(full_name='Blank Criteria', email='blank@example.com', job=job)
+
+        with self.settings(AZURE_OPENAI_ENDPOINT='https://example.test', AZURE_OPENAI_KEY='key'):
+            with mock.patch('candidates.match_scoring.requests.post',
+                            return_value=self._openai_response()) as post:
+                match_scoring.score_candidate(candidate, job)
+
+        system_message = post.call_args.kwargs['json']['messages'][0]['content']
+        self.assertNotIn('Additional scoring criteria set by HR', system_message)
+
+
+class ScoringCriteriaViewTests(TestCase):
+    """HR Admin only (a more consequential lever than day-to-day scoring
+    actions - it changes the rubric for every future score, every role)."""
+
+    def setUp(self):
+        self.admin = get_user_model().objects.create_user('admin1', password='pw')
+        self.admin.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.recruiter = get_user_model().objects.create_user('rec1', password='pw')
+        self.recruiter.groups.add(Group.objects.get_or_create(name=RECRUITER)[0])
+
+    def test_recruiter_cannot_reach_the_page(self):
+        self.client.login(username='rec1', password='pw')
+        response = self.client.get(reverse('scoring_criteria'))
+        self.assertEqual(response.status_code, 403)
+
+    def test_admin_can_view_and_save(self):
+        self.client.login(username='admin1', password='pw')
+        response = self.client.post(reverse('scoring_criteria'),
+                                    {'extra_instructions': 'Weight AI/ML skills higher.'})
+        self.assertRedirects(response, reverse('scoring_criteria'))
+        criteria = ScoringCriteria.load()
+        self.assertEqual(criteria.extra_instructions, 'Weight AI/ML skills higher.')
+        self.assertEqual(criteria.updated_by, self.admin)
+
+    def test_recruiter_cannot_save(self):
+        self.client.login(username='rec1', password='pw')
+        response = self.client.post(reverse('scoring_criteria'), {'extra_instructions': 'Sneaky edit.'})
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(ScoringCriteria.load().extra_instructions, '')
+
+    def test_rescore_everyone_requires_admin(self):
+        self.client.login(username='rec1', password='pw')
+        response = self.client.post(reverse('scoring_criteria_rescore'))
+        self.assertEqual(response.status_code, 403)
+
+    def test_rescore_everyone_triggers_a_bulk_rescore(self):
+        self.client.login(username='admin1', password='pw')
+        with self.settings(AZURE_OPENAI_ENDPOINT='https://example.test', AZURE_OPENAI_KEY='key'):
+            with mock.patch('candidates.views.scoring.start_bulk_rescore', return_value=3) as start:
+                response = self.client.post(reverse('scoring_criteria_rescore'))
+        start.assert_called_once()
+        self.assertRedirects(response, reverse('scoring_criteria'))
+
+    def test_rescore_everyone_reports_when_scoring_is_not_configured(self):
+        self.client.login(username='admin1', password='pw')
+        with self.settings(AZURE_OPENAI_ENDPOINT='', AZURE_OPENAI_KEY=''):
+            with mock.patch('candidates.views.scoring.start_bulk_rescore') as start:
+                self.client.post(reverse('scoring_criteria_rescore'))
+        start.assert_not_called()
+
+
+class BulkRescoreScopeTests(TestCase):
+    """scoring.start_bulk_rescore()'s scope: Active Pool + Open Applications,
+    General Application excluded - same membership as
+    candidates.management.commands.rescore_candidates --pool all."""
+
+    def setUp(self):
+        self.job = Job.objects.create(job_code='J1', title='Program Manager')
+        self.general = Job.objects.create(job_code='GA0', title=views.GENERAL_APPLICATION)
+
+    def _candidate(self, name, status, job=None):
+        c = Candidate.objects.create(
+            full_name=name, email=f'{name}@example.com', job=job or self.job, status=status)
+        return c
+
+    def test_start_bulk_rescore_resets_and_scopes_correctly(self):
+        S = Candidate.Status
+        in_scope_open = self._candidate('OpenOne', S.OPEN)
+        in_scope_active = self._candidate('ActiveOne', S.SHORTLISTED)
+        out_of_scope_rejected = self._candidate('RejectedOne', S.REJECTED)
+        out_of_scope_general = self._candidate('GeneralOne', S.OPEN, job=self.general)
+        # Already scored under an old prompt/criteria - must be reset to PENDING.
+        Candidate.objects.filter(pk=in_scope_active.pk).update(match_state=Candidate.MatchState.DONE)
+
+        with mock.patch('candidates.scoring.threading.Thread') as thread_cls:
+            count = scoring.start_bulk_rescore()
+
+        self.assertEqual(count, 2)
+        thread_cls.assert_called_once()
+        in_scope_open.refresh_from_db()
+        in_scope_active.refresh_from_db()
+        out_of_scope_rejected.refresh_from_db()
+        out_of_scope_general.refresh_from_db()
+        self.assertEqual(in_scope_open.match_state, Candidate.MatchState.PENDING)
+        self.assertEqual(in_scope_active.match_state, Candidate.MatchState.PENDING)
+        # Untouched - never in scope, so never reset either.
+        self.assertEqual(out_of_scope_rejected.match_state, Candidate.MatchState.PENDING)
+        self.assertEqual(out_of_scope_general.match_state, Candidate.MatchState.PENDING)
+
+    def test_run_scope_scores_every_candidate_in_the_batch_once(self):
+        S = Candidate.Status
+        c1 = self._candidate('One', S.OPEN)
+        c2 = self._candidate('Two', S.OPEN)
+        Candidate.objects.filter(pk__in=[c1.pk, c2.pk]).update(match_state=Candidate.MatchState.PENDING)
+
+        with mock.patch('candidates.scoring.score_one') as score_one:
+            scoring._run_scope([c1.pk, c2.pk])
+
+        self.assertEqual(score_one.call_count, 2)
+        scored_ids = {call.args[0].pk for call in score_one.call_args_list}
+        self.assertEqual(scored_ids, {c1.pk, c2.pk})
+
+    def test_run_scope_does_not_loop_forever_on_a_failing_candidate(self):
+        """A candidate that keeps landing back in ERROR (still a
+        PENDING_STATE) must still only be attempted once per batch - see
+        start_bulk_rescore's docstring for why _run(job_id)'s "keep
+        re-querying whatever's still pending" pattern isn't used here."""
+        S = Candidate.Status
+        c1 = self._candidate('AlwaysFails', S.OPEN)
+        Candidate.objects.filter(pk=c1.pk).update(match_state=Candidate.MatchState.PENDING)
+
+        def _always_error(candidate):
+            candidate.match_state = Candidate.MatchState.ERROR
+            candidate.match_error = 'boom'
+            candidate.save(update_fields=['match_state', 'match_error'])
+            return candidate
+
+        with mock.patch('candidates.scoring.score_one', side_effect=_always_error) as score_one:
+            scoring._run_scope([c1.pk])
+
+        self.assertEqual(score_one.call_count, 1)

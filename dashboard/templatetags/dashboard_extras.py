@@ -22,6 +22,7 @@ BREADCRUMB_REGISTRY = {
     'candidate_bulk_progress': ('Progress', 'candidate_bulk_upload'),
     'candidate_score': ('Score Candidates', None),
     'candidate_score_progress': ('Scoring Progress', 'candidate_score'),
+    'scoring_criteria': ('Scoring Criteria', None),
     'job_manage_list': ('Vacancies', None),
     'job_add': ('Add Vacancy', 'job_manage_list'),
     'job_edit': ('Edit Vacancy', 'job_manage_list'),

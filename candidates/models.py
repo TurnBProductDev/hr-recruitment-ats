@@ -480,3 +480,30 @@ class Offer(models.Model):
 
     def __str__(self):
         return f"Offer for {self.candidate.full_name} ({self.get_status_display()})"
+
+
+class ScoringCriteria(models.Model):
+    """Free-text criteria HR can layer on top of the base scoring rubric
+    (candidates/match_scoring.py's SYSTEM_PROMPT) - e.g. "weight AI/ML
+    skills higher", "prefer 3+ years in IT". Edited from the web app
+    (candidates/views.py::ScoringCriteriaView), not code, so it can change
+    without a deploy - see match_scoring.py's docstring for how it's folded
+    into the prompt and the scoring cache key.
+
+    Singleton: always the one row with pk=1 - load() gets or creates it."""
+    extra_instructions = models.TextField(blank=True, default='')
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'Scoring Criteria'
+        verbose_name_plural = 'Scoring Criteria'
+
+    def __str__(self):
+        return 'Scoring Criteria'
+
+    @classmethod
+    def load(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj

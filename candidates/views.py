@@ -37,6 +37,7 @@ from .models import (
     HOLD_STAGES,
     CommunicationLog,
     Note,
+    ScoringCriteria,
     hold_label,
 )
 from .permissions import (
@@ -1837,3 +1838,44 @@ class ScoreCandidatesStatusView(GroupRequiredMixin, View):
 
     def get(self, request, job_id):
         return JsonResponse(scoring.summarise(job_id))
+
+
+class ScoringCriteriaView(GroupRequiredMixin, View):
+    """HR-editable free text layered on top of match_scoring.py's base
+    rubric (e.g. "weight AI/ML skills higher") - see ScoringCriteria's own
+    docstring for how it reaches the prompt. Admin-only: unlike Score
+    Candidates itself, this changes the rubric for every future score across
+    every role, not just one run, so it's a more consequential lever than
+    Recruiter's day-to-day scoring actions."""
+    template_name = 'candidates/scoring_criteria.html'
+    allowed_groups = (HR_ADMIN,)
+
+    def get(self, request):
+        return render(request, self.template_name, {'criteria': ScoringCriteria.load()})
+
+    def post(self, request):
+        criteria = ScoringCriteria.load()
+        criteria.extra_instructions = request.POST.get('extra_instructions', '').strip()
+        criteria.updated_by = request.user
+        criteria.save(update_fields=['extra_instructions', 'updated_by', 'updated_at'])
+        messages.success(request, 'Scoring criteria saved. New scores will use it right away - '
+                                  'already-scored candidates keep their old score until re-scored.')
+        return redirect('scoring_criteria')
+
+
+class ScoringCriteriaRescoreView(GroupRequiredMixin, View):
+    """Force every Active Pool / Open Applications candidate to be re-scored
+    in the background - offered right on the Scoring Criteria page, since
+    saving new criteria text has no effect on anyone already scored until
+    they're re-scored (see candidates.scoring.start_bulk_rescore)."""
+    allowed_groups = (HR_ADMIN,)
+
+    def post(self, request):
+        if not match_scoring.is_configured():
+            messages.error(request, 'Scoring is not configured - set AZURE_OPENAI_ENDPOINT '
+                                    'and AZURE_OPENAI_KEY.')
+        else:
+            count = scoring.start_bulk_rescore()
+            messages.success(request, f'Re-scoring {count} candidate(s) in the background - '
+                                      'scores will update over the next few minutes.')
+        return redirect('scoring_criteria')

@@ -95,6 +95,10 @@ urlpatterns = [
     path('hr/candidates/score/<int:job_id>/status/', views.ScoreCandidatesStatusView.as_view(),
          name='candidate_score_status'),
 
+    path('hr/candidates/scoring-criteria/', views.ScoringCriteriaView.as_view(), name='scoring_criteria'),
+    path('hr/candidates/scoring-criteria/rescore/', views.ScoringCriteriaRescoreView.as_view(),
+         name='scoring_criteria_rescore'),
+
     # Machine-to-machine: called by a Logic App (X-Api-Key auth, not a
     # session) - see CVExtractAPIView and logic_apps/README.md.
     path('api/cv/extract/', views.CVExtractAPIView.as_view(), name='cv_extract_api'),

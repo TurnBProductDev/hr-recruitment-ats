@@ -33,6 +33,7 @@ import requests
 from django.conf import settings
 from django.core.cache import cache
 
+from .models import ScoringCriteria
 from prompts.match_scoring import RESPONSE_JSON_SCHEMA, SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
@@ -42,8 +43,13 @@ logger = logging.getLogger(__name__)
 # Azure OpenAI for an identical answer. Caching is best-effort only - a miss
 # just means a normal live call - so the project's default cache (in-process
 # LocMemCache; nothing extra configured in settings.py) is good enough here.
+# The cache key includes ScoringCriteria's current text (see build_cache_key)
+# so editing it on the Scoring Criteria page invalidates every old cached
+# score on its own - no version bump needed here for that. v4 bumped the
+# prompt itself (added the extra-criteria placeholder), which still needs a
+# version bump since the *template*, not just the per-call inputs, changed.
 CACHE_TIMEOUT = 60 * 60 * 24
-CACHE_PREFIX = 'match_scoring:v3:'
+CACHE_PREFIX = 'match_scoring:v4:'
 
 class ScoreError(Exception):
     """Raised when a candidate could not be scored. Message is shown to HR."""
@@ -101,14 +107,21 @@ def _candidate_text(candidate):
     return '\n\n'.join(parts)
 
 
-def _build_system_prompt(must_have):
+def _build_system_prompt(must_have, extra_criteria):
     must_have_block = '\n'.join(f'- {item}' for item in must_have) if must_have else '(none specified)'
-    return SYSTEM_PROMPT.format(must_have_block=must_have_block)
+    extra_criteria_block = ''
+    if extra_criteria:
+        extra_criteria_block = (
+            'Additional scoring criteria set by HR - apply these on top of everything above:\n'
+            f'{extra_criteria}\n\n'
+        )
+    return SYSTEM_PROMPT.format(must_have_block=must_have_block, extra_criteria_block=extra_criteria_block)
 
 
-def build_cache_key(job_text, candidate_text, must_have):
+def build_cache_key(job_text, candidate_text, must_have, extra_criteria):
     payload = json.dumps(
-        {'job': job_text, 'candidate': candidate_text, 'must_have': must_have}, sort_keys=True)
+        {'job': job_text, 'candidate': candidate_text, 'must_have': must_have, 'criteria': extra_criteria},
+        sort_keys=True)
     return CACHE_PREFIX + hashlib.sha256(payload.encode('utf-8')).hexdigest()
 
 
@@ -123,13 +136,14 @@ def score_candidate(candidate, job):
     must_have = job.must_have_list
     job_text = _job_text(job)
     candidate_text = _candidate_text(candidate)
+    extra_criteria = ScoringCriteria.load().extra_instructions.strip()
 
-    cache_key = build_cache_key(job_text, candidate_text, must_have)
+    cache_key = build_cache_key(job_text, candidate_text, must_have, extra_criteria)
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
 
-    system_prompt = _build_system_prompt(must_have)
+    system_prompt = _build_system_prompt(must_have, extra_criteria)
     user_content = f'{job_text}\n\n---\n\nCandidate Profile:\n\n{candidate_text}'
     payload = {
         'messages': [

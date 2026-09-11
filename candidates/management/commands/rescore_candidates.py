@@ -29,21 +29,16 @@ from candidates import match_scoring, scoring
 from candidates.models import Candidate
 from candidates.views import GENERAL_APPLICATION
 
-STATUS = Candidate.Status
 MS = Candidate.MatchState
 
-# Same membership as dashboard.views.SHORTLISTED_GROUP ("Active Pool"): every
-# status past screening, plus a hold taken at any later stage - not a hold
-# taken before screening (that's Future Prospects, not an active application).
-INITIAL_HOLD = Q(status=STATUS.SCREENING_HOLD, hold_from_status=STATUS.OPEN)
-ACTIVE_POOL = Q(status__in=(STATUS.SHORTLISTED, STATUS.ROUND1, STATUS.INTERVIEW,
-                            STATUS.FINAL_SELECTION)) | (Q(status=STATUS.SCREENING_HOLD) & ~INITIAL_HOLD)
-OPEN_APPLICATIONS = Q(status=STATUS.OPEN)
-
+# ACTIVE_POOL/OPEN_APPLICATIONS live in candidates.scoring - shared with
+# start_bulk_rescore() (the Scoring Criteria page's "Rescore Everyone"
+# action) so the CLI and the web action can't drift on what counts as
+# "Active Pool" (dashboard.views.SHORTLISTED_GROUP has the same membership).
 POOL_FILTERS = {
-    'active_pool': ACTIVE_POOL,
-    'open': OPEN_APPLICATIONS,
-    'all': ACTIVE_POOL | OPEN_APPLICATIONS,
+    'active_pool': scoring.ACTIVE_POOL,
+    'open': scoring.OPEN_APPLICATIONS,
+    'all': scoring.ACTIVE_POOL | scoring.OPEN_APPLICATIONS,
 }
 
 NOT_GENERAL_APPLICATION = ~Q(job__isnull=True) & ~Q(job__title__iexact=GENERAL_APPLICATION)

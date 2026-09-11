@@ -79,6 +79,9 @@
           <ul class="dropdown-menu">
             <li><a class="dropdown-item" href="{% url 'candidate_score' %}">Score Candidates</a></li>
             <li><a class="dropdown-item" href="{% url 'candidate_bulk_upload' %}">Bulk Upload</a></li>
+            {% if is_hr_admin %}
+            <li><a class="dropdown-item" href="{% url 'scoring_criteria' %}">Scoring Criteria</a></li>
+            {% endif %}
           </ul>
         </div>
         <a class="app-nav-link {% if '/hr/reports/' in request.path %}active{% endif %}" href="{% url 'hr_reports' %}">Reports</a>
