@@ -84,19 +84,18 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
   .sm-thead, .sm-row { min-width: 460px; }
 }
 
-/* ---- Top-right quick links: General Applications / Future Prospects -
+/* ---- Quick-link pills: General Applications / Future Prospects -
    excluded from every number below (see dashboard/views.py), so they get
-   their own always-visible counts instead of just disappearing. ---- */
-.dash-side-link {
-  display: inline-flex; align-items: center; gap: 7px; text-decoration: none;
-  font-size: .78rem; font-weight: 500; color: #45534f; background: #fff;
-  border: 1px solid #d8e0df; border-radius: 999px; padding: 5px 8px 5px 12px;
+   their own always-visible counts instead of just disappearing. Sit in the
+   filter row, same height as the Job Code/Vacancy dropdowns. ---- */
+.dash-count-pill {
+  display: inline-flex; align-items: center; gap: 12px; text-decoration: none;
+  background: #fff; border: 1px solid #d8e0df; border-radius: 999px;
+  padding: 6px 16px; line-height: 1.15;
 }
-.dash-side-link:hover { border-color: #b9c8c8; color: #1f2a2a; }
-.dash-side-link-n {
-  background: #eef1f1; color: #1f2a2a; font-weight: 700; font-size: .72rem;
-  border-radius: 999px; padding: 2px 9px;
-}
+.dash-count-pill:hover { border-color: #b9c8c8; box-shadow: 0 3px 10px rgba(16,24,40,.06); }
+.dash-count-pill-label { font-size: .78rem; font-weight: 500; color: #45534f; max-width: 92px; }
+.dash-count-pill-n { font-size: 1.1rem; font-weight: 700; color: #1f2a2a; }
 
 /* ---- Summary tab: plain stat cards + tables ---- */
 .sm-kpis { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 22px; }
@@ -184,46 +183,44 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
 {% endblock %}
 
 {% block content %}
-<div class="d-flex flex-wrap justify-content-between align-items-start mb-3 gap-2">
+<div class="d-flex flex-wrap justify-content-between align-items-end mb-3 gap-2">
   <h3 class="mb-0">Dashboard</h3>
-  <div class="d-flex flex-column align-items-end gap-2">
-    <div class="d-flex flex-wrap gap-2">
-      <a href="{% url 'candidate_general_applications' %}" class="dash-side-link">
-        General Applications <span class="dash-side-link-n">{{ general_applications_count }}</span>
-      </a>
-      <a href="{% url 'candidate_future_prospects' %}" class="dash-side-link">
-        Future Prospects <span class="dash-side-link-n">{{ future_prospects_count }}</span>
-      </a>
+  <form method="get" class="d-flex align-items-end flex-wrap gap-3">
+    <input type="hidden" name="view" value="{{ view }}">
+    <input type="hidden" name="scoped" value="1">
+    <a href="{% url 'candidate_general_applications' %}" class="dash-count-pill">
+      <span class="dash-count-pill-label">General Applications</span>
+      <span class="dash-count-pill-n">{{ general_applications_count }}</span>
+    </a>
+    <a href="{% url 'candidate_future_prospects' %}" class="dash-count-pill">
+      <span class="dash-count-pill-label">Future Prospects</span>
+      <span class="dash-count-pill-n">{{ future_prospects_count }}</span>
+    </a>
+    <div>
+      <label class="form-label small text-muted mb-0">Job Code</label>
+      <select class="form-select form-select-sm" onchange="this.form.job.value=this.value; this.form.submit();" style="min-width: 130px;">
+        <option value="">All codes</option>
+        {% for j in jobs %}
+        <option value="{{ j.id }}" {% if selected_job == j.id|stringformat:'s' %}selected{% endif %}>{{ j.job_code }}</option>
+        {% endfor %}
+      </select>
     </div>
-    <form method="get" class="d-flex align-items-end gap-3">
-      <input type="hidden" name="view" value="{{ view }}">
-      <input type="hidden" name="scoped" value="1">
-      <div>
-        <label class="form-label small text-muted mb-0">Job Code</label>
-        <select class="form-select form-select-sm" onchange="this.form.job.value=this.value; this.form.submit();" style="min-width: 130px;">
-          <option value="">All codes</option>
-          {% for j in jobs %}
-          <option value="{{ j.id }}" {% if selected_job == j.id|stringformat:'s' %}selected{% endif %}>{{ j.job_code }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div>
-        <label class="form-label small text-muted mb-0">Vacancy</label>
-        <select name="job" class="form-select form-select-sm" onchange="this.form.submit()" style="min-width: 240px;">
-          <option value="">All vacancies</option>
-          {% for j in jobs %}
-          <option value="{{ j.id }}" {% if selected_job == j.id|stringformat:'s' %}selected{% endif %}>{{ j.title }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="form-check form-switch mb-1">
-        <input type="checkbox" class="form-check-input" role="switch" id="scopeSwitch"
-               name="scope" value="open" {% if scope == 'open' %}checked{% endif %} onchange="this.form.submit()">
-        <label class="form-check-label small text-muted" for="scopeSwitch">Open vacancies only</label>
-      </div>
-      <noscript><button class="btn btn-sm btn-primary-app">Go</button></noscript>
-    </form>
-  </div>
+    <div>
+      <label class="form-label small text-muted mb-0">Vacancy</label>
+      <select name="job" class="form-select form-select-sm" onchange="this.form.submit()" style="min-width: 240px;">
+        <option value="">All vacancies</option>
+        {% for j in jobs %}
+        <option value="{{ j.id }}" {% if selected_job == j.id|stringformat:'s' %}selected{% endif %}>{{ j.title }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-check form-switch mb-1">
+      <input type="checkbox" class="form-check-input" role="switch" id="scopeSwitch"
+             name="scope" value="open" {% if scope == 'open' %}checked{% endif %} onchange="this.form.submit()">
+      <label class="form-check-label small text-muted" for="scopeSwitch">Open vacancies only</label>
+    </div>
+    <noscript><button class="btn btn-sm btn-primary-app">Go</button></noscript>
+  </form>
 </div>
 
 <ul class="nav nav-tabs mb-3" id="dashTabs">
@@ -240,7 +237,7 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
       <div class="sm-kpi" style="--kpi-accent:#1f2a2a">
         <div class="lbl">Open Positions</div>
         <div class="val">{{ open_positions }}</div>
-        <div class="sub">vacancies</div>
+        <div class="sub">Openings</div>
       </div>
       <div class="sm-kpi" style="--kpi-accent:#c9d3d1">
         <div class="lbl">Total Applicants</div>

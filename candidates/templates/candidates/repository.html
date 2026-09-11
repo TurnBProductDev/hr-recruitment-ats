@@ -80,6 +80,7 @@
 {% block content %}
 <form method="get" id="repoFilterForm">
   <input type="hidden" name="tab" value="{{ tab }}">
+  <input type="hidden" name="scoped" value="1">
 
   <div class="repo-head">
     <div>
@@ -317,7 +318,6 @@
         </tbody>
       </table>
     </div>
-    {% include "candidates/_pagination.html" %}
   </div>
 </form>
 

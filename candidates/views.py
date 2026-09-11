@@ -412,10 +412,21 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
     template_name = 'candidates/repository.html'
     context_object_name = 'candidates'
     allowed_groups = ANY_STAFF
-    paginate_by = CANDIDATE_LIST_PAGE_SIZE
 
     def get_tab(self):
         return self.request.GET.get('tab', 'open')
+
+    def _scope(self):
+        # 'scoped' only appears once the filter form has actually been
+        # submitted (it's a hidden field on it) - an unchecked checkbox isn't
+        # sent at all, so that's indistinguishable from a fresh visit with no
+        # query string otherwise. Every fresh arrival at the Repository
+        # (nav link, a candidate page's Back link, ...) defaults to Open
+        # vacancies only; explicitly unchecking it is still respected for
+        # that request - same pattern as dashboard.views.HRDashboardView.
+        if 'scoped' in self.request.GET:
+            return self.request.GET.get('scope', '')
+        return 'open'
 
     def _apply_flow(self, qs, flow):
         from .flows import flow_filter
@@ -432,7 +443,7 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
         if job_id:
             qs = qs.filter(job_id=job_id)
 
-        if self.request.GET.get('scope') == 'open':
+        if self._scope() == 'open':
             qs = qs.filter(job__status=Job.Status.OPEN, job__is_archived=False)
 
         source = self.request.GET.get('source')
@@ -527,7 +538,7 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
                             .values('status').annotate(n=Count('id'))}
         ctx['total_candidates'] = sum(ctx['tab_counts'].values())
         ctx['awaiting_count'] = ctx['tab_counts'].get(STATUS.OPEN, 0)
-        scope = self.request.GET.get('scope', '')
+        scope = self._scope()
         job_list = Job.objects.all().order_by('title')
         if scope == 'open':
             job_list = job_list.filter(status=Job.Status.OPEN, is_archived=False)

@@ -872,7 +872,7 @@ class HoldNamingTests(TestCase):
     def test_the_repository_tab_is_called_hold(self):
         services.change_status(self.candidate, Candidate.Status.INTERVIEW)
         self._hold()
-        response = self.client.get(f"{reverse('candidate_repository')}?tab=screening_hold")
+        response = self.client.get(f"{reverse('candidate_repository')}?tab=screening_hold&scoped=1")
         self.assertContains(response, '>Hold</a>')  # the tab itself
         self.assertContains(response, 'badge-screening_hold">Round 2 Hold')
 
@@ -886,7 +886,7 @@ class HoldNamingTests(TestCase):
         for tab, status in stages:
             with self.subTest(tab=tab):
                 services.change_status(self.candidate, status)
-                response = self.client.get(f"{reverse('candidate_repository')}?tab={tab}")
+                response = self.client.get(f"{reverse('candidate_repository')}?tab={tab}&scoped=1")
                 self.assertContains(response, hold_url)
 
     def test_hold_is_not_offered_on_terminal_tabs(self):
@@ -1079,7 +1079,7 @@ class HoldResumeActionTests(TestCase):
 
     def test_the_hold_tab_shows_the_matching_button(self):
         self._hold_at(Candidate.Status.ROUND1)
-        response = self.client.get(f"{reverse('candidate_repository')}?tab={HOLD_TAB}")
+        response = self.client.get(f"{reverse('candidate_repository')}?tab={HOLD_TAB}&scoped=1")
         self.assertContains(response, 'Move to Round 2')
         self.assertContains(
             response, reverse('candidate_interview_stage', args=[self.candidate.pk]))
@@ -1118,7 +1118,7 @@ class RepositoryStatusFilterTests(TestCase):
         self._candidate('Held at round 1', Candidate.Status.ROUND1, held=True)
         self._candidate('Held at screening', Candidate.Status.OPEN, held=True)
         response = self.client.get(
-            f"{reverse('candidate_repository')}?tab={HOLD_TAB}&status={Candidate.Status.ROUND1}")
+            f"{reverse('candidate_repository')}?tab={HOLD_TAB}&status={Candidate.Status.ROUND1}&scoped=1")
         self.assertContains(response, 'Held at round 1')
         self.assertNotContains(response, 'Held at screening')
 
@@ -1132,7 +1132,7 @@ class RepositoryStatusFilterTests(TestCase):
     def test_hold_tab_excludes_candidates_held_before_screening(self):
         self._candidate('Held at round 1', Candidate.Status.ROUND1, held=True)
         self._candidate('Held at screening', Candidate.Status.OPEN, held=True)
-        response = self.client.get(f"{reverse('candidate_repository')}?tab={HOLD_TAB}")
+        response = self.client.get(f"{reverse('candidate_repository')}?tab={HOLD_TAB}&scoped=1")
         self.assertContains(response, 'Held at round 1')
         self.assertNotContains(response, 'Held at screening')
 
@@ -1140,7 +1140,7 @@ class RepositoryStatusFilterTests(TestCase):
         self._candidate('Shortlisted one', Candidate.Status.SHORTLISTED)
         self._candidate('Open one', Candidate.Status.OPEN)
         response = self.client.get(
-            f"{reverse('candidate_repository')}?flow=all&status={Candidate.Status.SHORTLISTED}")
+            f"{reverse('candidate_repository')}?flow=all&status={Candidate.Status.SHORTLISTED}&scoped=1")
         self.assertContains(response, 'Shortlisted one')
         self.assertNotContains(response, 'Open one')
 

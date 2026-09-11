@@ -16,6 +16,16 @@ body {
   letter-spacing: 0.1px;
 }
 
+/* Checkboxes/switches: brand teal instead of Bootstrap's default blue. */
+.form-check-input:checked {
+  background-color: var(--primary-green);
+  border-color: var(--primary-green);
+}
+.form-check-input:focus {
+  border-color: var(--primary-green);
+  box-shadow: 0 0 0 .2rem rgba(0, 140, 140, .25);
+}
+
 /* Headings: tighter, less shouty */
 h1, .h1 { font-size: 24px; font-weight: 700; }
 h2, .h2 { font-size: 20px; font-weight: 700; }
