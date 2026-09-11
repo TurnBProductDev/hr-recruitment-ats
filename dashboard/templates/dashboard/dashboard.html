@@ -253,7 +253,6 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
       <div class="sm-kpi" style="--kpi-accent:#0e6f6b">
         <div class="lbl">Active Pool</div>
         <div class="val" style="color:#0e6f6b">{{ s.shortlisted }}</div>
-        <div class="sm-kpi-bar"><div class="sm-kpi-bar-fill" style="width:{% if s.total %}{% widthratio s.shortlisted s.total 100 %}{% else %}0{% endif %}%;background:#0e6f6b"></div></div>
         <div class="sm-kpi-subval">
           <div class="lbl">Rejected</div>
           <div class="val" style="color:#b02a37">{{ s.rejected }}</div>
@@ -274,6 +273,7 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
           <div class="fnl-panel-head sm-panel-head"><h5>By Job / Role</h5></div>
           <div class="sm-thead">
             <span class="sm-col-name">Role</span>
+            <span class="sm-col-plain">Openings</span>
             <span class="sm-col-num">Applicants</span>
             <span class="sm-col-plain">Unattended</span>
             <span class="sm-col-short">Active Pool</span>
@@ -283,6 +283,7 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
           {% for r in by_job %}
           <div class="sm-row">
             <span class="sm-col-name">{{ r.job__title|default:"Unassigned" }}</span>
+            <span class="sm-col-plain">{{ r.openings|default:0 }}</span>
             <span class="sm-col-num">{{ r.total }}</span>
             <span class="sm-col-plain">{{ r.open }}</span>
             <span class="sm-col-short">{{ r.shortlisted }}</span>

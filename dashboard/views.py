@@ -1,4 +1,4 @@
-from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F, Q, Sum
+from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F, Max, Q, Sum
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
@@ -118,7 +118,10 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
         ctx['open_positions'] = Job.objects.filter(status=Job.Status.OPEN, is_archived=False).count()
         ctx['summary'] = _summary_counts_qs(base)
         ctx['by_job'] = (base.values('job__title')
-                         .annotate(**_grouped_counts())
+                         # Max, not Sum: `openings` is a per-job value, not per-candidate -
+                         # summing it across every candidate row in the group would multiply
+                         # it out by however many candidates that job has.
+                         .annotate(openings=Max('job__openings'), **_grouped_counts())
                          .order_by('-total'))
         ctx['by_source'] = (base.exclude(source__isnull=True).exclude(source='')
                             .values('source')

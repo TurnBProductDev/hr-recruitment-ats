@@ -102,6 +102,14 @@ class SummaryTableTests(TestCase):
         row = self._row('by_source')
         self.assertEqual(row['open'] + row['shortlisted'] + row['rejected'] + row['hired'], row['total'])
 
+    def test_by_job_openings_is_not_multiplied_by_candidate_count(self):
+        """`openings` is a per-job value, not per-candidate - annotating it
+        with Sum() across a group with 9 candidates would wrongly multiply a
+        job with 1 opening out to 9. Must use Max() instead."""
+        row = self._row('by_job')
+        self.assertEqual(row['total'], 9)
+        self.assertEqual(row['openings'], 1)  # Job.openings default, not 9
+
 
 class OpenVacanciesDefaultScopeTests(TestCase):
     """A fresh arrival at the dashboard (no query string at all) defaults to
