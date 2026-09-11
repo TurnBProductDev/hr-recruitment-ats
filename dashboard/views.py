@@ -1,4 +1,4 @@
-from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F, Max, Q, Sum
+from django.db.models import Count, Max, Q, Sum
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
@@ -6,7 +6,7 @@ from django.utils import timezone
 from django.views.generic import TemplateView
 
 from candidates.flows import flow_count
-from candidates.models import Candidate, CandidateStatusHistory
+from candidates.models import Candidate
 from candidates.permissions import ANY_STAFF, GroupRequiredMixin
 from candidates.views import GENERAL_APPLICATION
 from interviews.models import Interview
@@ -340,6 +340,36 @@ class DailyActionDrilldownView(GroupRequiredMixin, TemplateView):
         return ctx
 
 
+def _report_metrics(qs):
+    """Applicants / Shortlisting Ratio / Round 1 Clear Ratio / Hired for one
+    queryset - shared by the page-level KPIs and each By Job/Role and Source
+    Level row, so every number on the Reports page uses the exact same
+    definitions as the Dashboard Overview funnel (candidates.flows) instead
+    of a second, parallel definition of "shortlisted"/"cleared Round 1" that
+    could drift out of sync with it.
+
+    Round 1 Clear Ratio's base is candidates who reached Round 1 at all
+    ('shortlisted_after_call' - the funnel's own name for that transition),
+    not total applicants - same as how the funnel bar computes each stage's
+    own clear rate. None (not 0) when nobody reached Round 1, so the
+    template can show "-" instead of a misleading 0.0%."""
+    applicants = qs.count()
+    shortlisted = flow_count(qs, 'ever_shortlisted')
+    reached_r1 = flow_count(qs, 'shortlisted_after_call')
+    r1_cleared = flow_count(qs, 'r1_cleared')
+    hired = flow_count(qs, 'hired')
+    return {
+        'applicants': applicants,
+        'shortlisted': shortlisted,
+        'shortlisting_ratio': round(shortlisted / applicants * 100, 1) if applicants else 0,
+        'reached_r1': reached_r1,
+        'r1_cleared': r1_cleared,
+        'r1_clear_ratio': round(r1_cleared / reached_r1 * 100, 1) if reached_r1 else None,
+        'hired': hired,
+        'hiring_ratio': round(hired / applicants * 100, 1) if applicants else 0,
+    }
+
+
 class ReportsView(GroupRequiredMixin, TemplateView):
     template_name = 'dashboard/reports.html'
     allowed_groups = ANY_STAFF
@@ -347,59 +377,37 @@ class ReportsView(GroupRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         job_id = self.request.GET.get('job') or ''
-        base = Candidate.objects.all()
+        # General Application isn't a real vacancy and Future Prospects isn't
+        # an active application - excluded from every Reports number, same
+        # as the Dashboard Summary page (see HRDashboardView).
+        base = Candidate.objects.exclude(job__title__iexact=GENERAL_APPLICATION).exclude(INITIAL_HOLD)
         if job_id:
             base = base.filter(job_id=job_id)
-        ctx['jobs'] = Job.objects.all().order_by('title')
+
+        date_from = self.request.GET.get('date_from', '')
+        if date_from:
+            base = base.filter(created_at__date__gte=date_from)
+        date_to = self.request.GET.get('date_to', '')
+        if date_to:
+            base = base.filter(created_at__date__lte=date_to)
+
+        ctx['jobs'] = Job.objects.exclude(title__iexact=GENERAL_APPLICATION).order_by('title')
         ctx['selected_job'] = job_id
+        ctx['date_from'] = date_from
+        ctx['date_to'] = date_to
 
-        total = base.count()
-        rejected = base.filter(status=STATUS.REJECTED).count()
-        ctx['rejection_ratio'] = round(rejected / total * 100, 1) if total else 0
-        ctx['total_applicants'] = total
-        ctx['rejected_count'] = rejected
+        ctx.update(_report_metrics(base))
 
-        jobs_qs = Job.objects.filter(pk=job_id) if job_id else Job.objects.all()
-        total_jobs = jobs_qs.count()
-        jobs_with_hire = jobs_qs.filter(candidates__status=STATUS.HIRED).distinct().count()
-        ctx['fill_rate'] = round(jobs_with_hire / total_jobs * 100, 1) if total_jobs else 0
-        ctx['jobs_with_hire'] = jobs_with_hire
-        ctx['total_jobs'] = total_jobs
-        ctx['fill_dots'] = [True] * jobs_with_hire + [False] * (total_jobs - jobs_with_hire)
+        by_job_titles = (base.values_list('job__title', flat=True).distinct())
+        ctx['by_job'] = sorted(
+            ({'name': title or 'Unassigned', **_report_metrics(base.filter(job__title=title))}
+             for title in by_job_titles),
+            key=lambda r: -r['applicants'])
 
-        hire_hist = CandidateStatusHistory.objects.filter(new_status=STATUS.HIRED)
-        if job_id:
-            hire_hist = hire_hist.filter(candidate__job_id=job_id)
-        avg_duration = (
-            hire_hist.annotate(duration=ExpressionWrapper(
-                F('changed_at') - F('candidate__created_at'), output_field=DurationField()))
-            .aggregate(avg=Avg('duration'))['avg']
-        )
-        ctx['avg_time_to_hire_days'] = round(avg_duration.total_seconds() / 86400, 1) if avg_duration else None
-
-        # Source effectiveness: total, shortlisted (%), hired (conversion %).
-        # distinct=True keeps counts correct despite the history join.
-        rows = (base.exclude(source__isnull=True).exclude(source='')
-                .values('source')
-                .annotate(total=Count('id', distinct=True),
-                          shortlisted=Count('id', filter=Q(history__new_status=STATUS.SHORTLISTED), distinct=True),
-                          hired=Count('id', filter=Q(status=STATUS.HIRED), distinct=True))
-                .order_by('-total'))
-        data = []
-        for r in rows:
-            t = r['total'] or 0
-            data.append({**r,
-                         'shortlist_pct': round(r['shortlisted'] / t * 100, 1) if t else 0,
-                         'conversion_pct': round(r['hired'] / t * 100, 1) if t else 0})
-
-        # "Where applicants come from": one bar per source, scaled to the busiest source.
-        max_total = max((r['total'] for r in data), default=0) or 1
-        ctx['source_volume'] = [
-            {**r,
-             'bar_w': round(r['total'] / max_total * 100, 1),
-             'share_pct': round(r['total'] / total * 100, 1) if total else 0}
-            for r in data
-        ]
-        # Source effectiveness table: ranked by shortlist rate, not volume.
-        ctx['source_effectiveness'] = sorted(data, key=lambda r: r['shortlist_pct'], reverse=True)
+        by_source_names = (base.exclude(source__isnull=True).exclude(source='')
+                           .values_list('source', flat=True).distinct())
+        ctx['by_source'] = sorted(
+            ({'name': source, **_report_metrics(base.filter(source=source))}
+             for source in by_source_names),
+            key=lambda r: -r['applicants'])
         return ctx

@@ -469,3 +469,86 @@ class UserManagementTests(TestCase):
         response = self.client.get(reverse('user_list'))
         self.assertContains(
             response, reverse('user_toggle_active', args=[self.admin.pk]))
+
+
+class ReportsViewTests(TestCase):
+    """Every number on Reports uses candidates.flows' own definitions
+    ('ever_shortlisted', 'shortlisted_after_call', 'r1_cleared', 'hired') so
+    it can never disagree with the Dashboard Overview funnel - and, like the
+    Dashboard Summary page, leaves out General Application and Future
+    Prospects entirely."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser('hr6', 'hr6@example.com', 'pw')
+        self.client.force_login(self.user)
+        self.job = Job.objects.create(title='Program Manager')
+        general = Job.objects.create(title='General Application')
+
+        def make(status_path, **kwargs):
+            c = Candidate.objects.create(job=self.job, **kwargs)
+            services.record_creation(c)
+            for status in status_path:
+                services.change_status(c, status)
+            return c
+
+        S = Candidate.Status
+        self.c_open = make([], full_name='Open', email='open@example.com')
+        self.c_shortlisted = make([S.SHORTLISTED], full_name='Shortlisted', email='shortlisted@example.com')
+        self.c_round1 = make([S.SHORTLISTED, S.ROUND1], full_name='Round1', email='round1@example.com')
+        self.c_cleared_r1 = make([S.SHORTLISTED, S.ROUND1, S.INTERVIEW],
+                                 full_name='ClearedR1', email='clearedr1@example.com')
+        self.c_hired = make([S.SHORTLISTED, S.ROUND1, S.INTERVIEW, S.FINAL_SELECTION, S.HIRED],
+                            full_name='Hired', email='hired@example.com')
+
+        self.c_general = Candidate.objects.create(
+            job=general, full_name='General', email='general@example.com')
+        services.record_creation(self.c_general)
+
+        self.c_future_prospect = Candidate.objects.create(
+            job=self.job, full_name='FutureProspect', email='fp@example.com')
+        services.record_creation(self.c_future_prospect)
+        services.change_status(self.c_future_prospect, S.SCREENING_HOLD)
+
+    def _get(self, **params):
+        return self.client.get(reverse('hr_reports'), params)
+
+    def test_applicants_excludes_general_application_and_future_prospects(self):
+        response = self._get()
+        self.assertEqual(response.context['applicants'], 5)
+
+    def test_shortlisting_ratio(self):
+        response = self._get()
+        self.assertEqual(response.context['shortlisted'], 4)
+        self.assertEqual(response.context['shortlisting_ratio'], 80.0)
+
+    def test_round1_clear_ratio_is_based_on_those_who_reached_round1(self):
+        response = self._get()
+        # 3 reached Round 1 (Round1/ClearedR1/Hired); 2 of those cleared it.
+        self.assertEqual(response.context['r1_clear_ratio'], round(2 / 3 * 100, 1))
+
+    def test_hiring_ratio(self):
+        response = self._get()
+        self.assertEqual(response.context['hired'], 1)
+        self.assertEqual(response.context['hiring_ratio'], 20.0)
+
+    def test_by_job_never_lists_general_application(self):
+        response = self._get()
+        names = [row['name'] for row in response.context['by_job']]
+        self.assertNotIn('General Application', names)
+        self.assertIn('Program Manager', names)
+
+    def test_r1_clear_ratio_is_none_not_zero_when_nobody_reached_round1(self):
+        """None (not 0.0%) so the template can show '-' rather than a
+        misleading 0.0% for a group nobody has even reached Round 1 in yet."""
+        empty_job = Job.objects.create(title='Brand New Role')
+        response = self._get(job=empty_job.pk)
+        self.assertEqual(response.context['applicants'], 0)
+        self.assertIsNone(response.context['r1_clear_ratio'])
+
+    def test_date_range_filters_applicants(self):
+        from datetime import timedelta
+        from django.utils import timezone as tz
+        Candidate.objects.filter(pk=self.c_open.pk).update(created_at=tz.now() - timedelta(days=30))
+        today = tz.localdate()
+        response = self._get(date_from=today.isoformat(), date_to=today.isoformat())
+        self.assertEqual(response.context['applicants'], 4)  # c_open backdated out of range
