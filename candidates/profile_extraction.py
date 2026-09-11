@@ -23,6 +23,8 @@ import requests
 from django.conf import settings
 from django.core.cache import cache
 
+from prompts import profile_extraction as prompts
+
 logger = logging.getLogger(__name__)
 
 # Cached per summary text so re-running this on an unchanged candidate (e.g. the
@@ -32,36 +34,8 @@ CACHE_PREFIX = 'profile_extraction:v1:'
 
 TARGET_FIELDS = ('qualification', 'last_role', 'last_company', 'total_experience_years', 'skills')
 
-RESPONSE_JSON_SCHEMA = {
-    'name': 'candidate_profile_fields',
-    'strict': True,
-    'schema': {
-        'type': 'object',
-        'properties': {
-            'qualification': {'type': ['string', 'null']},
-            'last_role': {'type': ['string', 'null']},
-            'last_company': {'type': ['string', 'null']},
-            'total_experience_years': {'type': ['number', 'null']},
-            'skills': {'type': ['string', 'null']},
-        },
-        'required': list(TARGET_FIELDS),
-        'additionalProperties': False,
-    },
-}
-
-SYSTEM_PROMPT = (
-    "You extract structured candidate fields from an AI-generated CV summary for "
-    "an ATS. Use only what the summary states - never invent or guess a value. "
-    "Return:\n"
-    "- qualification: their highest or most recent educational qualification "
-    "(degree + field), e.g. 'MBA - Finance'.\n"
-    "- last_role: their most recent job title.\n"
-    "- last_company: their most recent employer.\n"
-    "- total_experience_years: total professional experience in years, as a "
-    "number (e.g. 5.5). Convert phrasing like 'X years Y months' to a decimal.\n"
-    "- skills: a comma-separated list of their key technical/professional skills.\n"
-    "Return null for any field the summary does not clearly support."
-)
+RESPONSE_JSON_SCHEMA = prompts.response_json_schema(TARGET_FIELDS)
+SYSTEM_PROMPT = prompts.SYSTEM_PROMPT
 
 
 class ExtractionError(Exception):

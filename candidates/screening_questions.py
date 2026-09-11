@@ -14,37 +14,14 @@ import logging
 import requests
 from django.conf import settings
 
+from prompts import screening_questions as prompts
+
 logger = logging.getLogger(__name__)
 
 QUESTION_COUNT = 10
 
-RESPONSE_JSON_SCHEMA = {
-    'name': 'tele_screening_questions',
-    'strict': True,
-    'schema': {
-        'type': 'object',
-        'properties': {
-            'questions': {
-                'type': 'array', 'items': {'type': 'string'},
-                'minItems': QUESTION_COUNT, 'maxItems': QUESTION_COUNT,
-            },
-        },
-        'required': ['questions'],
-        'additionalProperties': False,
-    },
-}
-
-SYSTEM_PROMPT = (
-    "You are an experienced recruiter preparing for a first-round telephonic "
-    f"screening call with a job applicant. Based on the candidate's profile and "
-    f"the role they applied for, write exactly {QUESTION_COUNT} screening "
-    "questions to ask them on the call. Cover their background, key skills, "
-    "relevant experience, career motivation, notice period/availability, and "
-    "salary expectations where appropriate. Keep each question short and "
-    "conversational, suited to a phone call - not a technical panel interview. "
-    "Base them only on what the profile actually states - never invent specifics "
-    "that aren't there."
-)
+RESPONSE_JSON_SCHEMA = prompts.response_json_schema(QUESTION_COUNT)
+SYSTEM_PROMPT = prompts.system_prompt(QUESTION_COUNT)
 
 
 class ScreeningQuestionsError(Exception):
