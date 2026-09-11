@@ -537,6 +537,17 @@ class ReportsViewTests(TestCase):
         self.assertNotIn('General Application', names)
         self.assertIn('Program Manager', names)
 
+    def test_by_job_has_exactly_one_row_per_role_not_one_per_candidate(self):
+        """Regression: Candidate's default ordering (Meta.ordering =
+        ['-created_at']) used to leak into the underlying SELECT DISTINCT
+        (Django folds order_by() fields into distinct() unless order_by() is
+        explicitly cleared first), so a role with 5 candidates rendered as 5
+        identical-looking duplicate rows instead of 1."""
+        response = self._get()
+        rows = [row for row in response.context['by_job'] if row['name'] == 'Program Manager']
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['applicants'], 5)
+
     def test_r1_clear_ratio_is_none_not_zero_when_nobody_reached_round1(self):
         """None (not 0.0%) so the template can show '-' rather than a
         misleading 0.0% for a group nobody has even reached Round 1 in yet."""

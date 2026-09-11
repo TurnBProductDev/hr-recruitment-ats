@@ -398,14 +398,19 @@ class ReportsView(GroupRequiredMixin, TemplateView):
 
         ctx.update(_report_metrics(base))
 
-        by_job_titles = (base.values_list('job__title', flat=True).distinct())
+        # order_by() clears Candidate's default ordering (Meta.ordering =
+        # ['-created_at']) before distinct() - otherwise Django folds
+        # created_at into the SELECT DISTINCT (to satisfy that ordering),
+        # so no two candidate rows are ever "distinct" and every title
+        # comes back once per candidate instead of once per role.
+        by_job_titles = (base.order_by().values_list('job__title', flat=True).distinct())
         ctx['by_job'] = sorted(
             ({'name': title or 'Unassigned', **_report_metrics(base.filter(job__title=title))}
              for title in by_job_titles),
             key=lambda r: -r['applicants'])
 
         by_source_names = (base.exclude(source__isnull=True).exclude(source='')
-                           .values_list('source', flat=True).distinct())
+                           .order_by().values_list('source', flat=True).distinct())
         ctx['by_source'] = sorted(
             ({'name': source, **_report_metrics(base.filter(source=source))}
              for source in by_source_names),
