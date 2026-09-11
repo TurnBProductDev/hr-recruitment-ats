@@ -96,7 +96,7 @@ urlpatterns = [
          name='candidate_score_status'),
 
     path('hr/candidates/scoring-criteria/', views.ScoringCriteriaView.as_view(), name='scoring_criteria'),
-    path('hr/candidates/scoring-criteria/rescore/', views.ScoringCriteriaRescoreView.as_view(),
+    path('hr/candidates/scoring-criteria/<int:job_id>/rescore/', views.ScoringCriteriaRescoreView.as_view(),
          name='scoring_criteria_rescore'),
 
     # Machine-to-machine: called by a Logic App (X-Api-Key auth, not a

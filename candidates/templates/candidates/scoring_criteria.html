@@ -3,15 +3,40 @@
 {% block content %}
 <div class="row justify-content-center">
   <div class="col-lg-8">
+    <div class="d-flex flex-wrap justify-content-between align-items-end mb-3 gap-2">
+      <div>
+        <h3 class="mb-1">Scoring Criteria</h3>
+        <p class="text-muted small mb-0">
+          Extra instructions layered on top of the base scoring rubric - set per role, since what
+          should score higher for one role rarely applies to another.
+        </p>
+      </div>
+      <form method="get" class="d-flex align-items-end gap-2">
+        <div>
+          <label class="form-label small text-muted mb-0">Vacancy</label>
+          <select name="job" class="form-select form-select-sm" onchange="this.form.submit()" style="min-width: 260px;">
+            <option value="">Select a role&hellip;</option>
+            {% for j in jobs %}
+            <option value="{{ j.id }}" {% if selected_job == j.id|stringformat:'s' %}selected{% endif %}>
+              {{ j.title }}{% if j.scoring_criteria.extra_instructions %} (criteria set){% endif %}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <noscript><button class="btn btn-sm btn-outline-app">Go</button></noscript>
+      </form>
+    </div>
+
+    {% if not job %}
+    <div class="card app-card p-4 text-center text-muted">
+      Select a role above to view or edit its scoring criteria.
+    </div>
+    {% else %}
     <div class="card app-card p-4 mb-3">
-      <h4 class="mb-1">Scoring Criteria</h4>
-      <p class="text-muted small mb-3">
-        Extra instructions layered on top of the base scoring rubric for every candidate, every role -
-        e.g. "give extra weight to AI/ML skills" or "prefer 3+ years of IT industry experience".
-        Leave blank to score with just the base rubric, same as before.
-      </p>
+      <h5 class="mb-3">{{ job.title }}</h5>
       <form method="post">
         {% csrf_token %}
+        <input type="hidden" name="job" value="{{ job.pk }}">
         <textarea name="extra_instructions" class="form-control" rows="8"
                   placeholder="e.g. Give extra weight to candidates with hands-on AI/ML project experience. Treat prior IT industry experience as a strong positive.">{{ criteria.extra_instructions }}</textarea>
         <div class="d-flex justify-content-between align-items-center mt-2">
@@ -27,21 +52,22 @@
     </div>
 
     <div class="card app-card p-4">
-      <h5 class="mb-1">Rescore everyone</h5>
+      <h5 class="mb-1">Rescore this role</h5>
       <p class="text-muted small mb-3">
         Saving new criteria only affects <strong>new</strong> scores - candidates already scored keep
         their old score until they're re-scored. Use this to apply the current criteria to everyone
-        already in the pipeline: every candidate in the Active Pool or Open Applications
-        (General Application excluded). This can take a few minutes for a large batch.
+        already applied for <strong>{{ job.title }}</strong>: every candidate in the Active Pool or
+        Open Applications for this role. This can take a few minutes for a large batch.
       </p>
-      <form method="post" action="{% url 'scoring_criteria_rescore' %}">
+      <form method="post" action="{% url 'scoring_criteria_rescore' job.pk %}">
         {% csrf_token %}
         <button type="submit" class="btn btn-outline-app"
-                onclick="return confirm('Re-score every Active Pool / Open Applications candidate with the current criteria? This calls Azure OpenAI once per candidate and runs in the background.');">
-          Rescore Everyone
+                onclick="return confirm('Re-score every Active Pool / Open Applications candidate for {{ job.title|escapejs }} with the current criteria? This calls Azure OpenAI once per candidate and runs in the background.');">
+          Rescore This Role
         </button>
       </form>
     </div>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

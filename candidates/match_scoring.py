@@ -136,7 +136,7 @@ def score_candidate(candidate, job):
     must_have = job.must_have_list
     job_text = _job_text(job)
     candidate_text = _candidate_text(candidate)
-    extra_criteria = ScoringCriteria.load().extra_instructions.strip()
+    extra_criteria = ScoringCriteria.load_for(job).extra_instructions.strip()
 
     cache_key = build_cache_key(job_text, candidate_text, must_have, extra_criteria)
     cached = cache.get(cache_key)

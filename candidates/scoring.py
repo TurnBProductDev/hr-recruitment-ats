@@ -47,12 +47,18 @@ def start_job_scoring(job):
     return thread
 
 
-def start_bulk_rescore():
-    """Force re-score every Active Pool / Open Applications candidate
-    (General Application excluded, since it's never mapped to a role -
-    nothing to score against) in the background - used from the Scoring
-    Criteria page after its text is edited, since an already-DONE score
-    doesn't refresh on its own (score_one() only claims PENDING_STATES).
+def start_bulk_rescore(job=None):
+    """Force re-score every Active Pool / Open Applications candidate in the
+    background - scoped to one role when `job` is given (the Scoring
+    Criteria page's "Rescore This Role" action, since criteria are per-role
+    now - see candidates.models.ScoringCriteria), or every role otherwise
+    (General Application excluded either way, since it's never mapped to a
+    role - nothing to score against; still used with no job by
+    candidates.management.commands.rescore_candidates --pool all).
+
+    Used after a role's criteria text is edited, since an already-DONE
+    score doesn't refresh on its own (score_one() only claims
+    PENDING_STATES).
 
     Resets match_state to PENDING for the whole scope up front, then scores
     a fixed snapshot of those candidates one at a time - unlike _run(job_id)
@@ -63,11 +69,14 @@ def start_bulk_rescore():
     from .views import GENERAL_APPLICATION  # local import - views.py imports this module
     not_general = ~Q(job__isnull=True) & ~Q(job__title__iexact=GENERAL_APPLICATION)
     qs = Candidate.objects.filter(ACTIVE_POOL | OPEN_APPLICATIONS).filter(not_general)
+    if job is not None:
+        qs = qs.filter(job=job)
 
     pks = list(qs.values_list('pk', flat=True))
     Candidate.objects.filter(pk__in=pks).update(match_state=MS.PENDING)
 
-    thread = threading.Thread(target=_run_scope, args=(pks,), name='rescore-all', daemon=True)
+    thread_name = f'rescore-job-{job.pk}' if job is not None else 'rescore-all'
+    thread = threading.Thread(target=_run_scope, args=(pks,), name=thread_name, daemon=True)
     thread.start()
     return len(pks)
 

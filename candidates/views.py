@@ -1842,40 +1842,58 @@ class ScoreCandidatesStatusView(GroupRequiredMixin, View):
 
 class ScoringCriteriaView(GroupRequiredMixin, View):
     """HR-editable free text layered on top of match_scoring.py's base
-    rubric (e.g. "weight AI/ML skills higher") - see ScoringCriteria's own
-    docstring for how it reaches the prompt. Admin-only: unlike Score
-    Candidates itself, this changes the rubric for every future score across
-    every role, not just one run, so it's a more consequential lever than
-    Recruiter's day-to-day scoring actions."""
+    rubric (e.g. "weight AI/ML skills higher") - one role at a time, since
+    what should score higher for an AI role and a Sales role are rarely the
+    same thing (see ScoringCriteria's own docstring for how it reaches the
+    prompt). Admin-only: unlike Score Candidates itself, this changes the
+    rubric for every future score on a role, not just one run, so it's a
+    more consequential lever than Recruiter's day-to-day scoring actions."""
     template_name = 'candidates/scoring_criteria.html'
     allowed_groups = (HR_ADMIN,)
 
+    def _job_list(self):
+        return (Job.objects.exclude(title__iexact=GENERAL_APPLICATION)
+                .select_related('scoring_criteria').order_by('title'))
+
     def get(self, request):
-        return render(request, self.template_name, {'criteria': ScoringCriteria.load()})
+        job_id = request.GET.get('job') or ''
+        job = get_object_or_404(Job, pk=job_id) if job_id else None
+        ctx = {
+            'jobs': self._job_list(),
+            'selected_job': job_id,
+            'job': job,
+            'criteria': ScoringCriteria.load_for(job) if job else None,
+        }
+        return render(request, self.template_name, ctx)
 
     def post(self, request):
-        criteria = ScoringCriteria.load()
+        job = get_object_or_404(Job, pk=request.POST.get('job'))
+        criteria = ScoringCriteria.load_for(job)
         criteria.extra_instructions = request.POST.get('extra_instructions', '').strip()
         criteria.updated_by = request.user
         criteria.save(update_fields=['extra_instructions', 'updated_by', 'updated_at'])
-        messages.success(request, 'Scoring criteria saved. New scores will use it right away - '
-                                  'already-scored candidates keep their old score until re-scored.')
-        return redirect('scoring_criteria')
+        messages.success(request, f'Scoring criteria for "{job.title}" saved. New scores for this '
+                                  'role will use it right away - already-scored candidates keep '
+                                  'their old score until re-scored.')
+        return redirect(f"{reverse('scoring_criteria')}?job={job.pk}")
 
 
 class ScoringCriteriaRescoreView(GroupRequiredMixin, View):
-    """Force every Active Pool / Open Applications candidate to be re-scored
-    in the background - offered right on the Scoring Criteria page, since
-    saving new criteria text has no effect on anyone already scored until
-    they're re-scored (see candidates.scoring.start_bulk_rescore)."""
+    """Force every Active Pool / Open Applications candidate for one role to
+    be re-scored in the background - offered right on the Scoring Criteria
+    page, since saving new criteria text has no effect on anyone already
+    scored until they're re-scored (see candidates.scoring.start_bulk_rescore).
+    Scoped to this one role, not every role - criteria (and so the reason to
+    re-score) is per-role now."""
     allowed_groups = (HR_ADMIN,)
 
-    def post(self, request):
+    def post(self, request, job_id):
+        job = get_object_or_404(Job, pk=job_id)
         if not match_scoring.is_configured():
             messages.error(request, 'Scoring is not configured - set AZURE_OPENAI_ENDPOINT '
                                     'and AZURE_OPENAI_KEY.')
         else:
-            count = scoring.start_bulk_rescore()
-            messages.success(request, f'Re-scoring {count} candidate(s) in the background - '
-                                      'scores will update over the next few minutes.')
-        return redirect('scoring_criteria')
+            count = scoring.start_bulk_rescore(job=job)
+            messages.success(request, f'Re-scoring {count} candidate(s) for "{job.title}" in the '
+                                      'background - scores will update over the next few minutes.')
+        return redirect(f"{reverse('scoring_criteria')}?job={job.pk}")

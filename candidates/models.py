@@ -484,13 +484,14 @@ class Offer(models.Model):
 
 class ScoringCriteria(models.Model):
     """Free-text criteria HR can layer on top of the base scoring rubric
-    (candidates/match_scoring.py's SYSTEM_PROMPT) - e.g. "weight AI/ML
-    skills higher", "prefer 3+ years in IT". Edited from the web app
-    (candidates/views.py::ScoringCriteriaView), not code, so it can change
-    without a deploy - see match_scoring.py's docstring for how it's folded
-    into the prompt and the scoring cache key.
-
-    Singleton: always the one row with pk=1 - load() gets or creates it."""
+    (candidates/match_scoring.py's SYSTEM_PROMPT) for one specific role -
+    e.g. "weight AI/ML skills higher" for an AI role, "prefer 3+ years in
+    IT" for a technical one. Criteria genuinely differs by role, so this is
+    one row per Job (load_for(job) gets or creates it), not a single global
+    row. Edited from the web app (candidates/views.py::ScoringCriteriaView),
+    not code, so it can change without a deploy - see match_scoring.py's
+    docstring for how it's folded into the prompt and the scoring cache key."""
+    job = models.OneToOneField(Job, on_delete=models.CASCADE, related_name='scoring_criteria')
     extra_instructions = models.TextField(blank=True, default='')
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
@@ -501,9 +502,9 @@ class ScoringCriteria(models.Model):
         verbose_name_plural = 'Scoring Criteria'
 
     def __str__(self):
-        return 'Scoring Criteria'
+        return f'Scoring Criteria for {self.job.title}'
 
     @classmethod
-    def load(cls):
-        obj, _ = cls.objects.get_or_create(pk=1)
+    def load_for(cls, job):
+        obj, _ = cls.objects.get_or_create(job=job)
         return obj

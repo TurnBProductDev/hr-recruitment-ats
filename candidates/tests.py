@@ -1837,12 +1837,18 @@ class ScoringCriteriaPromptAndCacheTests(TestCase):
         from django.core.cache import cache
         cache.clear()
 
-    def test_load_creates_a_singleton_row(self):
+    def test_load_for_creates_one_row_per_job(self):
+        job_a = Job.objects.create(job_code='JA', title='Role A')
+        job_b = Job.objects.create(job_code='JB', title='Role B')
         self.assertEqual(ScoringCriteria.objects.count(), 0)
-        first = ScoringCriteria.load()
-        second = ScoringCriteria.load()
-        self.assertEqual(first.pk, second.pk)
-        self.assertEqual(ScoringCriteria.objects.count(), 1)
+
+        a_first = ScoringCriteria.load_for(job_a)
+        a_second = ScoringCriteria.load_for(job_a)
+        b = ScoringCriteria.load_for(job_b)
+
+        self.assertEqual(a_first.pk, a_second.pk)
+        self.assertNotEqual(a_first.pk, b.pk)
+        self.assertEqual(ScoringCriteria.objects.count(), 2)
 
     def test_prompt_includes_criteria_when_set(self):
         prompt = match_scoring._build_system_prompt([], 'Weight AI/ML skills higher.')
@@ -1866,11 +1872,11 @@ class ScoringCriteriaPromptAndCacheTests(TestCase):
         return response
 
     def test_score_candidate_sends_the_saved_criteria_to_azure_openai(self):
-        criteria = ScoringCriteria.load()
+        job = Job.objects.create(job_code='J1', title='Analyst')
+        criteria = ScoringCriteria.load_for(job)
         criteria.extra_instructions = 'Prefer candidates with hands-on AI/ML project experience.'
         criteria.save()
 
-        job = Job.objects.create(job_code='J1', title='Analyst')
         candidate = Candidate.objects.create(full_name='Test Candidate', email='test@example.com', job=job)
 
         with self.settings(AZURE_OPENAI_ENDPOINT='https://example.test', AZURE_OPENAI_KEY='key'):
@@ -1893,55 +1899,80 @@ class ScoringCriteriaPromptAndCacheTests(TestCase):
         system_message = post.call_args.kwargs['json']['messages'][0]['content']
         self.assertNotIn('Additional scoring criteria set by HR', system_message)
 
+    def test_criteria_set_for_one_role_does_not_leak_into_another(self):
+        ai_job = Job.objects.create(job_code='J3', title='AI Engineer')
+        sales_job = Job.objects.create(job_code='J4', title='Sales Associate')
+        ai_criteria = ScoringCriteria.load_for(ai_job)
+        ai_criteria.extra_instructions = 'Weight AI/ML skills higher.'
+        ai_criteria.save()
+        # sales_job's own row never gets any text - load_for() creates it blank on first touch.
+
+        candidate = Candidate.objects.create(full_name='Sales Candidate', email='sales@example.com', job=sales_job)
+        with self.settings(AZURE_OPENAI_ENDPOINT='https://example.test', AZURE_OPENAI_KEY='key'):
+            with mock.patch('candidates.match_scoring.requests.post',
+                            return_value=self._openai_response()) as post:
+                match_scoring.score_candidate(candidate, sales_job)
+
+        system_message = post.call_args.kwargs['json']['messages'][0]['content']
+        self.assertNotIn('Weight AI/ML skills higher.', system_message)
+
 
 class ScoringCriteriaViewTests(TestCase):
     """HR Admin only (a more consequential lever than day-to-day scoring
-    actions - it changes the rubric for every future score, every role)."""
+    actions - it changes the rubric for every future score on a role)."""
 
     def setUp(self):
         self.admin = get_user_model().objects.create_user('admin1', password='pw')
         self.admin.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
         self.recruiter = get_user_model().objects.create_user('rec1', password='pw')
         self.recruiter.groups.add(Group.objects.get_or_create(name=RECRUITER)[0])
+        self.job = Job.objects.create(job_code='J1', title='Analytics Consultant AI')
 
     def test_recruiter_cannot_reach_the_page(self):
         self.client.login(username='rec1', password='pw')
-        response = self.client.get(reverse('scoring_criteria'))
+        response = self.client.get(f"{reverse('scoring_criteria')}?job={self.job.pk}")
         self.assertEqual(response.status_code, 403)
+
+    def test_no_role_selected_shows_the_picker_only(self):
+        self.client.login(username='admin1', password='pw')
+        response = self.client.get(reverse('scoring_criteria'))
+        self.assertIsNone(response.context['job'])
+        self.assertIsNone(response.context['criteria'])
 
     def test_admin_can_view_and_save(self):
         self.client.login(username='admin1', password='pw')
         response = self.client.post(reverse('scoring_criteria'),
-                                    {'extra_instructions': 'Weight AI/ML skills higher.'})
-        self.assertRedirects(response, reverse('scoring_criteria'))
-        criteria = ScoringCriteria.load()
+                                    {'job': self.job.pk, 'extra_instructions': 'Weight AI/ML skills higher.'})
+        self.assertRedirects(response, f"{reverse('scoring_criteria')}?job={self.job.pk}")
+        criteria = ScoringCriteria.load_for(self.job)
         self.assertEqual(criteria.extra_instructions, 'Weight AI/ML skills higher.')
         self.assertEqual(criteria.updated_by, self.admin)
 
     def test_recruiter_cannot_save(self):
         self.client.login(username='rec1', password='pw')
-        response = self.client.post(reverse('scoring_criteria'), {'extra_instructions': 'Sneaky edit.'})
+        response = self.client.post(reverse('scoring_criteria'),
+                                    {'job': self.job.pk, 'extra_instructions': 'Sneaky edit.'})
         self.assertEqual(response.status_code, 403)
-        self.assertEqual(ScoringCriteria.load().extra_instructions, '')
+        self.assertEqual(ScoringCriteria.load_for(self.job).extra_instructions, '')
 
-    def test_rescore_everyone_requires_admin(self):
+    def test_rescore_this_role_requires_admin(self):
         self.client.login(username='rec1', password='pw')
-        response = self.client.post(reverse('scoring_criteria_rescore'))
+        response = self.client.post(reverse('scoring_criteria_rescore', args=[self.job.pk]))
         self.assertEqual(response.status_code, 403)
 
-    def test_rescore_everyone_triggers_a_bulk_rescore(self):
+    def test_rescore_this_role_triggers_a_scoped_bulk_rescore(self):
         self.client.login(username='admin1', password='pw')
         with self.settings(AZURE_OPENAI_ENDPOINT='https://example.test', AZURE_OPENAI_KEY='key'):
             with mock.patch('candidates.views.scoring.start_bulk_rescore', return_value=3) as start:
-                response = self.client.post(reverse('scoring_criteria_rescore'))
-        start.assert_called_once()
-        self.assertRedirects(response, reverse('scoring_criteria'))
+                response = self.client.post(reverse('scoring_criteria_rescore', args=[self.job.pk]))
+        start.assert_called_once_with(job=self.job)
+        self.assertRedirects(response, f"{reverse('scoring_criteria')}?job={self.job.pk}")
 
-    def test_rescore_everyone_reports_when_scoring_is_not_configured(self):
+    def test_rescore_this_role_reports_when_scoring_is_not_configured(self):
         self.client.login(username='admin1', password='pw')
         with self.settings(AZURE_OPENAI_ENDPOINT='', AZURE_OPENAI_KEY=''):
             with mock.patch('candidates.views.scoring.start_bulk_rescore') as start:
-                self.client.post(reverse('scoring_criteria_rescore'))
+                self.client.post(reverse('scoring_criteria_rescore', args=[self.job.pk]))
         start.assert_not_called()
 
 
@@ -1982,6 +2013,27 @@ class BulkRescoreScopeTests(TestCase):
         # Untouched - never in scope, so never reset either.
         self.assertEqual(out_of_scope_rejected.match_state, Candidate.MatchState.PENDING)
         self.assertEqual(out_of_scope_general.match_state, Candidate.MatchState.PENDING)
+
+    def test_start_bulk_rescore_scoped_to_one_job_leaves_other_jobs_alone(self):
+        """The Scoring Criteria page's "Rescore This Role" button - criteria
+        is per-role now, so the rescore it triggers must only touch that
+        one role's candidates, not every role's."""
+        other_job = Job.objects.create(job_code='J2', title='Other Role')
+        S = Candidate.Status
+        MS = Candidate.MatchState
+        this_role = self._candidate('ThisRole', S.OPEN)
+        other_role = self._candidate('OtherRole', S.OPEN, job=other_job)
+        Candidate.objects.filter(pk__in=[this_role.pk, other_role.pk]).update(match_state=MS.DONE)
+
+        with mock.patch('candidates.scoring.threading.Thread') as thread_cls:
+            count = scoring.start_bulk_rescore(job=self.job)
+
+        self.assertEqual(count, 1)
+        thread_cls.assert_called_once()
+        this_role.refresh_from_db()
+        other_role.refresh_from_db()
+        self.assertEqual(this_role.match_state, MS.PENDING)
+        self.assertEqual(other_role.match_state, MS.DONE)  # a different role - left alone
 
     def test_run_scope_scores_every_candidate_in_the_batch_once(self):
         S = Candidate.Status
