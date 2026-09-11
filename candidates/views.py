@@ -273,19 +273,13 @@ SCORE_BANDS = [
 SCORE_BAND_FILTERS = {key: lookup for key, _, lookup in SCORE_BANDS}
 
 
-# Candidate list pages (Repository, All Candidates, General Applications,
-# Future Prospects) render this many rows per request instead of the whole
-# filtered result - these tables use client-side DataTables for in-page
-# sort/search/paging on top of that, so this is the outer, DB/render-cost
-# bound, not the only paging a user sees. Export to Excel deliberately
-# ignores this (see _ExcelExportMixin) - it must return every matching row.
-CANDIDATE_LIST_PAGE_SIZE = 100
-
-
 def _querystring_without_page(request):
-    """The current filters as a query string, without `page` - used to build
-    pagination links (each appends its own page=N) and the Export to Excel
-    link (which should keep the same filters, but isn't itself paginated)."""
+    """The current filters as a query string, without `page` - none of the
+    candidate list pages paginate any more (DataTables' own client-side
+    search only ever covers whatever page loaded, which broke search - see
+    git history), but this is still what the Export to Excel link on each
+    one uses to carry the current filters over, so kept defensively in case
+    pagination (with a `page` param) ever comes back on one of them."""
     params = request.GET.copy()
     params.pop('page', None)
     return params.urlencode()
@@ -576,7 +570,6 @@ class AllCandidatesListView(RemembersListUrlMixin, GroupRequiredMixin, ListView)
     template_name = 'candidates/all_candidates.html'
     context_object_name = 'candidates'
     allowed_groups = ANY_STAFF
-    paginate_by = CANDIDATE_LIST_PAGE_SIZE
 
     def get_queryset(self):
         return Candidate.objects.select_related('job').order_by('full_name')
@@ -600,7 +593,6 @@ class GeneralApplicationsListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
     template_name = 'candidates/general_applications.html'
     context_object_name = 'candidates'
     allowed_groups = ANY_STAFF
-    paginate_by = CANDIDATE_LIST_PAGE_SIZE
 
     def base_queryset(self):
         return (Candidate.objects.select_related('job')
@@ -651,7 +643,6 @@ class FutureProspectsListView(RemembersListUrlMixin, GroupRequiredMixin, ListVie
     template_name = 'candidates/future_prospects.html'
     context_object_name = 'candidates'
     allowed_groups = ANY_STAFF
-    paginate_by = CANDIDATE_LIST_PAGE_SIZE
 
     def base_queryset(self):
         return Candidate.objects.select_related('job').filter(

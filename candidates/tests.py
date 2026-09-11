@@ -1797,10 +1797,13 @@ class RejectionEmailPopupTests(TestCase):
 
 
 class CandidateListPaginationAndExportTests(TestCase):
-    """Candidate lists cap what's rendered per page (CANDIDATE_LIST_PAGE_SIZE)
-    for query/render cost, but Export to Excel must still cover every row
-    matching the current filters, not just the visible page - see
-    views._ExcelExportMixin."""
+    """None of the candidate lists paginate by default any more - it broke
+    DataTables' client-side search, which only ever covers whatever page
+    loaded (see git history) - but Export to Excel must still cover every
+    row matching the current filters even if pagination is ever turned back
+    on for one of them, not just whatever page is visible - see
+    views._ExcelExportMixin. Forces paginate_by on with mock.patch since
+    CandidateRepositoryListView doesn't set it any more."""
 
     def setUp(self):
         self.user = get_user_model().objects.create_user('hr10', 'hr10@example.com', 'pw')
