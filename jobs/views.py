@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.db.models import Case, IntegerField, Value, When
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
@@ -6,6 +7,7 @@ from django.views import View
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
 
 from candidates.permissions import HR_ADMIN, RECRUITER, GroupRequiredMixin
+from candidates.views import GENERAL_APPLICATION
 
 from . import jd_extraction
 from .forms import JobForm
@@ -51,12 +53,21 @@ class JobManageListView(GroupRequiredMixin, ListView):
     context_object_name = 'jobs'
 
     def get_queryset(self):
-        return Job.objects.all()
+        # General Application isn't a real vacancy (candidates land there
+        # only when intake couldn't match them to an open one - see
+        # candidates.views.GENERAL_APPLICATION) - still listed here so it
+        # can be opened/edited, but always sorted last rather than wherever
+        # its creation date would otherwise place it.
+        is_general = Case(
+            When(title__iexact=GENERAL_APPLICATION, then=Value(1)),
+            default=Value(0), output_field=IntegerField())
+        return Job.objects.annotate(_is_general=is_general).order_by('_is_general', '-created_on')
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         u = self.request.user
         ctx['is_hr_admin'] = u.is_superuser or u.groups.filter(name=HR_ADMIN).exists()
+        ctx['total_vacancies'] = Job.objects.exclude(title__iexact=GENERAL_APPLICATION).count()
         return ctx
 
 

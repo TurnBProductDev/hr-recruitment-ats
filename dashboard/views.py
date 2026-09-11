@@ -114,8 +114,13 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
         # ---------- Summary ----------
         # Open vacancies, not candidates - always the global count regardless of
         # the job/candidate filters above, so picking one role doesn't make it look
-        # like there's only one opening.
-        ctx['open_positions'] = Job.objects.filter(status=Job.Status.OPEN, is_archived=False).count()
+        # like there's only one opening. Sum of Job.openings (individual positions
+        # to fill), not a count of vacancy postings - one posting can be for more
+        # than one opening (see jobs/models.py). General Application is never a
+        # real vacancy, so it's excluded even if its status were ever OPEN.
+        ctx['open_positions'] = Job.objects.filter(
+            status=Job.Status.OPEN, is_archived=False
+        ).exclude(title__iexact=GENERAL_APPLICATION).aggregate(n=Sum('openings'))['n'] or 0
         ctx['summary'] = _summary_counts_qs(base)
         ctx['by_job'] = (base.values('job__title')
                          # Max, not Sum: `openings` is a per-job value, not per-candidate -

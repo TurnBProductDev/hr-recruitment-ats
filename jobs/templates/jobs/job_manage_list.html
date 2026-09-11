@@ -41,7 +41,7 @@
 <div class="vac-head">
   <div>
     <h3 class="vac-title mb-0">Vacancy Management</h3>
-    <div class="vac-subtitle">{{ jobs|length }} vacanc{{ jobs|length|pluralize:"y,ies" }}</div>
+    <div class="vac-subtitle">{{ total_vacancies }} vacanc{{ total_vacancies|pluralize:"y,ies" }}</div>
   </div>
   <div class="vac-head-actions">
     {% if is_hr_admin or is_recruiter %}
@@ -96,7 +96,7 @@
         <tr>
           <th>Vacancy</th>
           <th>Status</th>
-          <th>Archived</th>
+          <th>Openings</th>
           <th>Applicants</th>
           <th>Opening Date</th>
           <th>Closing Date</th>
@@ -114,7 +114,7 @@
             {% if job.status == 'OPEN' %}<span class="badge-status badge-shortlisted">Open</span>
             {% else %}<span class="badge-status badge-rejected">Closed</span>{% endif %}
           </td>
-          <td>{% if job.is_archived %}Yes{% else %}No{% endif %}</td>
+          <td>{{ job.openings }}</td>
           <td>{{ job.candidates.count }}</td>
           <td>{{ job.opening_date|date:"d M Y"|default:"-" }}</td>
           <td>{{ job.closing_date|date:"d M Y"|default:"-" }}</td>

@@ -8,6 +8,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from candidates.permissions import HR_ADMIN
+from candidates.views import GENERAL_APPLICATION
 
 from . import jd_extraction
 from .models import Job
@@ -98,3 +99,28 @@ class JobExtractJDViewTests(TestCase):
             response = self.client.post(self.url, {'jd_file': self.file, 'title': 'HRBP'})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {'status': 'error', 'message': 'Could not read this file.'})
+
+
+class JobManageListViewTests(TestCase):
+    """General Application isn't a real vacancy - it's just where intake
+    files a candidate it couldn't match to an open one (see
+    candidates.views.GENERAL_APPLICATION). Still listed here so it can be
+    opened, but always sorted last and left out of the vacancy count."""
+
+    def setUp(self):
+        self.hr_user = get_user_model().objects.create_user('hr', password='pw')
+        self.hr_user.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.client.login(username='hr', password='pw')
+        self.general = Job.objects.create(job_code='GA00000', title=GENERAL_APPLICATION)
+        self.role_a = Job.objects.create(job_code='A1', title='Marketing Associate')
+        self.role_b = Job.objects.create(job_code='B1', title='Sales Associate')
+
+    def test_general_application_is_always_sorted_last(self):
+        response = self.client.get(reverse('job_manage_list'))
+        titles = [j.title for j in response.context['jobs']]
+        self.assertEqual(titles[-1], GENERAL_APPLICATION)
+        self.assertEqual(set(titles[:-1]), {'Marketing Associate', 'Sales Associate'})
+
+    def test_vacancy_count_excludes_general_application(self):
+        response = self.client.get(reverse('job_manage_list'))
+        self.assertEqual(response.context['total_vacancies'], 2)

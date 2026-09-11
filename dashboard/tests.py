@@ -12,6 +12,7 @@ from django.utils import timezone
 from candidates import services
 from candidates.models import Candidate
 from candidates.permissions import HR_ADMIN, INTERVIEWER, RECRUITER
+from candidates.views import GENERAL_APPLICATION
 from jobs.models import Job
 
 from . import daily_view
@@ -177,6 +178,37 @@ class GeneralApplicationAndFutureProspectsExcludedTests(TestCase):
         self.assertEqual(response.context['future_prospects_count'], 1)
         self.assertContains(response, reverse('candidate_general_applications'))
         self.assertContains(response, reverse('candidate_future_prospects'))
+
+
+class OpenPositionsTests(TestCase):
+    """Open Positions sums Job.openings (individual positions to fill)
+    across open, non-archived vacancies - not a count of vacancy postings,
+    since one posting can cover more than one opening - and always leaves
+    out General Application, even if its status were ever OPEN."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser('hr5', 'hr5@example.com', 'pw')
+        self.client.force_login(self.user)
+
+    def _get(self):
+        return self.client.get(f"{reverse('hr_dashboard')}?scoped=1")
+
+    def test_sums_openings_not_row_count(self):
+        Job.objects.create(title='Analytics Consultant AI', status=Job.Status.OPEN, openings=2)
+        Job.objects.create(title='Sales Associate', status=Job.Status.OPEN, openings=1)
+        response = self._get()
+        self.assertEqual(response.context['open_positions'], 3)
+
+    def test_excludes_closed_and_archived(self):
+        Job.objects.create(title='Closed Role', status=Job.Status.CLOSED, openings=5)
+        Job.objects.create(title='Archived Role', status=Job.Status.OPEN, is_archived=True, openings=5)
+        response = self._get()
+        self.assertEqual(response.context['open_positions'], 0)
+
+    def test_excludes_general_application_even_if_open(self):
+        Job.objects.create(title=GENERAL_APPLICATION, status=Job.Status.OPEN, openings=99)
+        response = self._get()
+        self.assertEqual(response.context['open_positions'], 0)
 
 
 class OverviewFunnelTests(TestCase):

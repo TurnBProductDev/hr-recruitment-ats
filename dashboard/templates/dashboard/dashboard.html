@@ -103,8 +103,6 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
 .sm-kpi .lbl { font-size: .72rem; text-transform: uppercase; letter-spacing: .5px; color: #6b7a7a; font-weight: 600; }
 .sm-kpi .val { font-size: 1.9rem; font-weight: 700; color: #1f2a2a; margin-top: 4px; }
 .sm-kpi .sub { font-size: .72rem; color: #8a9a9a; margin-top: 4px; }
-.sm-kpi-bar { height: 4px; border-radius: 999px; background: #edf1f0; overflow: hidden; margin-top: 10px; }
-.sm-kpi-bar-fill { height: 100%; border-radius: 999px; }
 .sm-kpi-subval { margin-top: 10px; padding-top: 8px; border-top: 1px solid #edf1f0; }
 .sm-kpi-subval .lbl { font-size: .66rem; }
 .sm-kpi-subval .val { font-size: 1rem; margin-top: 2px; }
@@ -259,7 +257,6 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
         <div class="lbl">Hired</div>
         <div class="val" style="color:#0e6f6b">{{ s.hired }}</div>
         <div class="sub">of {{ funnel_top.requirement }} openings</div>
-        <div class="sm-kpi-bar"><div class="sm-kpi-bar-fill" style="width:{% if s.total %}{% widthratio s.hired s.total 100 %}{% else %}0{% endif %}%;background:#0e6f6b"></div></div>
       </div>
     </div>
     {% endwith %}
