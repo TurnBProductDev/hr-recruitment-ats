@@ -6,6 +6,7 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.auth.decorators import login_required
 from django.urls import include, path
+from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.generic import TemplateView
 from django.views.static import serve as serve_static_file
 
@@ -28,9 +29,13 @@ urlpatterns = [
     # (job_form.html, job_manage_list.html, the candidate Attachments list)
     # 404'd there even though the file exists at MEDIA_ROOT. Gated behind
     # login - candidate attachments in particular are not meant to be
-    # reachable by anyone who finds/guesses the URL.
+    # reachable by anyone who finds/guesses the URL. xframe_options_exempt
+    # because the Vacancy edit page previews the JD in an <iframe> the same
+    # way CandidateCvView does for CVs - XFrameOptionsMiddleware's default
+    # X-Frame-Options: DENY would otherwise block that on the very first
+    # response, same trap CandidateCvView's docstring already explains.
     path(f'{settings.MEDIA_URL.lstrip("/")}<path:path>',
-         login_required(serve_static_file), {'document_root': settings.MEDIA_ROOT}),
+         xframe_options_exempt(login_required(serve_static_file)), {'document_root': settings.MEDIA_ROOT}),
 ]
 
 if settings.DEBUG:

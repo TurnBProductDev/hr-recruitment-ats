@@ -1,38 +1,140 @@
 {% extends "hr_base.html" %}
 {% block title %}{% if object %}Edit{% else %}Create{% endif %} Vacancy{% endblock %}
+{% block extra_css %}
+<style>
+  .jd-edit-layout { display: flex; align-items: flex-start; gap: 24px; }
+  .jd-edit-form-col { flex: 1 1 0; min-width: 0; max-width: 900px; margin: 0 auto; transition: max-width .15s ease; }
+  .jd-edit-layout.jd-open .jd-edit-form-col { max-width: none; margin: 0; }
+  .jd-edit-panel-col {
+    flex: 1 1 0; min-width: 0;
+    position: sticky; top: 16px;
+    max-height: calc(100vh - 32px);
+    display: flex; flex-direction: column;
+  }
+  .jd-edit-panel-col .app-card {
+    display: flex; flex-direction: column;
+    height: 100%; overflow: hidden; padding: 0 !important;
+  }
+  .jd-edit-panel-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px; border-bottom: 1px solid var(--border-color); flex-shrink: 0;
+  }
+  .jd-edit-panel-body { flex: 1; overflow: auto; background: #f4f6f6; }
+  .jd-edit-panel-body iframe { width: 100%; height: 100%; min-height: 75vh; border: 0; }
+  #viewJdBtn { text-decoration: none; }
+  #viewJdBtn:hover { text-decoration: underline; }
+
+  .vacancy-section { margin-bottom: 24px; }
+  .vacancy-section:last-of-type { margin-bottom: 0; }
+  .vacancy-section-title {
+    font-size: .75rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--primary-green); margin-bottom: 14px;
+  }
+  .jd-file-row {
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+    background: #f4f6f6; border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 14px;
+  }
+  @media (max-width: 991.98px) {
+    .jd-edit-layout { flex-direction: column; }
+    .jd-edit-panel-col { position: static; max-height: none; }
+    .jd-edit-panel-body iframe { min-height: 60vh; }
+  }
+</style>
+{% endblock %}
 {% block content %}
-<div class="row justify-content-center">
-  <div class="col-lg-7">
+<div class="jd-edit-layout" id="jdEditLayout">
+  <div class="jd-edit-form-col">
     <div class="card app-card p-4">
-      <h4 class="mb-3">{% if object %}Edit Vacancy{% else %}Create Vacancy{% endif %}</h4>
+      <h4 class="mb-1">{% if object %}Edit Vacancy{% else %}Create Vacancy{% endif %}</h4>
+      {% if object %}<p class="text-muted small mb-3">{{ object.job_code }} &middot; {{ object.title }}</p>{% endif %}
       {% if form.errors %}
       <div class="alert alert-danger">Please fix the highlighted fields and save again.</div>
       {% endif %}
       <form method="post" enctype="multipart/form-data">
         {% csrf_token %}
-        <div class="row g-3">
-          <div class="col-md-4">
-            <label class="form-label">Job Code</label>{{ form.job_code }}{{ form.job_code.errors }}
-          </div>
-          <div class="col-md-5"><label class="form-label">Title</label>{{ form.title }}{{ form.title.errors }}</div>
-          <div class="col-md-3"><label class="form-label">Status</label>{{ form.status }}</div>
-          <div class="col-md-6"><label class="form-label">Location</label>{{ form.location }}</div>
-          <div class="col-md-3"><label class="form-label">Openings</label>{{ form.openings }}{{ form.openings.errors }}</div>
-          <div class="col-md-3"><label class="form-label">Opening Date</label>{{ form.opening_date }}</div>
-          <div class="col-md-6"><label class="form-label">Closing Date</label>{{ form.closing_date }}</div>
-          <div class="col-12"><label class="form-label">Description</label>{{ form.description }}</div>
-          <div class="col-12"><label class="form-label">Requirements</label>{{ form.requirements }}</div>
-          <div class="col-12">
-            <label class="form-label">Job Description File</label>{{ form.jd_file }}
-            {% if object.jd_file %}<div class="small mt-1"><a href="{{ object.jd_file.url }}" target="_blank">Current JD</a></div>{% endif %}
+
+        <div class="vacancy-section">
+          <div class="vacancy-section-title">Vacancy Details</div>
+          <div class="row g-3">
+            <div class="col-md-4"><label class="form-label">Job Code</label>{{ form.job_code }}{{ form.job_code.errors }}</div>
+            <div class="col-md-5"><label class="form-label">Title</label>{{ form.title }}{{ form.title.errors }}</div>
+            <div class="col-md-3"><label class="form-label">Status</label>{{ form.status }}</div>
+            <div class="col-md-6"><label class="form-label">Location</label>{{ form.location }}</div>
+            <div class="col-md-3"><label class="form-label">Openings</label>{{ form.openings }}{{ form.openings.errors }}</div>
+            <div class="col-md-3"><label class="form-label">Opening Date</label>{{ form.opening_date }}</div>
+            <div class="col-md-6"><label class="form-label">Closing Date</label>{{ form.closing_date }}</div>
           </div>
         </div>
+
+        <div class="vacancy-section">
+          <div class="vacancy-section-title">Content</div>
+          <div class="row g-3">
+            <div class="col-12"><label class="form-label">Description</label>{{ form.description }}</div>
+            <div class="col-12"><label class="form-label">Requirements</label>{{ form.requirements }}</div>
+          </div>
+        </div>
+
+        <div class="vacancy-section">
+          <div class="vacancy-section-title">Job Description File</div>
+          {% if object.jd_file %}
+          <div class="jd-file-row mb-2">
+            <div>
+              <i class="bi bi-file-earmark-pdf"></i> {{ object.jd_file.name }}
+              <button type="button" class="btn btn-link btn-sm p-0 ms-2" id="viewJdBtn">View</button>
+            </div>
+            <div class="form-check form-check-inline mb-0">
+              <input type="checkbox" name="jd_file-clear" id="id_jd_file-clear" class="form-check-input">
+              <label class="form-check-label small" for="id_jd_file-clear">Clear</label>
+            </div>
+          </div>
+          {% endif %}
+          {{ form.jd_file }}
+        </div>
+
         <div class="mt-4 d-flex gap-2">
-          <button type="submit" class="btn btn-fill-app">Save</button>
+          <button type="submit" class="btn btn-fill-app">Save Changes</button>
           <a href="{% url 'job_manage_list' %}" class="btn btn-outline-app">Cancel</a>
         </div>
       </form>
     </div>
   </div>
+
+  {% if object.jd_file %}
+  <div class="jd-edit-panel-col d-none" id="jdPanel">
+    <div class="card app-card">
+      <div class="jd-edit-panel-head">
+        <strong><i class="bi bi-file-earmark-pdf"></i> Job Description</strong>
+        <div class="d-flex align-items-center gap-3">
+          <a href="{{ object.jd_file.url }}" target="_blank" rel="noopener" class="small">Open in new tab <i class="bi bi-box-arrow-up-right"></i></a>
+          <button type="button" class="btn-close" id="jdCloseBtn" aria-label="Close"></button>
+        </div>
+      </div>
+      <div class="jd-edit-panel-body">
+        <iframe id="jdIframe" title="Job Description" src="{{ object.jd_file.url }}"></iframe>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 </div>
+{% endblock %}
+{% block extra_js %}
+{% if object.jd_file %}
+<script>
+(function () {
+  var openBtn = document.getElementById('viewJdBtn');
+  var closeBtn = document.getElementById('jdCloseBtn');
+  var layout = document.getElementById('jdEditLayout');
+  var panel = document.getElementById('jdPanel');
+
+  openBtn.addEventListener('click', function () {
+    panel.classList.remove('d-none');
+    layout.classList.add('jd-open');
+  });
+  closeBtn.addEventListener('click', function () {
+    panel.classList.add('d-none');
+    layout.classList.remove('jd-open');
+  });
+})();
+</script>
+{% endif %}
 {% endblock %}
