@@ -1190,6 +1190,32 @@ class FutureProspectsPageTests(TestCase):
         response = self.client.get(reverse('candidate_future_prospects'))
         self.assertNotIn(c, response.context['candidates'])
 
+    def test_resume_button_reads_move_to_screening_not_applied(self):
+        """The underlying action/URL is unchanged (still candidate_reopen,
+        landing back at Applied) - only this page's own button wording
+        differs from the shared resume_action.label ("Move to Applied")."""
+        self._candidate('Held Early', Candidate.Status.OPEN, held=True)
+        response = self.client.get(reverse('candidate_future_prospects'))
+        self.assertContains(response, 'Move to Screening')
+        self.assertNotContains(response, 'Move to Applied')
+
+    def test_suggested_role_falls_back_to_applied_position_when_unset(self):
+        c = self._candidate('Held Early', Candidate.Status.OPEN, held=True)
+        c.role_applied = 'Data Analyst'
+        c.save(update_fields=['role_applied'])
+        response = self.client.get(reverse('candidate_future_prospects'))
+        self.assertContains(response, 'Data Analyst')
+
+    def test_suggested_role_takes_priority_over_applied_position(self):
+        job = Job.objects.create(title='Sales Associate')
+        c = self._candidate('Held Early', Candidate.Status.OPEN, held=True)
+        c.role_applied = 'Data Analyst'
+        c.suggested_role = job
+        c.save(update_fields=['role_applied', 'suggested_role'])
+        response = self.client.get(reverse('candidate_future_prospects'))
+        self.assertContains(response, 'Sales Associate')
+        self.assertNotContains(response, 'Data Analyst')
+
 
 class MoveToFutureProspectsTests(TestCase):
     """A hold taken at any stage can be moved to Future Prospects, alongside

@@ -759,7 +759,7 @@ class FutureProspectsExportView(GroupRequiredMixin, _ExcelExportMixin, View):
         ('Role', lambda c: c.job.title if c.job else ''),
         ('Held At', lambda c: c.held_at.strftime('%Y-%m-%d') if c.held_at else ''),
         ('Hold Reason', lambda c: c.hold_reason or ''),
-        ('Suggested Role', lambda c: c.suggested_role.title if c.suggested_role else ''),
+        ('Suggested Role', lambda c: c.suggested_role.title if c.suggested_role else (c.role_applied or '')),
     )
 
 
