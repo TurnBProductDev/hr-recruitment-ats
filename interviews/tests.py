@@ -765,6 +765,28 @@ class InterviewerPortalTests(TestCase):
         response = self.client.get(reverse('candidate_cv', args=[self.other_candidate.pk]))
         self.assertEqual(response.status_code, 404)
 
+    def test_a_later_round_interviewer_sees_the_earlier_rounds_feedback(self):
+        self.interview.status = Interview.Status.COMPLETED
+        self.interview.result = Interview.Result.PASS_
+        self.interview.feedback = 'Strong on fundamentals.'
+        self.interview.save()
+        round2_interviewer = get_user_model().objects.create_user(
+            'panel2', 'panel2@turnb.com', 'pw', first_name='Divya', last_name='S')
+        round2_interviewer.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
+        Interview.objects.create(
+            candidate=self.candidate, interviewer=round2_interviewer,
+            round_type=Interview.RoundType.TECHNICAL,
+            scheduled_date=timezone.now() + timezone.timedelta(days=2))
+
+        self.client.force_login(round2_interviewer)
+        response = self.client.get(reverse('interviewer_candidate', args=[self.candidate.pk]))
+        self.assertContains(response, 'Strong on fundamentals.')
+
+    def test_no_earlier_round_feedback_shown_when_there_is_none(self):
+        self.client.force_login(self.interviewer)
+        response = self.client.get(reverse('interviewer_candidate', args=[self.candidate.pk]))
+        self.assertNotContains(response, "Earlier Rounds")
+
     # ---- The main HR app is off-limits ----
 
     def test_cannot_reach_the_hr_dashboard(self):
@@ -1027,3 +1049,25 @@ class InviteAndSlotEmailTests(TestCase):
         payload = post.call_args.kwargs['json']
         self.assertEqual(payload['to'], self.interviewer.email)
         self.assertIn(self.candidate.full_name, payload['body'])
+
+    def test_notify_interviewer_new_request_includes_login_link_when_given(self):
+        request_obj = InterviewRequest.objects.create(
+            candidate=self.candidate, round_type=Interview.RoundType.ROUND1,
+            interviewer=self.interviewer)
+        with mock.patch('candidates.logic_app_mail.requests.post',
+                        return_value=self._ok_response()) as post:
+            slot_emails.notify_interviewer_new_request(
+                request_obj, login_url='https://ats.example/interviewer/login/')
+        payload = post.call_args.kwargs['json']
+        self.assertIn('https://ats.example/interviewer/login/', payload['body'])
+
+    def test_notify_interviewer_new_slots_needed_includes_login_link_when_given(self):
+        request_obj = InterviewRequest.objects.create(
+            candidate=self.candidate, round_type=Interview.RoundType.ROUND1,
+            interviewer=self.interviewer)
+        with mock.patch('candidates.logic_app_mail.requests.post',
+                        return_value=self._ok_response()) as post:
+            slot_emails.notify_interviewer_new_slots_needed(
+                request_obj, login_url='https://ats.example/interviewer/login/')
+        payload = post.call_args.kwargs['json']
+        self.assertIn('https://ats.example/interviewer/login/', payload['body'])

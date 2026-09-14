@@ -175,7 +175,8 @@ class InterviewAllocateView(GroupRequiredMixin, CreateView):
                     f'({self.object.get_round_type_display()}).',
             url=reverse('interviewer_propose_slots', args=[self.object.pk]))
         try:
-            slot_emails.notify_interviewer_new_request(self.object)
+            slot_emails.notify_interviewer_new_request(
+                self.object, login_url=self.request.build_absolute_uri(reverse('interviewer_login')))
         except logic_app_mail.EmailSendError as exc:
             logger.warning('Could not email the new-allocation notice for request %s: %s', self.object.pk, exc)
         if _is_ajax(self.request):
@@ -262,7 +263,8 @@ class InterviewRequestNewSlotsView(GroupRequiredMixin, View):
             message=note or 'None of the proposed slots worked for HR - please propose new ones.',
             url=reverse('interviewer_propose_slots', args=[request_obj.pk]))
         try:
-            slot_emails.notify_interviewer_new_slots_needed(request_obj, note=note)
+            slot_emails.notify_interviewer_new_slots_needed(
+                request_obj, note=note, login_url=request.build_absolute_uri(reverse('interviewer_login')))
         except logic_app_mail.EmailSendError as exc:
             logger.warning('Could not email the new-slots-needed notice for request %s: %s', request_obj.pk, exc)
         messages.success(request, 'Asked the interviewer to propose new slots.')

@@ -14,7 +14,7 @@ def _role_name(candidate):
     return candidate.role_applied or 'the role'
 
 
-def notify_interviewer_new_request(interview_request):
+def notify_interviewer_new_request(interview_request, login_url=''):
     """Sent to the interviewer right after HR allocates them to a
     candidate - asks them to propose 2-3 one-hour slots."""
     interviewer = interview_request.interviewer
@@ -28,6 +28,7 @@ def notify_interviewer_new_request(interview_request):
         f'({interview_request.get_round_type_display()}).\n\n'
         f'Please sign in to the Interviewer portal and propose 2-3 one-hour slots you are '
         f'available, so HR can pick one and schedule the interview.\n\n'
+        f'{"Sign in here: " + login_url + chr(10) + chr(10) if login_url else ""}'
         f'Regards,\nHireB'
     )
     logic_app_mail.send_email(
@@ -56,7 +57,7 @@ def notify_hr_slots_proposed(interview_request):
         to_email=hr_user.email, cc_emails=logic_app_mail.default_cc_list(), subject=subject, body=body)
 
 
-def notify_interviewer_new_slots_needed(interview_request, note=''):
+def notify_interviewer_new_slots_needed(interview_request, note='', login_url=''):
     """Sent to the interviewer when HR asks for a fresh set of slots because
     none of the proposed ones worked."""
     interviewer = interview_request.interviewer
@@ -69,6 +70,7 @@ def notify_interviewer_new_slots_needed(interview_request, note=''):
         f'The slots you proposed for {candidate.full_name} ({interview_request.get_round_type_display()}) '
         f'don\'t work for HR. Please propose a fresh set of 2-3 one-hour slots.'
         f'{chr(10) + chr(10) + "Note from HR: " + note if note else ""}\n\n'
+        f'{"Sign in here: " + login_url + chr(10) + chr(10) if login_url else ""}'
         f'Regards,\nHireB'
     )
     logic_app_mail.send_email(
