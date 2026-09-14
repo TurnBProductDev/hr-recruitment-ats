@@ -6,6 +6,7 @@ from django.urls import reverse, reverse_lazy
 from django.views import View
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
 
+from candidates.models import ScoringCriteria
 from candidates.permissions import HR_ADMIN, RECRUITER, GroupRequiredMixin
 from candidates.views import GENERAL_APPLICATION
 
@@ -71,6 +72,29 @@ class JobManageListView(GroupRequiredMixin, ListView):
         return ctx
 
 
+def _can_set_scoring_criteria(user):
+    # Same two roles JobCreateView/JobUpdateView.allowed_groups already lets
+    # onto this form at all (plus the superuser bypass GroupRequiredMixin
+    # gives everywhere) - unlike the dedicated Scoring Criteria page
+    # (candidates.views.ScoringCriteriaView), which stays HR_ADMIN-only.
+    return user.is_superuser or user.groups.filter(name__in=(HR_ADMIN, RECRUITER)).exists()
+
+
+def _save_scoring_criteria(job, form, user):
+    """Persists JobForm's extra_scoring_criteria into the same
+    ScoringCriteria row the dedicated Scoring Criteria page reads/writes -
+    only for whoever job_form.html actually renders the field as editable
+    for (a submission from anyone else never reaches here, even if
+    'extra_scoring_criteria' were posted directly - this is the server-side
+    half of that)."""
+    if not _can_set_scoring_criteria(user):
+        return
+    criteria = ScoringCriteria.load_for(job)
+    criteria.extra_instructions = form.cleaned_data.get('extra_scoring_criteria', '').strip()
+    criteria.updated_by = user
+    criteria.save(update_fields=['extra_instructions', 'updated_by', 'updated_at'])
+
+
 class JobCreateView(GroupRequiredMixin, CreateView):
     model = Job
     form_class = JobForm
@@ -81,7 +105,9 @@ class JobCreateView(GroupRequiredMixin, CreateView):
     def form_valid(self, form):
         form.instance.created_by = self.request.user
         messages.success(self.request, f'Vacancy "{form.instance.title}" created.')
-        return super().form_valid(form)
+        response = super().form_valid(form)
+        _save_scoring_criteria(self.object, form, self.request.user)
+        return response
 
 
 class JobUpdateView(GroupRequiredMixin, UpdateView):
@@ -98,7 +124,9 @@ class JobUpdateView(GroupRequiredMixin, UpdateView):
 
     def form_valid(self, form):
         messages.success(self.request, f'Vacancy "{form.instance.title}" updated.')
-        return super().form_valid(form)
+        response = super().form_valid(form)
+        _save_scoring_criteria(self.object, form, self.request.user)
+        return response
 
 
 class JobExtractJDView(GroupRequiredMixin, View):

@@ -1,5 +1,6 @@
 from django import forms
 
+from candidates.models import ScoringCriteria
 from HR_management.widgets import BareClearableFileInput
 
 from .models import Job
@@ -18,6 +19,26 @@ class BootstrapFormMixin:
 
 
 class JobForm(BootstrapFormMixin, forms.ModelForm):
+    # Not a Job field - lives on candidates.models.ScoringCriteria (one row
+    # per Job, same place the dedicated Scoring Criteria page reads/writes -
+    # see that page's own docstring for how it reaches the scoring prompt).
+    # Offered here too as a convenience so it can be set right when the
+    # vacancy is created, not only after the fact on a separate page.
+    # HR_ADMIN and Recruiter only (same two roles who can reach this form at
+    # all - see jobs/views.py's _can_set_scoring_criteria, which is what
+    # actually persists it and is the server-side half of job_form.html only
+    # rendering this field for them). The dedicated Scoring Criteria page
+    # stays HR_ADMIN-only regardless.
+    extra_scoring_criteria = forms.CharField(
+        label='Extra Scoring Criteria', required=False,
+        widget=forms.Textarea(attrs={
+            'rows': 4,
+            'placeholder': 'e.g. Give extra weight to candidates with hands-on AI/ML project '
+                          'experience. Treat prior IT industry experience as a strong positive.',
+        }),
+        help_text='Layered on top of the base scoring rubric whenever Score Candidates runs for '
+                  'this role - same as the dedicated Scoring Criteria page.')
+
     class Meta:
         model = Job
         # job_type and must_have_requirements are deliberately excluded -
@@ -46,6 +67,8 @@ class JobForm(BootstrapFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            self.fields['extra_scoring_criteria'].initial = ScoringCriteria.load_for(self.instance).extra_instructions
         self._add_bootstrap_classes()
 
     def clean_job_code(self):

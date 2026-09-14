@@ -7,7 +7,8 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
 
-from candidates.permissions import HR_ADMIN
+from candidates.models import ScoringCriteria
+from candidates.permissions import HR_ADMIN, RECRUITER
 from candidates.views import GENERAL_APPLICATION
 
 from . import jd_extraction
@@ -124,3 +125,74 @@ class JobManageListViewTests(TestCase):
     def test_vacancy_count_excludes_general_application(self):
         response = self.client.get(reverse('job_manage_list'))
         self.assertEqual(response.context['total_vacancies'], 2)
+
+
+class JobFormScoringCriteriaTests(TestCase):
+    """Extra Scoring Criteria on the Create/Edit Vacancy form - a
+    convenience for setting candidates.models.ScoringCriteria right when the
+    vacancy is created, without a trip to the dedicated Scoring Criteria
+    page. HR_ADMIN and Recruiter (the same two roles who can reach this form
+    at all) - see jobs/views.py's _can_set_scoring_criteria. The dedicated
+    Scoring Criteria page itself stays HR_ADMIN-only, unaffected."""
+
+    def _post_data(self, **overrides):
+        data = {
+            'title': 'HR Business Partner', 'openings': 1, 'status': Job.Status.OPEN,
+            'job_code': '', 'location': '', 'description': '', 'requirements': '',
+            'opening_date': '', 'closing_date': '',
+        }
+        data.update(overrides)
+        return data
+
+    def setUp(self):
+        self.admin = get_user_model().objects.create_user('admin', password='pw')
+        self.admin.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.recruiter = get_user_model().objects.create_user('recruiter', password='pw')
+        self.recruiter.groups.add(Group.objects.get_or_create(name=RECRUITER)[0])
+
+    def test_admin_sets_criteria_when_creating_a_vacancy(self):
+        self.client.login(username='admin', password='pw')
+        response = self.client.post(reverse('job_add'), self._post_data(
+            extra_scoring_criteria='Weight AI/ML project experience heavily.'))
+        self.assertEqual(response.status_code, 302)
+        job = Job.objects.get(title='HR Business Partner')
+        self.assertEqual(job.scoring_criteria.extra_instructions, 'Weight AI/ML project experience heavily.')
+        self.assertEqual(job.scoring_criteria.updated_by, self.admin)
+
+    def test_admin_sees_the_field_pre_filled_when_editing(self):
+        job = Job.objects.create(title='Analyst')
+        ScoringCriteria.objects.create(job=job, extra_instructions='Prefer IT industry background.')
+        self.client.login(username='admin', password='pw')
+        response = self.client.get(reverse('job_edit', args=[job.pk]))
+        self.assertContains(response, 'Prefer IT industry background.')
+
+    def test_admin_can_update_existing_criteria(self):
+        job = Job.objects.create(title='Analyst')
+        ScoringCriteria.objects.create(job=job, extra_instructions='Old criteria.')
+        self.client.login(username='admin', password='pw')
+        response = self.client.post(reverse('job_edit', args=[job.pk]), self._post_data(
+            title='Analyst', extra_scoring_criteria='New criteria.'))
+        self.assertEqual(response.status_code, 302)
+        job.refresh_from_db()
+        self.assertEqual(job.scoring_criteria.extra_instructions, 'New criteria.')
+
+    def test_recruiter_sees_the_field_and_can_set_it(self):
+        self.client.login(username='recruiter', password='pw')
+        response = self.client.get(reverse('job_add'))
+        self.assertContains(response, 'Extra Scoring Criteria')
+
+        response = self.client.post(reverse('job_add'), self._post_data(
+            extra_scoring_criteria='Prefer candidates with call-centre experience.'))
+        self.assertEqual(response.status_code, 302)
+        job = Job.objects.get(title='HR Business Partner')
+        self.assertEqual(job.scoring_criteria.extra_instructions, 'Prefer candidates with call-centre experience.')
+        self.assertEqual(job.scoring_criteria.updated_by, self.recruiter)
+
+    def test_a_role_with_neither_permission_cannot_set_it(self):
+        """Only HR_ADMIN/Recruiter can even reach this form - allowed_groups
+        on JobCreateView/JobUpdateView already blocks anyone else with a
+        403, so this just confirms _can_set_scoring_criteria agrees with
+        that gate rather than trusting it blindly."""
+        from jobs.views import _can_set_scoring_criteria
+        outsider = get_user_model().objects.create_user('outsider', password='pw')
+        self.assertFalse(_can_set_scoring_criteria(outsider))
