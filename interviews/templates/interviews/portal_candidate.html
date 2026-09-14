@@ -112,6 +112,20 @@
   </div>
 </div>
 
+{% if not is_admin_view and other_round_feedback %}
+<div class="card app-card p-4 mt-3">
+  <div class="section-eyebrow">Earlier Rounds' Feedback</div>
+  {% for i in other_round_feedback %}
+    <div class="mb-2 pb-2 {% if not forloop.last %}border-bottom{% endif %}">
+      <strong>{{ i.get_round_type_display }}</strong> &middot; {{ i.scheduled_date|date:"d M Y H:i" }}
+      &middot; Interviewer: {% if i.interviewer %}{{ i.interviewer.get_full_name|default:i.interviewer.get_username }}{% else %}Unassigned{% endif %}
+      <div class="text-muted pd-meta">Result: {{ i.get_result_display }}</div>
+      <div class="pd-body mt-1">{{ i.feedback }}</div>
+    </div>
+  {% endfor %}
+</div>
+{% endif %}
+
 <div class="card app-card p-4 mt-3">
   <div class="section-eyebrow">{% if is_admin_view %}All Interviews With This Candidate{% else %}Your Interviews With This Candidate{% endif %}</div>
   {% for i in my_interviews %}

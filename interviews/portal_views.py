@@ -130,6 +130,14 @@ class InterviewerCandidateView(GroupRequiredMixin, DetailView):
         ctx['open_statuses'] = Interview.OPEN_STATUSES
         ctx['back_url'] = reverse('interviewer_home')
         ctx['back_label'] = 'My Interviews'
+        # A later-round interviewer (e.g. Round 2) otherwise has no way to see
+        # what an earlier round's interviewer wrote - an admin already sees
+        # every interview via my_interviews above, so this is non-admin only.
+        if not is_admin:
+            ctx['other_round_feedback'] = (
+                self.object.interviews.exclude(interviewer=self.request.user)
+                .exclude(feedback__isnull=True).exclude(feedback='')
+                .select_related('interviewer').order_by('scheduled_date'))
         return ctx
 
 
