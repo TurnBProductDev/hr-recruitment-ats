@@ -35,6 +35,9 @@ SHORTLISTED_GROUP = Q(status__in=(STATUS.SHORTLISTED, STATUS.ROUND1, STATUS.INTE
                                   STATUS.FINAL_SELECTION)) | (Q(status=STATUS.SCREENING_HOLD) & ~INITIAL_HOLD)
 REJECTED_GROUP = Q(status__in=(STATUS.REJECTED, STATUS.BLACKLISTED)) | INITIAL_HOLD
 HIRED_GROUP = Q(status=STATUS.HIRED)
+# Attended = Active Pool + Rejected - candidates HR has already acted on,
+# shown instead of the raw Open/Unattended count.
+ATTENDED_GROUP = SHORTLISTED_GROUP | REJECTED_GROUP
 
 
 def _grouped_counts():
@@ -42,6 +45,7 @@ def _grouped_counts():
     return dict(
         total=Count('id'),
         open=Count('id', filter=OPEN_GROUP),
+        attended=Count('id', filter=ATTENDED_GROUP),
         shortlisted=Count('id', filter=SHORTLISTED_GROUP),
         rejected=Count('id', filter=REJECTED_GROUP),
         hired=Count('id', filter=HIRED_GROUP),

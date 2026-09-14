@@ -84,19 +84,6 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
   .sm-thead, .sm-row { min-width: 460px; }
 }
 
-/* ---- Quick-link pills: General Applications / Future Prospects -
-   excluded from every number below (see dashboard/views.py), so they get
-   their own always-visible counts instead of just disappearing. Sit in the
-   filter row, same height as the Job Code/Vacancy dropdowns. ---- */
-.dash-count-pill {
-  display: inline-flex; align-items: center; gap: 12px; text-decoration: none;
-  background: #fff; border: 1px solid #d8e0df; border-radius: 999px;
-  padding: 6px 16px; line-height: 1.15;
-}
-.dash-count-pill:hover { border-color: #b9c8c8; box-shadow: 0 3px 10px rgba(16,24,40,.06); }
-.dash-count-pill-label { font-size: .78rem; font-weight: 500; color: #45534f; max-width: 92px; }
-.dash-count-pill-n { font-size: 1.1rem; font-weight: 700; color: #1f2a2a; }
-
 /* ---- Summary tab: plain stat cards + tables ---- */
 .sm-kpis { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 22px; }
 .sm-kpi { flex: 1 1 150px; min-width: 150px; background: #fff; border: 1px solid #e2ebeb; border-top: 3px solid var(--kpi-accent, #e2ebeb); border-radius: 12px; padding: 16px 20px; }
@@ -195,14 +182,6 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
   <form method="get" class="d-flex align-items-end flex-wrap gap-3">
     <input type="hidden" name="view" value="{{ view }}">
     <input type="hidden" name="scoped" value="1">
-    <a href="{% url 'candidate_general_applications' %}" class="dash-count-pill">
-      <span class="dash-count-pill-label">General Applications</span>
-      <span class="dash-count-pill-n">{{ general_applications_count }}</span>
-    </a>
-    <a href="{% url 'candidate_future_prospects' %}" class="dash-count-pill">
-      <span class="dash-count-pill-label">Future Prospects</span>
-      <span class="dash-count-pill-n">{{ future_prospects_count }}</span>
-    </a>
     <div>
       <label class="form-label small text-muted mb-0">Job Code</label>
       <select class="form-select form-select-sm" onchange="this.form.job.value=this.value; this.form.submit();" style="min-width: 130px;">
@@ -250,8 +229,8 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
         <div class="lbl">Total Applicants</div>
         <div class="val">{{ s.total }}</div>
         <div class="sm-kpi-subval">
-          <div class="lbl">Unattended</div>
-          <div class="val" style="color:#6b7a7a">{{ s.open }}</div>
+          <div class="lbl">Attended</div>
+          <div class="val" style="color:#6b7a7a">{{ s.attended }}</div>
         </div>
       </div>
       <div class="sm-kpi" style="--kpi-accent:#0e6f6b">
@@ -277,7 +256,7 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
             <span class="sm-col-name">Role</span>
             <span class="sm-col-plain">Openings</span>
             <span class="sm-col-num">Applicants</span>
-            <span class="sm-col-plain">Unattended</span>
+            <span class="sm-col-plain">Attended</span>
             <span class="sm-col-short">Active Pool</span>
             <span class="sm-col-plain">Rejected</span>
             <span class="sm-col-hired">Hired</span>
@@ -287,7 +266,7 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
             <span class="sm-col-name">{{ r.job__title|default:"Unassigned" }}</span>
             <span class="sm-col-plain">{{ r.openings|default:0 }}</span>
             <span class="sm-col-num">{{ r.total }}</span>
-            <span class="sm-col-plain">{{ r.open }}</span>
+            <span class="sm-col-plain">{{ r.attended }}</span>
             <span class="sm-col-short">{{ r.shortlisted }}</span>
             <span class="sm-col-plain">{{ r.rejected }}</span>
             <span class="sm-col-hired">{{ r.hired }}</span>
@@ -301,7 +280,7 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
           <div class="sm-thead sm-thead-source">
             <span class="sm-col-name">Source</span>
             <span class="sm-col-num">Applicants</span>
-            <span class="sm-col-plain">Unattended</span>
+            <span class="sm-col-plain">Attended</span>
             <span class="sm-col-short">Active Pool</span>
             <span class="sm-col-plain">Rejected</span>
             <span class="sm-col-hired">Hired</span>
@@ -310,7 +289,7 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
           <div class="sm-row sm-row-source">
             <span class="sm-col-name">{{ r.source }}</span>
             <span class="sm-col-num">{{ r.total }}</span>
-            <span class="sm-col-plain">{{ r.open }}</span>
+            <span class="sm-col-plain">{{ r.attended }}</span>
             <span class="sm-col-short">{{ r.shortlisted }}</span>
             <span class="sm-col-plain">{{ r.rejected }}</span>
             <span class="sm-col-hired">{{ r.hired }}</span>
