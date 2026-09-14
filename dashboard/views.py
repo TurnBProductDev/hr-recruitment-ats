@@ -348,7 +348,8 @@ class DailyActionDrilldownView(GroupRequiredMixin, TemplateView):
         ctx['daily_from'], ctx['daily_to'] = date_range
         ctx['selected_job'] = job_id
         ctx['job'] = get_object_or_404(Job, pk=job_id) if job_id else None
-        ctx['rows'] = daily_view.events(column, date_range, job_id or None)
+        ctx['groups'] = daily_view.grouped_events(column, date_range, job_id or None)
+        ctx['total_actions'] = sum(len(g['actions']) for g in ctx['groups'])
         ctx['back_label'] = 'Back to Daily View'
         ctx['back_url'] = (f"{reverse('hr_dashboard')}?view=daily"
                            f"&daily_from={date_range[0]:%Y-%m-%d}&daily_to={date_range[1]:%Y-%m-%d}"

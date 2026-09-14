@@ -15,6 +15,7 @@ of (queryset, date_field, action_label, candidate_path) tuples. compute()
 just counts them (the bar chart); events() lists the actual rows (the
 drill-through) - so the chart and its drill-through can never disagree.
 """
+from collections import Counter
 from datetime import timedelta
 
 from django.db.models import Exists, OuterRef, Q
@@ -165,10 +166,22 @@ def _sources_for(column, date_range, job_id):
         ]
 
     if column == 'calls':
+        # Every Tele Screening action except "Yet to Call" itself (a
+        # candidate still waiting to be called isn't an action HR took) -
+        # the 2 outright call outcomes (Unable to Connect/Call Back), a call
+        # that was attended but hasn't reached a decision yet, and every way
+        # a call resolves the candidate onward (Shortlisted, Rejected,
+        # Hold). Each is its own action, same as Round 1/Round 2 already
+        # count a Scheduled and a later Rejected on the same candidate
+        # separately - logging "Attended" and later logging the decision
+        # are two distinct things HR did, even on the same candidate.
         return [
             (_history_qs(S.ROUND1, date_range, job_id), 'changed_at', 'Shortlisted After Call', 'candidate'),
+            (_reject_qs(date_range, job_id, not_yet=S.ROUND1, reached=S.SHORTLISTED), 'changed_at', 'Rejected after Call', 'candidate'),
+            (_history_qs(S.SCREENING_HOLD, date_range, job_id, old_status=S.SHORTLISTED), 'changed_at', 'Hold before Round 1', 'candidate'),
             (_comm_log_qs(CommunicationLog.Outcome.UNABLE, date_range, job_id), 'logged_at', 'Unable to Connect', 'candidate'),
             (_comm_log_qs(CommunicationLog.Outcome.CALLBACK, date_range, job_id), 'logged_at', 'Call Back', 'candidate'),
+            (_comm_log_qs(CommunicationLog.Outcome.ATTENDED, date_range, job_id), 'logged_at', 'Attended - Decision Pending', 'candidate'),
         ]
 
     if column == 'round1':
@@ -202,18 +215,61 @@ def _resolve(obj, path):
     return obj
 
 
+ATTENDED_ACTION = 'Attended - Decision Pending'
+# Whatever a pending call actually resolves into, within the same range -
+# see _merge_attended_into_resolution().
+CALL_RESOLUTION_ACTIONS = {'Shortlisted After Call', 'Rejected after Call', 'Hold before Round 1'}
+
+
+def _merge_attended_into_resolution(rows):
+    """"Attended - Decision Pending" only means "no decision yet as of
+    then" - if the same candidate also has a resolving action (Shortlisted/
+    Rejected/Hold) anywhere in this same range, that resolution is the
+    whole story's real outcome, so the Attended entry is dropped rather
+    than counted as a second, separate action for them. Kept only when
+    nothing resolved it within the range - they're still genuinely pending
+    as of the range's end."""
+    resolved_candidates = {r['candidate'].pk for r in rows if r['action'] in CALL_RESOLUTION_ACTIONS}
+    return [r for r in rows
+            if not (r['action'] == ATTENDED_ACTION and r['candidate'].pk in resolved_candidates)]
+
+
+def _rows_for(column, date_range, job_id):
+    """The flat list of individual events behind one Daily View column -
+    shared by compute() (which counts them) and events() (which lists
+    them), so the two can never disagree. 'calls' additionally folds a
+    resolved "Attended" entry into its resolution - see
+    _merge_attended_into_resolution()."""
+    rows = []
+    for qs, date_attr, action_label, candidate_path in _sources_for(column, date_range, job_id):
+        for obj in qs:
+            candidate = obj if candidate_path == 'self' else _resolve(obj, candidate_path)
+            rows.append({'candidate': candidate, 'when': getattr(obj, date_attr), 'action': action_label})
+    if column == 'calls':
+        rows = _merge_attended_into_resolution(rows)
+    return rows
+
+
 def compute(date_range, job_id=None):
     """date_range is (start_date, end_date), both inclusive `date` objects.
     Returns the 6 chart columns in display order. Each column also carries
     its `breakdown` - the same per-source counts a bar's tooltip shows -
-    computed from the identical _sources_for() list so it can never
-    disagree with the bar's own total."""
+    and `candidate_count` - how many distinct candidates its actions touched,
+    always <= `value` since one candidate can rack up several actions in the
+    same range (scheduled, then rescheduled, then rejected, say) - both
+    computed from the identical _rows_for() list so they can never disagree
+    with the bar's own total (or with events()/grouped_events())."""
     results = []
     for key, label in COLUMNS:
-        breakdown = [{'label': action_label, 'value': qs.count()}
-                    for qs, _, action_label, _ in _sources_for(key, date_range, job_id)]
-        total = sum(b['value'] for b in breakdown)
-        results.append({'key': key, 'label': label, 'value': total, 'breakdown': breakdown})
+        rows = _rows_for(key, date_range, job_id)
+        action_counts = Counter(r['action'] for r in rows)
+        breakdown = [{'label': action_label, 'value': action_counts[action_label]}
+                    for _, _, action_label, _ in _sources_for(key, date_range, job_id)]
+        candidate_ids = {r['candidate'].pk for r in rows}
+        results.append({
+            'key': key, 'label': label, 'value': len(rows), 'breakdown': breakdown,
+            'candidate_count': len(candidate_ids),
+        })
     return results
 
 
@@ -222,10 +278,31 @@ def events(column, date_range, job_id=None):
     View column - the drill-through a bar click lands on. Each item has
     `candidate`, `when` (datetime) and `action` (human label); the row
     count always matches that column's bar value for the same range."""
-    rows = []
-    for qs, date_attr, action_label, candidate_path in _sources_for(column, date_range, job_id):
-        for obj in qs:
-            candidate = obj if candidate_path == 'self' else _resolve(obj, candidate_path)
-            rows.append({'candidate': candidate, 'when': getattr(obj, date_attr), 'action': action_label})
+    rows = _rows_for(column, date_range, job_id)
     rows.sort(key=lambda r: r['when'], reverse=True)
     return rows
+
+
+def grouped_events(column, date_range, job_id=None):
+    """Same events as events(), grouped by candidate instead of one flat
+    chronological list - so a candidate who was, say, scheduled, rescheduled
+    and then rejected within the range reads as one story (in the order it
+    happened) instead of 3 anonymous rows mixed in with everyone else's.
+    Groups are ordered by their most recent action, newest first - same
+    order events() would list them standalone."""
+    groups = {}
+    order = []
+    for row in events(column, date_range, job_id):
+        cid = row['candidate'].pk
+        if cid not in groups:
+            groups[cid] = {'candidate': row['candidate'], 'actions': []}
+            order.append(cid)
+        groups[cid]['actions'].append(row)
+    result = []
+    for cid in order:
+        group = groups[cid]
+        group['actions'].sort(key=lambda r: r['when'])
+        group['latest'] = group['actions'][-1]['when']
+        result.append(group)
+    result.sort(key=lambda g: g['latest'], reverse=True)
+    return result

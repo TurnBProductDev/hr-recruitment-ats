@@ -13,9 +13,10 @@ from django.urls import reverse
 from django.utils import timezone
 
 from candidates import services
-from candidates.models import Candidate, CandidateStatusHistory
+from candidates.models import Candidate, CandidateStatusHistory, CommunicationLog
 from candidates.permissions import HR_ADMIN, INTERVIEWER, RECRUITER
 from candidates.views import GENERAL_APPLICATION
+from interviews.models import Interview, InterviewReschedule
 from jobs.models import Job
 
 from . import daily_view
@@ -315,6 +316,197 @@ class DailyViewScreenedColumnTests(TestCase):
         matches = [r for r in rows if r['candidate'].pk == c.pk]
         self.assertEqual(len(matches), 1)
         self.assertEqual(matches[0]['action'], 'Rejected at Screening')
+
+
+class DailyViewCallsColumnTests(TestCase):
+    """"Calls" is every Tele Screening action except "Yet to Call" itself -
+    Shortlisted/Rejected/Hold at that stage, Unable to Connect/Call Back,
+    and Attended - Decision Pending (only when nothing resolved it within
+    the same range - see _merge_attended_into_resolution) - not just the 2
+    call outcomes it used to track (which missed the rest entirely and
+    undercounted the day's real call activity). See
+    dashboard.daily_view._sources_for's 'calls' branch."""
+
+    def setUp(self):
+        self.job = Job.objects.create(title='Analyst')
+        self.today = timezone.localdate()
+
+    def _shortlisted_candidate(self, name):
+        c = Candidate.objects.create(full_name=name, email=f'{name}@example.com', job=self.job)
+        services.record_creation(c)
+        services.change_status(c, Candidate.Status.SHORTLISTED)
+        return c
+
+    def _calls_total(self):
+        [calls] = [c for c in daily_view.compute((self.today, self.today), None) if c['key'] == 'calls']
+        return calls
+
+    def test_shortlisted_after_call_counts(self):
+        c = self._shortlisted_candidate('Rose')
+        services.change_status(c, Candidate.Status.ROUND1)
+        self.assertEqual(self._calls_total()['value'], 1)
+
+    def test_rejected_after_call_counts(self):
+        c = self._shortlisted_candidate('Rose')
+        services.change_status(c, Candidate.Status.REJECTED)
+        calls = self._calls_total()
+        self.assertEqual(calls['value'], 1)
+        breakdown = {b['label']: b['value'] for b in calls['breakdown']}
+        self.assertEqual(breakdown.get('Rejected after Call'), 1)
+
+    def test_hold_before_round1_counts(self):
+        c = self._shortlisted_candidate('Rose')
+        services.change_status(c, Candidate.Status.SCREENING_HOLD)
+        calls = self._calls_total()
+        self.assertEqual(calls['value'], 1)
+        breakdown = {b['label']: b['value'] for b in calls['breakdown']}
+        self.assertEqual(breakdown.get('Hold before Round 1'), 1)
+
+    def test_unable_and_callback_outcomes_still_count(self):
+        c = self._shortlisted_candidate('Rose')
+        CommunicationLog.objects.create(
+            candidate=c, channel=CommunicationLog.Channel.PHONE, outcome=CommunicationLog.Outcome.UNABLE)
+        d = self._shortlisted_candidate('Nikhil')
+        CommunicationLog.objects.create(
+            candidate=d, channel=CommunicationLog.Channel.PHONE, outcome=CommunicationLog.Outcome.CALLBACK)
+        self.assertEqual(self._calls_total()['value'], 2)
+
+    def test_attended_decision_pending_counts_when_still_unresolved(self):
+        """A call logged as Attended counts on its own only if nothing has
+        resolved it within the same range - they're still genuinely
+        pending as of the range's end."""
+        c = self._shortlisted_candidate('Rose')
+        CommunicationLog.objects.create(
+            candidate=c, channel=CommunicationLog.Channel.PHONE, outcome=CommunicationLog.Outcome.ATTENDED)
+        calls = self._calls_total()
+        self.assertEqual(calls['value'], 1)
+        breakdown = {b['label']: b['value'] for b in calls['breakdown']}
+        self.assertEqual(breakdown.get('Attended - Decision Pending'), 1)
+
+    def test_attended_then_shortlisted_in_the_same_range_counts_once(self):
+        """Attended followed by its actual resolution (Shortlisted here),
+        both within the same range, is one story with one outcome - not 2
+        separate actions. The Attended entry is dropped in favour of the
+        resolution it led to."""
+        c = self._shortlisted_candidate('Rose')
+        CommunicationLog.objects.create(
+            candidate=c, channel=CommunicationLog.Channel.PHONE, outcome=CommunicationLog.Outcome.ATTENDED)
+        services.change_status(c, Candidate.Status.ROUND1)
+        calls = self._calls_total()
+        self.assertEqual(calls['value'], 1)
+        breakdown = {b['label']: b['value'] for b in calls['breakdown']}
+        self.assertEqual(breakdown.get('Attended - Decision Pending'), 0)
+        self.assertEqual(breakdown.get('Shortlisted After Call'), 1)
+
+    def test_attended_then_rejected_in_the_same_range_counts_once(self):
+        c = self._shortlisted_candidate('Rose')
+        CommunicationLog.objects.create(
+            candidate=c, channel=CommunicationLog.Channel.PHONE, outcome=CommunicationLog.Outcome.ATTENDED)
+        services.change_status(c, Candidate.Status.REJECTED)
+        calls = self._calls_total()
+        self.assertEqual(calls['value'], 1)
+        breakdown = {b['label']: b['value'] for b in calls['breakdown']}
+        self.assertEqual(breakdown.get('Attended - Decision Pending'), 0)
+        self.assertEqual(breakdown.get('Rejected after Call'), 1)
+
+    def test_attended_then_held_in_the_same_range_counts_once(self):
+        c = self._shortlisted_candidate('Rose')
+        CommunicationLog.objects.create(
+            candidate=c, channel=CommunicationLog.Channel.PHONE, outcome=CommunicationLog.Outcome.ATTENDED)
+        services.change_status(c, Candidate.Status.SCREENING_HOLD)
+        calls = self._calls_total()
+        self.assertEqual(calls['value'], 1)
+        breakdown = {b['label']: b['value'] for b in calls['breakdown']}
+        self.assertEqual(breakdown.get('Attended - Decision Pending'), 0)
+        self.assertEqual(breakdown.get('Hold before Round 1'), 1)
+
+    def test_attended_resolved_outside_the_range_still_counts_as_pending(self):
+        """Attended logged yesterday, resolved only today (outside a range
+        scoped to yesterday alone) - within that range they were genuinely
+        still pending, so the Attended entry stays."""
+        from datetime import timedelta
+        c = self._shortlisted_candidate('Rose')
+        yesterday = self.today - timedelta(days=1)
+        log = CommunicationLog.objects.create(
+            candidate=c, channel=CommunicationLog.Channel.PHONE, outcome=CommunicationLog.Outcome.ATTENDED)
+        CommunicationLog.objects.filter(pk=log.pk).update(logged_at=timezone.now() - timedelta(days=1))
+
+        [calls] = [x for x in daily_view.compute((yesterday, yesterday), None) if x['key'] == 'calls']
+        self.assertEqual(calls['value'], 1)
+        breakdown = {b['label']: b['value'] for b in calls['breakdown']}
+        self.assertEqual(breakdown.get('Attended - Decision Pending'), 1)
+
+        # Resolving it today - outside yesterday's range - doesn't
+        # retroactively change what already happened within it.
+        services.change_status(c, Candidate.Status.ROUND1)
+        [calls_again] = [x for x in daily_view.compute((yesterday, yesterday), None) if x['key'] == 'calls']
+        self.assertEqual(calls_again['value'], 1)
+        breakdown_again = {b['label']: b['value'] for b in calls_again['breakdown']}
+        self.assertEqual(breakdown_again.get('Attended - Decision Pending'), 1)
+
+    def test_yet_to_call_is_not_counted(self):
+        """A candidate still waiting to be called (no action taken yet)
+        isn't an action HR took, so contributes nothing to the total."""
+        self._shortlisted_candidate('Rose')
+        self.assertEqual(self._calls_total()['value'], 0)
+
+
+class DailyViewCandidateGroupingTests(TestCase):
+    """Several actions on the same candidate within a range (scheduled, then
+    rescheduled, then rejected) used to render as 3 anonymous rows mixed in
+    with everyone else's - confusing when trying to tell "how many actions"
+    apart from "how many candidates". See dashboard.daily_view.compute's
+    candidate_count and grouped_events()."""
+
+    def setUp(self):
+        self.job = Job.objects.create(title='Analyst')
+        self.today = timezone.localdate()
+        self.candidate = Candidate.objects.create(full_name='Rose', email='rose@example.com', job=self.job)
+        services.record_creation(self.candidate)
+        services.change_status(self.candidate, Candidate.Status.SHORTLISTED)
+        services.change_status(self.candidate, Candidate.Status.ROUND1)
+        self.interview = Interview.objects.create(
+            candidate=self.candidate, round_type=Interview.RoundType.ROUND1,
+            scheduled_date=timezone.now() + timezone.timedelta(days=1))
+        InterviewReschedule.objects.create(
+            interview=self.interview, previous_date=self.interview.scheduled_date,
+            new_date=self.interview.scheduled_date + timezone.timedelta(hours=1))
+        services.change_status(self.candidate, Candidate.Status.REJECTED)
+
+    def test_candidate_count_is_lower_than_the_action_count_for_a_repeat_candidate(self):
+        [round1] = [c for c in daily_view.compute((self.today, self.today), None) if c['key'] == 'round1']
+        self.assertEqual(round1['value'], 3)  # scheduled, rescheduled, rejected
+        self.assertEqual(round1['candidate_count'], 1)  # all the same candidate
+
+    def test_grouped_events_keeps_one_candidates_actions_together_in_order(self):
+        [group] = daily_view.grouped_events('round1', (self.today, self.today), None)
+        self.assertEqual(group['candidate'], self.candidate)
+        actions = [a['action'] for a in group['actions']]
+        self.assertEqual(actions, [
+            'Round 1 Interview Scheduled', 'Round 1 Interview Rescheduled', 'Rejected after Round 1',
+        ])
+
+    def test_grouped_events_keeps_unrelated_candidates_separate(self):
+        other = Candidate.objects.create(full_name='Nikhil', email='nikhil@example.com', job=self.job)
+        services.record_creation(other)
+        services.change_status(other, Candidate.Status.SHORTLISTED)
+        services.change_status(other, Candidate.Status.ROUND1)
+        Interview.objects.create(
+            candidate=other, round_type=Interview.RoundType.ROUND1,
+            scheduled_date=timezone.now() + timezone.timedelta(days=1))
+
+        groups = daily_view.grouped_events('round1', (self.today, self.today), None)
+        self.assertEqual(len(groups), 2)
+        self.assertEqual({g['candidate'].pk for g in groups}, {self.candidate.pk, other.pk})
+
+    def test_drilldown_page_groups_by_candidate(self):
+        user = get_user_model().objects.create_superuser('hr9', 'hr9@example.com', 'pw')
+        self.client.force_login(user)
+        response = self.client.get(reverse('daily_action_drilldown', args=['round1']),
+                                   {'daily_from': self.today.isoformat(), 'daily_to': self.today.isoformat()})
+        self.assertEqual(len(response.context['groups']), 1)
+        self.assertEqual(response.context['total_actions'], 3)
+        self.assertContains(response, '3 actions across 1 candidate')
 
 
 class UserManagementTests(TestCase):

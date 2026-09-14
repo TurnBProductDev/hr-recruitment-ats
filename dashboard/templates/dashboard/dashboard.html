@@ -152,7 +152,8 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
 }
 .daily-col:hover { background: #f6f8f8; }
 .daily-col:hover .daily-lbl { color: #0e6f6b; }
-.daily-val { font-size: 1rem; font-weight: 700; color: #1f2a2a; margin-bottom: 8px; }
+.daily-val { font-size: 1rem; font-weight: 700; color: #1f2a2a; margin-bottom: 1px; }
+.daily-val-sub { font-size: .62rem; color: #8a9a9a; margin-bottom: 8px; }
 .daily-bar-track { flex: 1; width: 100%; max-width: 96px; display: flex; flex-direction: column; justify-content: flex-end; }
 .daily-bar { width: 100%; border-radius: 6px 6px 0 0; min-height: 3px; transition: height .2s ease; }
 .daily-lbl { font-size: .66rem; font-weight: 700; letter-spacing: .3px; text-transform: uppercase; color: #566664; margin-top: 10px; text-align: center; transition: color .12s ease; }
@@ -431,12 +432,16 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
         <a class="daily-col"
            href="{% url 'daily_action_drilldown' c.key %}?daily_from={{ daily_from|date:"Y-m-d" }}&daily_to={{ daily_to|date:"Y-m-d" }}{% if selected_job %}&job={{ selected_job }}{% endif %}">
           <div class="daily-tooltip">
-            <div class="daily-tooltip-title">{{ c.label }} &middot; {{ c.value }}</div>
+            <div class="daily-tooltip-title">
+              {{ c.label }} &middot; {{ c.value }} action{{ c.value|pluralize }}
+              &middot; {{ c.candidate_count }} candidate{{ c.candidate_count|pluralize }}
+            </div>
             {% for b in c.breakdown %}
             <div class="daily-tooltip-row"><span>{{ b.label }}</span><span>{{ b.value }}</span></div>
             {% endfor %}
           </div>
           <div class="daily-val">{{ c.value }}</div>
+          <div class="daily-val-sub">{{ c.candidate_count }} candidate{{ c.candidate_count|pluralize }}</div>
           <div class="daily-bar-track">
             <div class="daily-bar" style="height:{{ c.bar_pct }}%;background:{{ c.color }}"></div>
           </div>

@@ -2,6 +2,24 @@
 {% load candidates_extras %}
 {% block title %}{{ column_label }} - Daily View{% endblock %}
 
+{% block extra_css %}
+<style>
+/* ===== Daily View drill-through: grouped by candidate, not one flat list -
+   so a candidate who was e.g. scheduled, rescheduled and rejected within
+   the range reads as one story instead of 3 anonymous rows. ===== */
+.dd-group { padding: 14px 0; border-bottom: 1px solid #eef2f2; }
+.dd-group:last-child { border-bottom: none; }
+.dd-group-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.dd-group-head a { font-weight: 600; font-size: .92rem; }
+.dd-role { font-size: .78rem; color: #8a969b; }
+.dd-count { font-size: .68rem; font-weight: 600; text-transform: uppercase; letter-spacing: .3px; color: #0e6f6b; background: #eef6f5; border-radius: 999px; padding: 2px 10px; margin-left: auto; }
+.dd-actions { display: flex; flex-direction: column; gap: 4px; padding-left: 2px; }
+.dd-action { display: flex; align-items: baseline; gap: 10px; font-size: .82rem; color: #1f2a2a; }
+.dd-when { flex: 0 0 150px; color: #8a969b; font-size: .76rem; }
+.dd-arrow { color: #c3cbcb; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
   <div>
@@ -9,28 +27,31 @@
     <p class="text-muted mb-0">
       {{ daily_from|date:"d M Y" }}{% if daily_to != daily_from %} &ndash; {{ daily_to|date:"d M Y" }}{% endif %}
       {% if job %}&middot; {{ job.title }}{% endif %}
-      &middot; {{ rows|length }} action{{ rows|length|pluralize }}
+      &middot; {{ total_actions }} action{{ total_actions|pluralize }} across {{ groups|length }} candidate{{ groups|length|pluralize }}
     </p>
   </div>
 </div>
 
 <div class="card app-card p-4">
-  <div class="table-responsive">
-    <table class="table table-hover align-middle w-100 mb-0">
-      <thead><tr><th>When</th><th>Candidate</th><th>Role</th><th>Action</th></tr></thead>
-      <tbody>
-        {% for row in rows %}
-        <tr>
-          <td class="text-nowrap">{{ row.when|date:"d M Y, H:i" }}</td>
-          <td><a href="{% url 'candidate_timeline' row.candidate.pk %}">{{ row.candidate.full_name }}</a></td>
-          <td>{{ row.candidate.job.title|default:"&mdash;" }}</td>
-          <td>{{ row.action }}</td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="4" class="text-muted text-center py-4">No {{ column_label|lower }} actions in this range.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+  {% for g in groups %}
+  <div class="dd-group">
+    <div class="dd-group-head">
+      <a href="{% url 'candidate_timeline' g.candidate.pk %}">{{ g.candidate.full_name }}</a>
+      <span class="dd-role">{{ g.candidate.job.title|default:"&mdash;" }}</span>
+      {% if g.actions|length > 1 %}<span class="dd-count">{{ g.actions|length }} actions</span>{% endif %}
+    </div>
+    <div class="dd-actions">
+      {% for a in g.actions %}
+      <div class="dd-action">
+        <span class="dd-when">{{ a.when|date:"d M Y, H:i" }}</span>
+        <span class="dd-arrow">&rarr;</span>
+        <span>{{ a.action }}</span>
+      </div>
+      {% endfor %}
+    </div>
   </div>
+  {% empty %}
+  <div class="text-muted text-center py-4">No {{ column_label|lower }} actions in this range.</div>
+  {% endfor %}
 </div>
 {% endblock %}
