@@ -1,4 +1,5 @@
-from django.db.models import Count, Max, Q, Sum
+from django.db.models import Count, Max, OuterRef, Q, Subquery, Sum
+from django.db.models.functions import Coalesce
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
@@ -6,7 +7,7 @@ from django.utils import timezone
 from django.views.generic import TemplateView
 
 from candidates.flows import flow_count
-from candidates.models import Candidate
+from candidates.models import Candidate, CandidateStatusHistory
 from candidates.permissions import ANY_STAFF, GroupRequiredMixin
 from candidates.views import GENERAL_APPLICATION
 from interviews.models import Interview
@@ -355,6 +356,26 @@ class DailyActionDrilldownView(GroupRequiredMixin, TemplateView):
         return ctx
 
 
+def _with_screening_date(qs):
+    """Annotate each candidate with `screening_date` - when their CV
+    Screening decision was made, not when they applied (created_at). That's
+    the earliest time they were Qualified (reached SHORTLISTED), or, for
+    someone screened out outright and never qualified, the earliest time
+    they were Rejected/Blacklisted - same "Screened" moment Daily View
+    tracks (dashboard.daily_view's 'screened' column). A candidate rejected
+    at a later stage keeps their (earlier) Qualified date here, correctly -
+    that's still when they were screened, whatever happened afterwards.
+    Null for anyone still Open/Unattended, who this doesn't need to reach:
+    no _report_metrics figure ever counts an Open candidate anyway."""
+    qualified_at = (CandidateStatusHistory.objects
+                    .filter(candidate=OuterRef('pk'), new_status=STATUS.SHORTLISTED)
+                    .order_by('changed_at').values('changed_at')[:1])
+    rejected_at_screening = (CandidateStatusHistory.objects
+                             .filter(candidate=OuterRef('pk'), new_status__in=(STATUS.REJECTED, STATUS.BLACKLISTED))
+                             .order_by('changed_at').values('changed_at')[:1])
+    return qs.annotate(screening_date=Coalesce(Subquery(qualified_at), Subquery(rejected_at_screening)))
+
+
 def _report_metrics(qs):
     """Applicants / Qualified / Shortlisted / Round 1 Cleared / Round 2
     Cleared / Hired for one queryset, plus each stage's % against both the
@@ -418,11 +439,13 @@ class ReportsView(GroupRequiredMixin, TemplateView):
             base = base.filter(job_id=job_id)
 
         date_from = self.request.GET.get('date_from', '')
-        if date_from:
-            base = base.filter(created_at__date__gte=date_from)
         date_to = self.request.GET.get('date_to', '')
-        if date_to:
-            base = base.filter(created_at__date__lte=date_to)
+        if date_from or date_to:
+            base = _with_screening_date(base)
+            if date_from:
+                base = base.filter(screening_date__date__gte=date_from)
+            if date_to:
+                base = base.filter(screening_date__date__lte=date_to)
 
         ctx['jobs'] = Job.objects.exclude(title__iexact=GENERAL_APPLICATION).order_by('title')
         ctx['selected_job'] = job_id

@@ -13,7 +13,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from candidates import services
-from candidates.models import Candidate
+from candidates.models import Candidate, CandidateStatusHistory
 from candidates.permissions import HR_ADMIN, INTERVIEWER, RECRUITER
 from candidates.views import GENERAL_APPLICATION
 from jobs.models import Job
@@ -653,16 +653,43 @@ class ReportsViewTests(TestCase):
         self.assertEqual(response.context['applicants'], 0)
         self.assertIsNone(response.context['r1_cleared_pct'])
 
-    def test_date_range_filters_applicants(self):
+    def test_date_range_filters_by_when_screened_not_when_applied(self):
+        """The date filter goes by when the CV Screening decision happened
+        (CandidateStatusHistory's SHORTLISTED/Rejected changed_at), not
+        Candidate.created_at (when they applied) - see
+        dashboard.views._with_screening_date."""
         from datetime import timedelta
         from django.utils import timezone as tz
-        Candidate.objects.filter(pk=self.c_open.pk).update(created_at=tz.now() - timedelta(days=30))
+        # c_shortlisted applied "today" (setUp's default), but was actually
+        # screened a month ago.
+        CandidateStatusHistory.objects.filter(
+            candidate=self.c_shortlisted, new_status=Candidate.Status.SHORTLISTED
+        ).update(changed_at=tz.now() - timedelta(days=30))
         today = tz.localdate()
         response = self._get(date_from=today.isoformat(), date_to=today.isoformat())
-        # c_open was never a screening decision either way, so this mainly
-        # confirms the date filter itself narrows the queryset - the other 4
-        # (all created "today") still add up the same way.
-        self.assertEqual(response.context['applicants'], 4)
+        # Excluded by screening date even though created_at is today -
+        # leaving Round1/ClearedR1/Hired (all screened today).
+        self.assertEqual(response.context['qualified'], 3)
+
+    def test_date_range_includes_a_rejected_candidate_by_their_rejection_date(self):
+        """A candidate rejected outright at screening (never Qualified) is
+        dated by their Rejected event instead, not created_at."""
+        from datetime import timedelta
+        from django.utils import timezone as tz
+        rejected = Candidate.objects.create(job=self.job, full_name='Rejected', email='rej@example.com')
+        services.record_creation(rejected)
+        services.change_status(rejected, Candidate.Status.REJECTED)
+        CandidateStatusHistory.objects.filter(
+            candidate=rejected, new_status=Candidate.Status.REJECTED
+        ).update(changed_at=tz.now() - timedelta(days=30))
+
+        today = tz.localdate()
+        response = self._get(date_from=today.isoformat(), date_to=today.isoformat())
+        self.assertEqual(response.context['applicants'], 4)  # rejected's screening date is out of range
+
+        response = self._get(date_from=(tz.localdate() - timedelta(days=31)).isoformat(),
+                             date_to=(tz.localdate() - timedelta(days=29)).isoformat())
+        self.assertEqual(response.context['applicants'], 1)  # only the backdated rejection is in range
 
     def test_by_job_row_carries_both_previous_stage_and_total_pcts(self):
         """Each row needs both sets - the default view (% vs the stage right
