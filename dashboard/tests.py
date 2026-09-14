@@ -265,6 +265,23 @@ class OverviewFunnelTests(TestCase):
         drop_labels = [d[0] for d in tele_screening['drops']]
         self.assertNotIn('Unable to Connect', drop_labels)
 
+    def test_yellow_pending_segments_sort_last_regardless_of_count(self):
+        """"Yet to Call" (yellow - hasn't been actioned yet) always renders
+        last in the bar, even when it outnumbers the other breakdown reasons
+        - those are actual decisions/drops, this one is just still pending."""
+        # 3 candidates still awaiting their tele-screening call (Yet to Call) -
+        # deliberately more than the 1 rejected-after-call below.
+        for i in range(3):
+            c = Candidate.objects.create(full_name=f'Pending{i}', email=f'pending{i}@example.com', job=self.job)
+            services.change_status(c, Candidate.Status.SHORTLISTED)
+        rejected = Candidate.objects.create(full_name='Rejected', email='rejected@example.com', job=self.job)
+        services.change_status(rejected, Candidate.Status.SHORTLISTED)
+        services.change_status(rejected, Candidate.Status.REJECTED)
+
+        tele_screening = self._get().context['funnel'][1]
+        flows = [seg['flow'] for seg in tele_screening['segments']]
+        self.assertLess(flows.index('rejected_after_call'), flows.index('call_pending'))
+
 
 class DailyViewScreenedColumnTests(TestCase):
     """A screening-stage hold counts as a Daily View "Screened" action, same

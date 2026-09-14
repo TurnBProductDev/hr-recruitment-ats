@@ -265,7 +265,12 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
                     'bg': GREEN, 'text_color': '#fff', 'show_inline': True,
                     'font_size': font_size, 'is_green': True,
                 })
-            breakdown_items = sorted((c for c in breakdown_chips if c['count'] > 0), key=lambda c: -c['count'])
+            # Yellow ("Yet to Call"/"Yet to Schedule" - not yet actioned) always
+            # sits last in the bar/chip order, however its count compares to
+            # the other breakdown reasons - those are actual decisions/drops,
+            # this is just "hasn't happened yet".
+            breakdown_items = sorted((c for c in breakdown_chips if c['count'] > 0),
+                                     key=lambda c: (c['cat'] == 'yellow', -c['count']))
             breakdown_pct = round((prev_value - value) / peak * 100, 1)
             items_total = sum(c['count'] for c in breakdown_items) or 1
             for c in breakdown_items:
