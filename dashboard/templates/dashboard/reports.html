@@ -13,19 +13,39 @@
 .rep-panel { background: #fff; border: 1px solid #e2ebeb; border-radius: 12px; padding: 22px 24px 18px; height: 100%; }
 .rep-panel h5 { margin: 0 0 14px; }
 
-.rep-thead { display: flex; align-items: center; gap: 14px; padding: 0 0 10px; border-bottom: 1px solid #e2ebeb; font-size: .68rem; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: #8a9a9a; }
-.rep-row { display: flex; align-items: center; gap: 14px; padding: 14px 0; border-bottom: 1px solid #eef2f2; }
-.rep-row:last-child { border-bottom: none; }
-.rep-row .name { flex: 2; font-size: .85rem; font-weight: 500; color: #1f2a2a; }
-.rep-row .col { flex: 1; text-align: center; font-size: .82rem; color: #1f2a2a; }
-.rep-row .col.shortlist { font-weight: 600; color: #0e6f6b; }
-.rep-row .col.hired { color: #c3cdd0; }
-.rep-thead span.name { flex: 2; }
-.rep-thead span.col { flex: 1; text-align: center; }
+/* Grid, not flex: a fixed track per column keeps every row's numbers lined
+   up under the header no matter how long a Role/Source name is, and keeps
+   the header and data rows using the exact same layout (see dashboard.html's
+   .sm-thead/.sm-row for the same reasoning). */
+.rep-thead, .rep-row, .rep-row-expand {
+  display: grid; align-items: center; gap: 10px;
+  grid-template-columns: minmax(0, 1.6fr) repeat(6, minmax(0, 1fr)) 26px;
+}
+.rep-thead { padding: 0 0 10px; border-bottom: 1px solid #e2ebeb; font-size: .64rem; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: #8a9a9a; }
+.rep-thead .col { text-align: center; }
+.rep-rowwrap { padding: 12px 0; border-bottom: 1px solid #eef2f2; }
+.rep-rowwrap:last-child { border-bottom: none; }
+.rep-row .name { min-width: 0; font-size: .82rem; font-weight: 500; color: #1f2a2a; }
+.rep-row .col { text-align: center; font-size: .78rem; color: #1f2a2a; white-space: nowrap; }
+.rep-row .col.hired .rep-num { color: #0e6f6b; }
+.rep-num { font-weight: 600; }
+.rep-pct { font-size: .66rem; color: #8a9a9a; margin-left: 1px; }
 
-@media (max-width: 700px) {
+.rep-toggle {
+  justify-self: end; flex: 0 0 22px; width: 22px; height: 22px; border-radius: 999px;
+  border: 1px solid #d8e0df; background: #fff; padding: 0; display: flex; align-items: center;
+  justify-content: center; font-size: .8rem; color: #566664; cursor: pointer;
+}
+.rep-toggle:hover { border-color: #b9c8c8; color: #1f2a2a; }
+
+.rep-row-expand { display: none; margin-top: 8px; }
+.rep-row-expand.show { display: grid; }
+.rep-row-expand .name { font-size: .66rem; color: #8a9a9a; text-transform: uppercase; letter-spacing: .3px; }
+.rep-row-expand .col { text-align: center; font-size: .74rem; font-weight: 600; color: #0e6f6b; }
+
+@media (max-width: 900px) {
   .rep-panel { overflow-x: auto; }
-  .rep-thead, .rep-row { min-width: 460px; }
+  .rep-thead, .rep-row, .rep-row-expand { min-width: 640px; }
 }
 </style>
 {% endblock %}
@@ -73,8 +93,8 @@
   </div>
   <div class="col-md-3 col-6">
     <div class="rep-kpi">
-      <div class="lbl">Shortlisting Ratio</div>
-      <div class="val-row"><span class="val accent">{{ shortlisting_ratio }}%</span><span class="hint">{{ shortlisted }} of {{ applicants }}</span></div>
+      <div class="lbl">Qualified Ratio</div>
+      <div class="val-row"><span class="val accent">{% if qualified_pct is not None %}{{ qualified_pct }}%{% else %}&ndash;{% endif %}</span><span class="hint">{{ qualified }} of {{ applicants }}</span></div>
     </div>
   </div>
   <div class="col-md-3 col-6">
@@ -86,7 +106,7 @@
   <div class="col-md-3 col-6">
     <div class="rep-kpi">
       <div class="lbl">Hiring Ratio</div>
-      <div class="val-row"><span class="val accent">{{ hiring_ratio }}%</span><span class="hint">{{ hired }} of {{ applicants }}</span></div>
+      <div class="val-row"><span class="val accent">{% if hired_pct_total is not None %}{{ hired_pct_total }}%{% else %}&ndash;{% endif %}</span><span class="hint">{{ hired }} of {{ applicants }}</span></div>
     </div>
   </div>
 </div>
@@ -96,18 +116,15 @@
   <div class="rep-thead">
     <span class="name">Role</span>
     <span class="col">Applicants</span>
-    <span class="col">Shortlisting Ratio</span>
-    <span class="col">Round 1 Clear Ratio</span>
+    <span class="col">Qualified</span>
+    <span class="col">Shortlisted</span>
+    <span class="col">Round 1 Cleared</span>
+    <span class="col">Round 2 Cleared</span>
     <span class="col">Hired</span>
+    <span></span>
   </div>
   {% for r in by_job %}
-  <div class="rep-row">
-    <span class="name">{{ r.name }}</span>
-    <span class="col">{{ r.applicants }}</span>
-    <span class="col shortlist">{{ r.shortlisting_ratio }}%</span>
-    <span class="col">{% if r.r1_clear_ratio is not None %}{{ r.r1_clear_ratio }}%{% else %}&ndash;{% endif %}</span>
-    <span class="col hired">{{ r.hired }}</span>
-  </div>
+  {% include "dashboard/_reports_row.html" %}
   {% empty %}<div class="text-muted text-center py-3">No data.</div>{% endfor %}
 </div>
 
@@ -116,18 +133,31 @@
   <div class="rep-thead">
     <span class="name">Source</span>
     <span class="col">Applicants</span>
-    <span class="col">Shortlisting Ratio</span>
-    <span class="col">Round 1 Clear Ratio</span>
+    <span class="col">Qualified</span>
+    <span class="col">Shortlisted</span>
+    <span class="col">Round 1 Cleared</span>
+    <span class="col">Round 2 Cleared</span>
     <span class="col">Hired</span>
+    <span></span>
   </div>
   {% for r in by_source %}
-  <div class="rep-row">
-    <span class="name">{{ r.name }}</span>
-    <span class="col">{{ r.applicants }}</span>
-    <span class="col shortlist">{{ r.shortlisting_ratio }}%</span>
-    <span class="col">{% if r.r1_clear_ratio is not None %}{{ r.r1_clear_ratio }}%{% else %}&ndash;{% endif %}</span>
-    <span class="col hired">{{ r.hired }}</span>
-  </div>
+  {% include "dashboard/_reports_row.html" %}
   {% empty %}<div class="text-muted text-center py-3">No data.</div>{% endfor %}
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Each row's + toggles a second line showing the same 5 stages' % against
+// Applicants overall, instead of against the stage right before it.
+document.querySelectorAll('.rep-toggle').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var wrap = btn.closest('.rep-rowwrap');
+    var expand = wrap.querySelector('.rep-row-expand');
+    var showing = expand.classList.toggle('show');
+    btn.textContent = showing ? '−' : '+';
+    btn.setAttribute('aria-expanded', showing ? 'true' : 'false');
+  });
+});
+</script>
 {% endblock %}

@@ -356,32 +356,50 @@ class DailyActionDrilldownView(GroupRequiredMixin, TemplateView):
 
 
 def _report_metrics(qs):
-    """Applicants / Shortlisting Ratio / Round 1 Clear Ratio / Hired for one
-    queryset - shared by the page-level KPIs and each By Job/Role and Source
-    Level row, so every number on the Reports page uses the exact same
-    definitions as the Dashboard Overview funnel (candidates.flows) instead
-    of a second, parallel definition of "shortlisted"/"cleared Round 1" that
-    could drift out of sync with it.
+    """Applicants / Qualified / Shortlisted / Round 1 Cleared / Round 2
+    Cleared / Hired for one queryset, plus each stage's % against both the
+    stage right before it and against Applicants overall - shared by the
+    page-level KPIs and each By Job/Role and Source Level row, so every
+    number on the Reports page uses the exact same stage definitions as the
+    Dashboard Overview funnel (candidates.flows) instead of a second,
+    parallel definition that could drift out of sync with it.
 
-    Round 1 Clear Ratio's base is candidates who reached Round 1 at all
-    ('shortlisted_after_call' - the funnel's own name for that transition),
-    not total applicants - same as how the funnel bar computes each stage's
-    own clear rate. None (not 0) when nobody reached Round 1, so the
-    template can show "-" instead of a misleading 0.0%."""
-    applicants = qs.count()
-    shortlisted = flow_count(qs, 'ever_shortlisted')
-    reached_r1 = flow_count(qs, 'shortlisted_after_call')
+    Applicants = Qualified + Rejected-at-screening ('ever_shortlisted' +
+    'screened_out') - candidates still Open/Unattended (no screening
+    decision yet) are deliberately left out, same as how the funnel bar's
+    own CV Screening peak (dashboard.views.HRDashboardView) excludes them.
+
+    Each "_pct" is None (not 0) when its base is 0, so the template can show
+    "-" instead of a misleading 0.0%."""
+    def pct(numerator, denominator):
+        return round(numerator / denominator * 100, 1) if denominator else None
+
+    qualified = flow_count(qs, 'ever_shortlisted')
+    screened_out = flow_count(qs, 'screened_out')
+    applicants = qualified + screened_out
+    shortlisted = flow_count(qs, 'shortlisted_after_call')
     r1_cleared = flow_count(qs, 'r1_cleared')
+    r2_cleared = flow_count(qs, 'r2_cleared')
     hired = flow_count(qs, 'hired')
     return {
         'applicants': applicants,
+        'qualified': qualified,
+        'qualified_pct': pct(qualified, applicants),
         'shortlisted': shortlisted,
-        'shortlisting_ratio': round(shortlisted / applicants * 100, 1) if applicants else 0,
-        'reached_r1': reached_r1,
+        'shortlisted_pct': pct(shortlisted, qualified),
         'r1_cleared': r1_cleared,
-        'r1_clear_ratio': round(r1_cleared / reached_r1 * 100, 1) if reached_r1 else None,
+        'r1_cleared_pct': pct(r1_cleared, shortlisted),
+        'r2_cleared': r2_cleared,
+        'r2_cleared_pct': pct(r2_cleared, r1_cleared),
         'hired': hired,
-        'hiring_ratio': round(hired / applicants * 100, 1) if applicants else 0,
+        'hired_pct': pct(hired, r2_cleared),
+        # Same 5 stages, each against Applicants instead of the stage right
+        # before it - shown only once a row is expanded (see reports.html).
+        'qualified_pct_total': pct(qualified, applicants),
+        'shortlisted_pct_total': pct(shortlisted, applicants),
+        'r1_cleared_pct_total': pct(r1_cleared, applicants),
+        'r2_cleared_pct_total': pct(r2_cleared, applicants),
+        'hired_pct_total': pct(hired, applicants),
     }
 
 

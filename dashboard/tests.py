@@ -596,22 +596,37 @@ class ReportsViewTests(TestCase):
 
     def test_applicants_excludes_general_application_and_future_prospects(self):
         response = self._get()
-        self.assertEqual(response.context['applicants'], 5)
+        self.assertEqual(response.context['applicants'], 4)
 
-    def test_shortlisting_ratio(self):
+    def test_applicants_is_qualified_plus_rejected_not_everyone(self):
+        """Applicants = Qualified + Rejected-at-screening - Open/Unattended
+        (c_open here, never screened) is deliberately left out, same as the
+        funnel bar's own CV Screening peak."""
         response = self._get()
-        self.assertEqual(response.context['shortlisted'], 4)
-        self.assertEqual(response.context['shortlisting_ratio'], 80.0)
+        self.assertEqual(response.context['qualified'], 4)
+        self.assertEqual(response.context['applicants'], 4)  # not 5 - c_open excluded
 
-    def test_round1_clear_ratio_is_based_on_those_who_reached_round1(self):
+    def test_qualified_ratio(self):
+        response = self._get()
+        self.assertEqual(response.context['qualified'], 4)
+        self.assertEqual(response.context['qualified_pct'], 100.0)  # 4 of 4 applicants
+
+    def test_r1_cleared_pct_is_based_on_those_who_reached_round1(self):
         response = self._get()
         # 3 reached Round 1 (Round1/ClearedR1/Hired); 2 of those cleared it.
-        self.assertEqual(response.context['r1_clear_ratio'], round(2 / 3 * 100, 1))
+        self.assertEqual(response.context['shortlisted'], 3)
+        self.assertEqual(response.context['r1_cleared_pct'], round(2 / 3 * 100, 1))
+
+    def test_r2_cleared(self):
+        response = self._get()
+        # Only ClearedR1 and Hired reached Round 1; only Hired went on to
+        # reach Final Selection (clearing Round 2).
+        self.assertEqual(response.context['r2_cleared'], 1)
 
     def test_hiring_ratio(self):
         response = self._get()
         self.assertEqual(response.context['hired'], 1)
-        self.assertEqual(response.context['hiring_ratio'], 20.0)
+        self.assertEqual(response.context['hired_pct_total'], 25.0)  # 1 of 4 applicants
 
     def test_by_job_never_lists_general_application(self):
         response = self._get()
@@ -628,15 +643,15 @@ class ReportsViewTests(TestCase):
         response = self._get()
         rows = [row for row in response.context['by_job'] if row['name'] == 'Program Manager']
         self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]['applicants'], 5)
+        self.assertEqual(rows[0]['applicants'], 4)  # 5 candidates, but c_open isn't an Applicant
 
-    def test_r1_clear_ratio_is_none_not_zero_when_nobody_reached_round1(self):
+    def test_r1_cleared_pct_is_none_not_zero_when_nobody_reached_round1(self):
         """None (not 0.0%) so the template can show '-' rather than a
         misleading 0.0% for a group nobody has even reached Round 1 in yet."""
         empty_job = Job.objects.create(title='Brand New Role')
         response = self._get(job=empty_job.pk)
         self.assertEqual(response.context['applicants'], 0)
-        self.assertIsNone(response.context['r1_clear_ratio'])
+        self.assertIsNone(response.context['r1_cleared_pct'])
 
     def test_date_range_filters_applicants(self):
         from datetime import timedelta
@@ -644,4 +659,26 @@ class ReportsViewTests(TestCase):
         Candidate.objects.filter(pk=self.c_open.pk).update(created_at=tz.now() - timedelta(days=30))
         today = tz.localdate()
         response = self._get(date_from=today.isoformat(), date_to=today.isoformat())
-        self.assertEqual(response.context['applicants'], 4)  # c_open backdated out of range
+        # c_open was never a screening decision either way, so this mainly
+        # confirms the date filter itself narrows the queryset - the other 4
+        # (all created "today") still add up the same way.
+        self.assertEqual(response.context['applicants'], 4)
+
+    def test_by_job_row_carries_both_previous_stage_and_total_pcts(self):
+        """Each row needs both sets - the default view (% vs the stage right
+        before it) and the expandable one (% vs Applicants overall) - see
+        reports.html/_reports_row.html."""
+        response = self._get()
+        row = next(r for r in response.context['by_job'] if r['name'] == 'Program Manager')
+        self.assertEqual(row['shortlisted_pct'], round(3 / 4 * 100, 1))        # vs Qualified
+        self.assertEqual(row['shortlisted_pct_total'], round(3 / 4 * 100, 1))  # vs Applicants (same here)
+        self.assertEqual(row['r2_cleared_pct'], round(1 / 2 * 100, 1))         # vs Round 1 Cleared
+        self.assertEqual(row['r2_cleared_pct_total'], round(1 / 4 * 100, 1))   # vs Applicants
+
+    def test_reports_page_renders_the_new_columns_and_expand_toggle(self):
+        response = self._get()
+        content = response.content.decode()
+        self.assertIn('Round 1 Cleared', content)
+        self.assertIn('Round 2 Cleared', content)
+        self.assertIn('rep-toggle', content)
+        self.assertIn('% of Applicants', content)
