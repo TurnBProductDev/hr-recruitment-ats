@@ -4,6 +4,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>
+// Same theme choice as the signed-in app (see templates/hr_base.html) -
+// applied before first paint so there's no flash of the wrong theme.
+(function () {
+  var stored = null;
+  try { stored = localStorage.getItem('theme'); } catch (e) { /* private mode etc. */ }
+  var theme = stored || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  document.documentElement.setAttribute('data-theme', theme);
+})();
+</script>
 <title>Login - HireB</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -14,12 +24,21 @@
   body {
     margin: 0;
     font-family: 'Poppins', system-ui, sans-serif;
-    background: #fff;
+    background: var(--bg-surface, #fff);
   }
   .login-shell {
     display: flex;
     min-height: 100vh;
+    position: relative;
   }
+  .theme-toggle-corner {
+    position: absolute; top: 20px; right: 24px; z-index: 2; background: rgba(0,0,0,.06); border: none;
+    border-radius: 6px; padding: 6px 10px; font-size: 15px; line-height: 1; cursor: pointer;
+  }
+  .theme-toggle-corner:hover { background: rgba(0,0,0,.12); }
+  .theme-toggle-corner .moon { display: none; }
+  :root[data-theme="dark"] .theme-toggle-corner .sun { display: none; }
+  :root[data-theme="dark"] .theme-toggle-corner .moon { display: inline; }
   .login-brand {
     width: 42%;
     min-width: 320px;
@@ -81,12 +100,12 @@
   .login-form-wrap h2 {
     font-weight: 700;
     font-size: 25px;
-    color: #1a2e35;
+    color: var(--text-primary, #1a2e35);
     margin: 0;
   }
   .login-form-wrap .subtitle {
     font-size: 13px;
-    color: #7a8a90;
+    color: var(--text-muted, #7a8a90);
     margin: 8px 0 0;
   }
   .login-field { margin-top: 26px; }
@@ -94,7 +113,7 @@
     display: block;
     font-weight: 500;
     font-size: 12.5px;
-    color: #3d4f57;
+    color: var(--text-muted, #3d4f57);
     margin-bottom: 8px;
   }
   .login-field-row {
@@ -114,10 +133,11 @@
   .login-input {
     width: 100%;
     padding: 13px 14px;
-    border: 1px solid #d7dfe1;
+    border: 1px solid var(--border-color, #d7dfe1);
     border-radius: 8px;
     font-size: 14px;
-    color: #1a2e35;
+    color: var(--text-primary, #1a2e35);
+    background: var(--bg-surface, #fff);
     font-family: inherit;
     outline: none;
     transition: border-color .15s, box-shadow .15s;
@@ -156,7 +176,7 @@
   }
   .login-back a {
     font-size: 13px;
-    color: #8a969b;
+    color: var(--text-muted, #8a969b);
     text-decoration: none;
   }
   .login-back a:hover { color: var(--primary-green, #008C8C); }
@@ -171,6 +191,9 @@
 </head>
 <body>
 <div class="login-shell">
+  <button type="button" class="theme-toggle-corner" id="themeToggleBtn" aria-label="Switch between light and dark mode" title="Switch between light and dark mode">
+    <span class="sun">&#9728;&#65039;</span><span class="moon">&#127769;</span>
+  </button>
   <div class="login-brand">
     <div class="login-brand-mark">
       <span class="badge-mark">H</span>
@@ -217,5 +240,16 @@
     </div>
   </div>
 </div>
+<script>
+(function () {
+  var btn = document.getElementById('themeToggleBtn');
+  if (!btn) return;
+  btn.addEventListener('click', function () {
+    var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem('theme', next); } catch (e) { /* private mode etc. */ }
+  });
+})();
+</script>
 </body>
 </html>

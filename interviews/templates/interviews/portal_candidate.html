@@ -4,16 +4,17 @@
 
 {% block extra_css %}
 <style>
-.pd-meta { font-size:.72rem; color:#8a969b; }
+.pd-meta { font-size:.72rem; color:var(--text-muted); }
 .section-eyebrow { font-size:.72rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--primary-green); margin-bottom:14px; }
 .field-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px 28px; }
 .field-full { grid-column:1 / -1; }
-.field-label { font-size:.72rem; color:#8b9998; margin-bottom:3px; }
-.field-value { font-size:.8rem; color:#2b3238; }
-.field-value.text-muted { color:#b7c0be !important; }
+.field-label { font-size:.72rem; color:var(--text-muted); margin-bottom:3px; }
+.field-value { font-size:.8rem; color:var(--text-primary); }
+.field-value.text-muted { color:var(--text-muted) !important; }
 .match-score-num { font-size:1.8rem; font-weight:700; line-height:1; }
 .match-score-high { color: var(--primary-green); }
 .match-score-mid { color: #8a6a12; }
+:root[data-theme="dark"] .match-score-mid { color: #d4a94a; }
 .match-score-low { color: #dc3545; }
 .cv-summary-md { font-size:.8rem; }
 .cv-summary-md h3 { font-size:.8rem; font-weight:600; color:var(--dark-green); margin:14px 0 6px; }
