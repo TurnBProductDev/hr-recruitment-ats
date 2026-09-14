@@ -84,6 +84,30 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
   .sm-thead, .sm-row { min-width: 460px; }
 }
 
+/* ---- Dashboard tabs: a rounded segmented control (pill container, the
+   active tab its own smaller pill inside it) instead of Bootstrap's default
+   underline-style nav-tabs. #dashTabs scoping + explicit `border: none`
+   beats nav-tabs' own border-bottom rules without needing !important. ---- */
+#dashTabs {
+  display: inline-flex; gap: 2px; background: var(--bg-hover); border: none;
+  border-radius: 999px; padding: 4px; margin-bottom: 22px !important;
+}
+#dashTabs .nav-item { display: flex; }
+#dashTabs .nav-link {
+  border: none; border-radius: 999px; padding: 8px 20px; font-weight: 600;
+  font-size: .85rem; color: var(--text-muted); background: transparent; transition: background .12s ease, color .12s ease;
+}
+#dashTabs .nav-link:hover { color: var(--text-primary); }
+#dashTabs .nav-link.active {
+  background: var(--bg-surface); color: var(--primary-green);
+  box-shadow: 0 1px 3px rgba(16,24,40,.08);
+}
+@media (max-width: 500px) {
+  #dashTabs { display: flex; }
+  #dashTabs .nav-item { flex: 1; }
+  #dashTabs .nav-link { width: 100%; text-align: center; padding: 8px 10px; }
+}
+
 /* ---- Summary tab: plain stat cards + tables ---- */
 .sm-kpis { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 22px; }
 .sm-kpi { flex: 1 1 150px; min-width: 150px; background: var(--bg-surface); border: 1px solid var(--border-color); border-top: 3px solid var(--kpi-accent, var(--border-color)); border-radius: 12px; padding: 16px 20px; }
