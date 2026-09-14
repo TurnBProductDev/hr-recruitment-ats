@@ -1245,6 +1245,25 @@ class MoveToFutureProspectsTests(TestCase):
         response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
         self.assertNotContains(response, reverse('candidate_move_to_future', args=[self.candidate.pk]))
 
+    def test_move_to_future_saves_suggested_role(self):
+        job = Job.objects.create(title='Data Analyst')
+        self.client.post(reverse('candidate_move_to_future', args=[self.candidate.pk]),
+                         {'suggested_role': job.pk})
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.suggested_role, job)
+
+    def test_future_prospects_filters_by_suggested_role(self):
+        job = Job.objects.create(title='Data Analyst')
+        other_job = Job.objects.create(title='Sales Associate')
+        self.client.post(reverse('candidate_move_to_future', args=[self.candidate.pk]),
+                         {'suggested_role': job.pk})
+
+        response = self.client.get(reverse('candidate_future_prospects'), {'role': job.pk})
+        self.assertIn(self.candidate, response.context['candidates'])
+
+        response = self.client.get(reverse('candidate_future_prospects'), {'role': other_job.pk})
+        self.assertNotIn(self.candidate, response.context['candidates'])
+
 
 class HiringBlockStageLabelTests(TestCase):
     """The Hiring block's stage headings and decision-button text."""

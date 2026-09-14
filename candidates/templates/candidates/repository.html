@@ -291,7 +291,7 @@
               {% if tab == 'screening_hold' %}
                 {# Off hold resumes the pipeline at the stage after the one they were held at. #}
                 <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url c.resume_action.url_name c.id %}" data-title="Move {{ c.full_name }} to {{ c.resume_action.stage }}" data-msg="Taking {{ c.full_name }} off hold — this moves them on to {{ c.resume_action.stage }}.">{{ c.resume_action.label }}</button>
-                <button type="button" class="btn btn-sm btn-outline-app act" data-action="{% url 'candidate_move_to_future' c.id %}" data-title="Move {{ c.full_name }} to Future Prospects" data-msg="This stops actively pursuing {{ c.full_name }} for this vacancy and keeps them as a prospect for future openings instead.">Move to Future</button>
+                <button type="button" class="btn btn-sm btn-outline-app act" data-action="{% url 'candidate_move_to_future' c.id %}" data-title="Move {{ c.full_name }} to Future Prospects" data-msg="This stops actively pursuing {{ c.full_name }} for this vacancy and keeps them as a prospect for future openings instead." data-role-field="1">Move to Future</button>
               {% elif tab == 'rejected' %}
                 <button type="button" class="btn btn-sm btn-fill-app act" data-action="{% url 'candidate_shortlist' c.id %}" data-title="Move {{ c.full_name }} to Qualified" data-msg="Decision changed? This moves the candidate into the Qualified pipeline.">Move to Qualified</button>
               {% endif %}
@@ -336,6 +336,17 @@
         <div class="modal-body">
           <p id="actionModalMsg" class="text-muted small mb-3"></p>
           <div id="actionFields">
+            <div class="mb-3 d-none" id="actionRoleField">
+              <label class="form-label">Suggested Role <span class="text-danger">*</span></label>
+              <select name="suggested_role" id="actionRoleSelect" class="form-select">
+                <option value="">Select a role…</option>
+                {% for job in jobs %}
+                {% if job.title|lower != 'general application' %}
+                <option value="{{ job.id }}">{{ job.title }}</option>
+                {% endif %}
+                {% endfor %}
+              </select>
+            </div>
             <div class="mb-3">
               <label class="form-label">Remarks / Reason <span id="reasonReq" class="text-danger d-none">*</span></label>
               <textarea name="reason" id="actionReason" class="form-control" rows="3"></textarea>
@@ -428,6 +439,10 @@ $(function () {
     var required = b.getAttribute('data-require') === '1';
     $('#actionReason').prop('required', required).val('');
     $('#reasonReq').toggleClass('d-none', !required);
+    // Move to Future: ask which role might suit them later.
+    var wantsRole = b.getAttribute('data-role-field') === '1';
+    $('#actionRoleField').toggleClass('d-none', !wantsRole);
+    $('#actionRoleSelect').prop('required', wantsRole).val('');
     // destructive actions (delete) hide the remarks/done-by fields
     $('#actionFields').toggle(b.getAttribute('data-nofields') !== '1');
     var btnCls = b.getAttribute('data-btn') || 'btn-fill-app';

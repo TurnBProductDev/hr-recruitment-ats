@@ -656,7 +656,7 @@ html { scroll-behavior: smooth; }
             <button type="submit" formaction="{% url candidate.resume_action.url_name candidate.pk %}" class="stage-action-btn stage-tone-advance">{{ candidate.resume_action.label }}</button>
             <button type="submit" formaction="{% url 'candidate_reject' candidate.pk %}" class="stage-action-btn stage-tone-reject">Reject</button>
             {% if candidate.hold_from_status != 'OPEN' %}
-            <button type="submit" formaction="{% url 'candidate_move_to_future' candidate.pk %}" class="stage-action-btn stage-tone-hold">Move to Future</button>
+            <button type="button" class="stage-action-btn stage-tone-hold" data-bs-toggle="modal" data-bs-target="#moveToFutureModal">Move to Future</button>
             {% endif %}
           </div>
         </form>
@@ -767,6 +767,46 @@ html { scroll-behavior: smooth; }
     </div>
   </div>
 </div>
+
+{% if is_on_hold and candidate.hold_from_status != 'OPEN' %}
+<div class="modal fade" id="moveToFutureModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <form method="post" action="{% url 'candidate_move_to_future' candidate.pk %}">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+      <input type="hidden" name="performed_by" value="{{ user.get_full_name|default:user.get_username }}">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Move to Future Prospects</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small mb-3">This stops actively pursuing {{ candidate.full_name }} for this vacancy and keeps them as a prospect for future openings instead.</p>
+          <div class="mb-3">
+            <label class="form-label">Suggested Role <span class="text-danger">*</span></label>
+            <select name="suggested_role" class="form-select" required>
+              <option value="">Select a role…</option>
+              {% for j in all_jobs %}
+              {% if j.title|lower != 'general application' %}
+              <option value="{{ j.id }}">{{ j.title }}</option>
+              {% endif %}
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-1">
+            <label class="form-label">Remarks / Reason</label>
+            <textarea name="reason" class="form-control" rows="3"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-app btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-fill-app btn-sm">Confirm</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}

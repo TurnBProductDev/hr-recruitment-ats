@@ -645,7 +645,7 @@ class FutureProspectsListView(RemembersListUrlMixin, GroupRequiredMixin, ListVie
     allowed_groups = ANY_STAFF
 
     def base_queryset(self):
-        return Candidate.objects.select_related('job').filter(
+        return Candidate.objects.select_related('job', 'suggested_role').filter(
             status=STATUS.SCREENING_HOLD, hold_from_status=STATUS.OPEN)
 
     def get_queryset(self):
@@ -660,11 +660,16 @@ class FutureProspectsListView(RemembersListUrlMixin, GroupRequiredMixin, ListVie
         q = self.request.GET.get('q')
         if q:
             qs = qs.filter(Q(full_name__icontains=q) | Q(email__icontains=q))
+        role = self.request.GET.get('role')
+        if role:
+            qs = qs.filter(suggested_role_id=role)
         return qs.order_by('-held_at')
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx['q'] = self.request.GET.get('q', '')
+        ctx['selected_role'] = self.request.GET.get('role', '')
+        ctx['role_options'] = Job.objects.exclude(title__iexact=GENERAL_APPLICATION).order_by('title')
         ctx['total'] = self.base_queryset().count()
         ctx['querystring'] = _querystring_without_page(self.request)
         u = self.request.user
@@ -754,6 +759,7 @@ class FutureProspectsExportView(GroupRequiredMixin, _ExcelExportMixin, View):
         ('Role', lambda c: c.job.title if c.job else ''),
         ('Held At', lambda c: c.held_at.strftime('%Y-%m-%d') if c.held_at else ''),
         ('Hold Reason', lambda c: c.hold_reason or ''),
+        ('Suggested Role', lambda c: c.suggested_role.title if c.suggested_role else ''),
     )
 
 
@@ -1336,8 +1342,11 @@ class CandidateMoveToFutureView(GroupRequiredMixin, View):
     def post(self, request, pk):
         candidate = get_object_or_404(Candidate, pk=pk)
         reason = request.POST.get('reason', '').strip()
+        role_id = request.POST.get('suggested_role', '').strip()
+        suggested_role = get_object_or_404(Job, pk=role_id) if role_id else None
         services.move_to_future_prospects(
-            candidate, user=request.user, remarks=reason or None, performed_by=_performed_by(request))
+            candidate, user=request.user, remarks=reason or None, performed_by=_performed_by(request),
+            suggested_role=suggested_role)
         messages.success(request, f'{candidate.full_name} moved to Future Prospects.')
         next_url = request.POST.get('next')
         return redirect(next_url or reverse('candidate_timeline', args=[pk]))

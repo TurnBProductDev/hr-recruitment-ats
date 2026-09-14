@@ -117,6 +117,12 @@ class Candidate(models.Model):
     # named after it. Blank for anyone not on hold. Kept on the row (the same
     # thing is derivable from history) so candidate lists need no extra query.
     hold_from_status = models.CharField(max_length=30, blank=True, default='')
+    # Which role HR thinks might suit this candidate later, set when moving
+    # them to Future Prospects (services.move_to_future_prospects) - distinct
+    # from `job` (the vacancy they actually applied to), so Future Prospects
+    # can be filtered by it.
+    suggested_role = models.ForeignKey(
+        Job, on_delete=models.SET_NULL, null=True, blank=True, related_name='future_prospect_candidates')
     source = models.CharField(max_length=255, blank=True, null=True)
     # The position the applicant actually asked for, as written on the CV / in the
     # application email. `job` is where we filed them, which is often
