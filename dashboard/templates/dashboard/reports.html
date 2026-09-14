@@ -3,13 +3,13 @@
 
 {% block extra_css %}
 <style>
-.rep-kpi { background: #fff; border: 1px solid #e2ebeb; border-radius: 12px; padding: 18px 22px; height: 100%; }
-.rep-kpi .lbl { font-size: .72rem; text-transform: uppercase; letter-spacing: .5px; color: #6b7a7a; font-weight: 600; }
+.rep-kpi { background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 12px; padding: 18px 22px; height: 100%; }
+.rep-kpi .lbl { font-size: .72rem; text-transform: uppercase; letter-spacing: .5px; color: var(--text-muted); font-weight: 600; }
 .rep-kpi .val-row { display: flex; align-items: baseline; gap: 10px; margin-top: 10px; }
-.rep-kpi .val { font-size: 1.9rem; font-weight: 700; color: #1f2a2a; }
-.rep-kpi .val.accent { color: #0e6f6b; }
+.rep-kpi .val { font-size: 1.9rem; font-weight: 700; color: var(--text-primary); }
+.rep-kpi .val.accent { color: var(--accent-teal); }
 
-.rep-panel { background: #fff; border: 1px solid #e2ebeb; border-radius: 12px; padding: 22px 24px 18px; height: 100%; }
+.rep-panel { background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 12px; padding: 22px 24px 18px; height: 100%; }
 .rep-panel h5 { margin: 0 0 14px; }
 
 /* Grid, not flex: a fixed track per column keeps every row's numbers lined
@@ -20,27 +20,27 @@
   display: grid; align-items: center; gap: 10px;
   grid-template-columns: minmax(0, 1.6fr) repeat(6, minmax(0, 1fr)) 26px;
 }
-.rep-thead { padding: 0 0 10px; border-bottom: 1px solid #e2ebeb; font-size: .64rem; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: #8a9a9a; }
+.rep-thead { padding: 0 0 10px; border-bottom: 1px solid var(--border-color); font-size: .64rem; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--text-muted); }
 .rep-thead .col { text-align: center; }
-.rep-rowwrap { padding: 12px 0; border-bottom: 1px solid #eef2f2; }
+.rep-rowwrap { padding: 12px 0; border-bottom: 1px solid var(--border-color); }
 .rep-rowwrap:last-child { border-bottom: none; }
-.rep-row .name { min-width: 0; font-size: .82rem; font-weight: 500; color: #1f2a2a; }
-.rep-row .col { text-align: center; font-size: .78rem; color: #1f2a2a; white-space: nowrap; }
-.rep-row .col.hired .rep-num { color: #0e6f6b; }
+.rep-row .name { min-width: 0; font-size: .82rem; font-weight: 500; color: var(--text-primary); }
+.rep-row .col { text-align: center; font-size: .78rem; color: var(--text-primary); white-space: nowrap; }
+.rep-row .col.hired .rep-num { color: var(--accent-teal); }
 .rep-num { font-weight: 600; }
-.rep-pct { font-size: .66rem; color: #8a9a9a; margin-left: 1px; }
+.rep-pct { font-size: .66rem; color: var(--text-muted); margin-left: 1px; }
 
 .rep-toggle {
   justify-self: end; flex: 0 0 22px; width: 22px; height: 22px; border-radius: 999px;
-  border: 1px solid #d8e0df; background: #fff; padding: 0; display: flex; align-items: center;
-  justify-content: center; font-size: .8rem; color: #566664; cursor: pointer;
+  border: 1px solid var(--border-color); background: var(--bg-surface); padding: 0; display: flex; align-items: center;
+  justify-content: center; font-size: .8rem; color: var(--text-muted); cursor: pointer;
 }
-.rep-toggle:hover { border-color: #b9c8c8; color: #1f2a2a; }
+.rep-toggle:hover { border-color: #b9c8c8; color: var(--text-primary); }
 
 .rep-row-expand { display: none; margin-top: 8px; }
 .rep-row-expand.show { display: grid; }
-.rep-row-expand .name { font-size: .66rem; color: #8a9a9a; text-transform: uppercase; letter-spacing: .3px; }
-.rep-row-expand .col { text-align: center; font-size: .74rem; font-weight: 600; color: #0e6f6b; }
+.rep-row-expand .name { font-size: .66rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .3px; }
+.rep-row-expand .col { text-align: center; font-size: .74rem; font-weight: 600; color: var(--accent-teal); }
 
 @media (max-width: 900px) {
   .rep-panel { overflow-x: auto; }
