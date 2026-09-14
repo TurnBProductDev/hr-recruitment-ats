@@ -129,6 +129,8 @@
           {% endif %}
           <li><hr class="dropdown-divider"></li>
           {% endif %}
+          <li><a class="dropdown-item {% if request.resolver_match.url_name == 'password_change' %}active{% endif %}" href="{% url 'password_change' %}">Change Password</a></li>
+          <li><hr class="dropdown-divider"></li>
           <li>
             <form method="post" action="{% url 'logout' %}">
               {% csrf_token %}

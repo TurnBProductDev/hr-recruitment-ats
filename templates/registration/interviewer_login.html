@@ -97,6 +97,20 @@
     color: #3d4f57;
     margin-bottom: 8px;
   }
+  .login-field-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .login-field-row label { margin-bottom: 0; }
+  .login-field-row a {
+    font-weight: 500;
+    font-size: 12px;
+    color: var(--primary-green, #008C8C);
+    text-decoration: none;
+  }
+  .login-field-row a:hover { text-decoration: underline; }
   .login-input {
     width: 100%;
     padding: 13px 14px;
@@ -186,7 +200,10 @@
           <input type="text" id="id_username" name="username" class="login-input" required autofocus>
         </div>
         <div class="login-field">
-          <label for="id_password">Password</label>
+          <div class="login-field-row">
+            <label for="id_password">Password</label>
+            <a href="{% url 'password_reset' %}">Forgot password?</a>
+          </div>
           <input type="password" id="id_password" name="password" class="login-input" required>
         </div>
         <input type="hidden" name="next" value="{{ next }}">

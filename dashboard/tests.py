@@ -3,9 +3,12 @@
 Run against sqlite so the live Azure DB is never touched:
     DB_ENGINE=sqlite python manage.py test dashboard
 """
+import re
+from unittest import mock
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -469,6 +472,68 @@ class UserManagementTests(TestCase):
         response = self.client.get(reverse('user_list'))
         self.assertContains(
             response, reverse('user_toggle_active', args=[self.admin.pk]))
+
+
+@override_settings(LOGIC_APP_EMAIL_SENDER_URL='https://logic.example/send-email')
+class PasswordSelfServiceTests(TestCase):
+    """Change Password (logged in) and Forgot Password (from either login
+    page) - see HR_management/auth_views.py and HR_management/password_forms.py.
+    The reset email goes through the same Logic App every other outbound
+    email in this app uses, not Django's own mail backend."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('hr7', 'hr7@example.com', 'OldPass123!')
+        self.user.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.client.force_login(self.user)
+
+    def _ok_response(self):
+        return mock.Mock(status_code=200, text='')
+
+    def test_change_password_updates_it_and_lets_the_user_sign_in_with_it(self):
+        response = self.client.post(reverse('password_change'), {
+            'old_password': 'OldPass123!', 'new_password1': 'NewPass456!', 'new_password2': 'NewPass456!',
+        })
+        self.assertRedirects(response, reverse('hr_dashboard'))
+        self.client.logout()
+        self.assertTrue(self.client.login(username='hr7', password='NewPass456!'))
+
+    def test_change_password_rejects_a_wrong_old_password(self):
+        response = self.client.post(reverse('password_change'), {
+            'old_password': 'WrongPass!', 'new_password1': 'NewPass456!', 'new_password2': 'NewPass456!',
+        })
+        self.assertEqual(response.status_code, 200)  # redisplayed with the error
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password('OldPass123!'))
+
+    def test_forgot_password_end_to_end(self):
+        self.client.logout()
+        with mock.patch('candidates.logic_app_mail.requests.post', return_value=self._ok_response()) as post:
+            response = self.client.post(reverse('password_reset'), {'email': 'hr7@example.com'})
+        self.assertRedirects(response, reverse('password_reset_done'))
+        body = post.call_args.kwargs['json']['body']
+        self.assertEqual(post.call_args.kwargs['json']['to'], 'hr7@example.com')
+
+        match = re.search(r'/password/reset/confirm/([^/]+)/([^/\s]+)/', body)
+        self.assertIsNotNone(match, f'No reset link found in email body: {body!r}')
+        uidb64, token = match.group(1), match.group(2)
+
+        # Following the emailed link (GET) swaps the token for a one-time
+        # session token, same as clicking it in a real inbox would.
+        confirm_url = reverse('password_reset_confirm', kwargs={'uidb64': uidb64, 'token': token})
+        response = self.client.get(confirm_url, follow=True)
+        self.assertEqual(response.status_code, 200)
+        set_password_url = response.redirect_chain[-1][0]
+
+        response = self.client.post(set_password_url, {
+            'new_password1': 'BrandNew789!', 'new_password2': 'BrandNew789!',
+        })
+        self.assertRedirects(response, reverse('password_reset_complete'))
+        self.assertTrue(self.client.login(username='hr7', password='BrandNew789!'))
+
+    def test_forgot_password_does_not_reveal_whether_the_email_exists(self):
+        self.client.logout()
+        response = self.client.post(reverse('password_reset'), {'email': 'nobody@example.com'})
+        self.assertRedirects(response, reverse('password_reset_done'))
 
 
 class ReportsViewTests(TestCase):

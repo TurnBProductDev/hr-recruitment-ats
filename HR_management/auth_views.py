@@ -1,7 +1,10 @@
+from django.contrib import messages
 from django.contrib.auth import views as auth_views
 from django.urls import reverse
 
 from candidates.permissions import PORTAL_SESSION_KEY, in_interviewer_portal, is_interviewer_only
+
+from .password_forms import BootstrapPasswordChangeForm
 
 
 class HRLoginView(auth_views.LoginView):
@@ -45,3 +48,27 @@ class HRLogoutView(auth_views.LogoutView):
         if self._was_portal_session:
             return reverse('interviewer_login')
         return reverse('login')
+
+
+class HRPasswordChangeView(auth_views.PasswordChangeView):
+    """Self-service "Change Password" while logged in - reachable by HR and
+    Interviewer accounts alike (linked from the shared account dropdown in
+    templates/hr_base.html). A messages.success() + redirect back to
+    wherever this role actually lands, rather than Django's separate "done"
+    page, to match this app's messages-based feedback used everywhere else."""
+    template_name = 'registration/password_change_form.html'
+    form_class = BootstrapPasswordChangeForm
+
+    def get_success_url(self):
+        # in_interviewer_portal (session-mode-aware, same as
+        # InterviewResultView.get_success_url), not just is_interviewer_only -
+        # an Admin who signed in via the Interviewer login stays in the
+        # portal experience, same as everywhere else portal mode matters.
+        if in_interviewer_portal(self.request) or is_interviewer_only(self.request.user):
+            return reverse('interviewer_home')
+        return reverse('hr_dashboard')
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        messages.success(self.request, 'Password changed.')
+        return response
