@@ -101,16 +101,26 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
    is required, not just 1fr - a grid item's default min-width:auto would
    otherwise let a long unbroken name blow the track out wider than the
    header instead of wrapping inside it. */
-.sm-thead { display: grid; align-items: center; gap: 14px; padding: 10px 0 8px; border-bottom: 1px solid #e2ebeb; font-size: .68rem; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: #6b7a7a; }
-.sm-row { display: grid; align-items: center; gap: 14px; padding: 13px 0; border-bottom: 1px solid #eef2f2; }
+.sm-thead { display: grid; align-items: center; gap: 10px; padding: 10px 0 8px; border-bottom: 1px solid #e2ebeb; font-size: .66rem; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: #6b7a7a; }
+.sm-row { display: grid; align-items: center; gap: 10px; padding: 13px 0; border-bottom: 1px solid #eef2f2; }
 .sm-row:last-child { border-bottom: none; }
-.sm-thead-job, .sm-row-job { grid-template-columns: minmax(0, 1fr) 70px 82px 70px 88px 70px 56px; }
-.sm-thead-source, .sm-row-source { grid-template-columns: minmax(0, 1fr) 82px 70px 88px 70px 56px; }
-.sm-col-name { min-width: 0; font-size: .85rem; font-weight: 500; color: #1f2a2a; }
-.sm-col-num { text-align: center; font-size: .8rem; font-weight: 600; color: #1f2a2a; }
-.sm-col-plain { text-align: center; font-size: .78rem; color: #1f2a2a; }
-.sm-col-short { text-align: center; font-size: .78rem; font-weight: 600; color: #0e6f6b; }
-.sm-col-hired { text-align: center; font-size: .78rem; color: #8a9a9a; }
+.sm-thead-job, .sm-row-job { grid-template-columns: minmax(0, 1fr) 66px 78px 70px 82px 68px 54px; }
+.sm-thead-source, .sm-row-source { grid-template-columns: minmax(0, 1fr) 78px 70px 82px 68px 54px; }
+.sm-col-name { min-width: 0; font-size: .82rem; font-weight: 500; color: #1f2a2a; }
+.sm-col-num { text-align: center; font-size: .78rem; font-weight: 600; color: #1f2a2a; }
+.sm-col-plain { text-align: center; font-size: .76rem; color: #1f2a2a; }
+.sm-col-short { text-align: center; font-size: .76rem; font-weight: 600; color: #0e6f6b; }
+.sm-col-hired { text-align: center; font-size: .76rem; color: #8a9a9a; }
+/* The header row reuses the same per-column classes as the data rows (so
+   alignment always matches) - but its own text must stay the small, bold,
+   uppercase treatment above, not inherit each column's data styling
+   (size/weight/colour), which is what made the header read as uneven/
+   crowded before. */
+.sm-thead .sm-col-name, .sm-thead .sm-col-num, .sm-thead .sm-col-plain,
+.sm-thead .sm-col-short, .sm-thead .sm-col-hired {
+  font-size: inherit; font-weight: inherit; color: inherit; text-align: center;
+}
+.sm-thead .sm-col-name { text-align: left; }
 
 /* ---- Daily View tab: date-range picker + bar chart ---- */
 .daily-range { position: relative; }
