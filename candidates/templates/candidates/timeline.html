@@ -9,10 +9,10 @@
    sub-heading labels and the actual body content (values, remarks, notes,
    the CV summary). Weight/case/colour carry the hierarchy instead of a
    growing list of one-off font sizes, so every card reads the same way. */
-.pd-meta { font-size:.72rem; color:#8a969b; }
-.pd-subhead { font-size:.8rem; font-weight:600; color:#1a2e35; }
-.pd-body { font-size:.8rem; color:#2b3238; }
-.profile-sections strong { font-size:.8rem; font-weight:600; color:#1a2e35; }
+.pd-meta { font-size:.72rem; color:var(--text-muted); }
+.pd-subhead { font-size:.8rem; font-weight:600; color:var(--text-primary); }
+.pd-body { font-size:.8rem; color:var(--text-primary); }
+.profile-sections strong { font-size:.8rem; font-weight:600; color:var(--text-primary); }
 
 /* The AI CV Summary is Markdown (headings, a skills table, bullet lists) -
    rendered client-side by marked.js into this container. */
@@ -33,14 +33,15 @@
 .card-head-row .btn { flex-shrink:0; }
 .field-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px 28px; }
 .field-full { grid-column:1 / -1; }
-.field-label { font-size:.72rem; color:#8b9998; margin-bottom:3px; }
-.field-value { font-size:.8rem; color:#2b3238; }
-.field-value.text-muted { color:#b7c0be !important; }
+.field-label { font-size:.72rem; color:var(--text-muted); margin-bottom:3px; }
+.field-value { font-size:.8rem; color:var(--text-primary); }
+.field-value.text-muted { color:var(--text-muted) !important; }
 
 /* Match Score: big numeral, coloured by score_tier (matches the Repository score meter) */
 .match-score-num { font-size:2.1rem; font-weight:700; line-height:1; }
 .match-score-high { color: var(--primary-green); }
 .match-score-mid { color: #8a6a12; }
+:root[data-theme="dark"] .match-score-mid { color: #d4a94a; }
 .match-score-low { color: #dc3545; }
 
 /* Candidate Details / AI-Scan / Hiring: top-level page sections */
@@ -62,10 +63,10 @@
 .call-status-badge { display:inline-flex; align-items:center; font-size:.72rem; font-weight:700; color:#0a58ca; background:#e7f1ff; border:1px solid #cfe2ff; border-radius:12px; padding:.3em .75em; white-space:nowrap; }
 
 .stage-subsection { margin-top:14px; padding-top:14px; border-top:1px solid var(--border-color); }
-.stage-subsection-title { font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#8b9998; margin-bottom:8px; }
+.stage-subsection-title { font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); margin-bottom:8px; }
 
 .stage-action-row { display:flex; flex-wrap:wrap; gap:8px; }
-.stage-action-btn { border:1.5px solid; border-radius:10px; padding:.5rem 1.1rem; font-size:.82rem; font-weight:600; background:#fff; }
+.stage-action-btn { border:1.5px solid; border-radius:10px; padding:.5rem 1.1rem; font-size:.82rem; font-weight:600; background:var(--bg-surface); }
 .final-status-actions .stage-action-btn { padding:.35rem .8rem; font-size:.68rem; }
 .stage-action-btn.stage-tone-advance { border-color: var(--primary-green); color: var(--primary-green); }
 .stage-action-btn.stage-tone-advance:hover { background: var(--primary-green); color:#fff; }
@@ -81,26 +82,26 @@
 .sla-tracker { display:flex; align-items:flex-start; }
 .sla-stage { flex:1; display:flex; flex-direction:column; align-items:center; position:relative; }
 .sla-line { position:absolute; top:6px; left:-50%; width:100%; height:2px; background:var(--primary-green); z-index:0; }
-.sla-dot { width:13px; height:13px; border-radius:50%; background:var(--primary-green); border:2px solid #fff; box-shadow:0 0 0 1px var(--primary-green); position:relative; z-index:1; }
-.sla-label { font-size:.8rem; font-weight:600; color:#1a2e35; margin-top:10px; text-align:center; }
-.sla-date { font-size:.72rem; color:#8a969b; }
+.sla-dot { width:13px; height:13px; border-radius:50%; background:var(--primary-green); border:2px solid var(--bg-surface); box-shadow:0 0 0 1px var(--primary-green); position:relative; z-index:1; }
+.sla-label { font-size:.8rem; font-weight:600; color:var(--text-primary); margin-top:10px; text-align:center; }
+.sla-date { font-size:.72rem; color:var(--text-muted); }
 /* A checkpoint that's still in the future (e.g. an interview scheduled ahead)
    isn't reached yet - dotted line in, hollow dot, so it reads as "coming up"
    rather than "already happened" like every other (solid) checkpoint. */
 .sla-stage.sla-pending .sla-line { background:none; border-top:2px dashed var(--primary-green); height:0; }
-.sla-stage.sla-pending .sla-dot { background:#fff; }
-.sla-stage.sla-pending .sla-label { color:#5a6b73; }
+.sla-stage.sla-pending .sla-dot { background:var(--bg-surface); }
+.sla-stage.sla-pending .sla-label { color:var(--text-muted); }
 
 .activity-row { display:flex; gap:14px; padding-bottom:20px; }
 .activity-icon-col { display:flex; flex-direction:column; align-items:center; flex-shrink:0; }
 .activity-icon { width:26px; height:26px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:.72rem; flex-shrink:0; }
 .activity-icon-default { background:#e4eeed; color:var(--primary-green); }
 .activity-icon-interview { background:#fbf1d6; color:#8a6a12; }
-.activity-line { width:2px; flex:1; background:#eef1f1; margin-top:4px; min-height:14px; }
+.activity-line { width:2px; flex:1; background:var(--border-color); margin-top:4px; min-height:14px; }
 .activity-body { flex:1; padding-top:1px; min-width:0; }
-.activity-title { font-size:.8rem; font-weight:600; color:#1a2e35; }
-.activity-meta { font-size:.72rem; color:#8a969b; margin-top:2px; }
-.activity-note { font-size:.8rem; color:#4a5a60; margin-top:6px; background:#f6f8f8; border-radius:6px; padding:9px 12px; }
+.activity-title { font-size:.8rem; font-weight:600; color:var(--text-primary); }
+.activity-meta { font-size:.72rem; color:var(--text-muted); margin-top:2px; }
+.activity-note { font-size:.8rem; color:var(--text-primary); margin-top:6px; background:var(--bg-hover); border-radius:6px; padding:9px 12px; }
 
 html { scroll-behavior: smooth; }
 
@@ -128,11 +129,23 @@ html { scroll-behavior: smooth; }
 .block-header-history .block-header-icon { background:#e9eef0; color:#455a64; }
 .block-header-history .block-header-title { color:#37474f; }
 
+/* These 4 title colours (and the icon chips' own light backgrounds, left
+   as-is like every other badge/chip in this app) were picked for a white
+   page - as plain text sitting directly on the page/card surface (not a
+   chip with its own paired background), they're too dark to read against
+   a near-black one, so dark mode gets brighter variants of the same 4 hues. */
+.text-accent-green { color: var(--dark-green); }
+:root[data-theme="dark"] .text-accent-green { color: var(--accent-teal); }
+:root[data-theme="dark"] .block-header-details .block-header-title { color: var(--accent-teal); }
+:root[data-theme="dark"] .block-header-ai .block-header-title { color: #b79bef; }
+:root[data-theme="dark"] .block-header-hiring .block-header-title { color: #e0c97e; }
+:root[data-theme="dark"] .block-header-history .block-header-title { color: #a9bcc4; }
+
 /* Sticky quick-nav: jump between blocks on this long page, current block
    highlighted in its own colour as it scrolls into view. */
 .quick-nav { position:sticky; top:0; z-index:15; display:flex; gap:8px; padding:10px 0; margin-bottom:20px; background:var(--light-bg); }
-.quick-nav-link { display:inline-flex; align-items:center; gap:7px; padding:7px 14px; border-radius:20px; border:1.5px solid var(--border-color); background:#fff; font-size:.8rem; font-weight:600; color:#5a6b73; text-decoration:none; transition:border-color .12s ease, color .12s ease; }
-.quick-nav-link:hover { color:#1a2e35; }
+.quick-nav-link { display:inline-flex; align-items:center; gap:7px; padding:7px 14px; border-radius:20px; border:1.5px solid var(--border-color); background:var(--bg-surface); font-size:.8rem; font-weight:600; color:var(--text-muted); text-decoration:none; transition:border-color .12s ease, color .12s ease; }
+.quick-nav-link:hover { color:var(--text-primary); }
 .quick-nav-link.active[data-block="details"] { border-color: var(--primary-green); color: var(--dark-green); background:#dff2f1; }
 .quick-nav-link.active[data-block="ai"] { border-color:#6f42c1; color:#4d2d99; background:#ede4f8; }
 .quick-nav-link.active[data-block="hiring"] { border-color:#e0c97e; color:#7a5c00; background:#fbf1c9; }
@@ -368,7 +381,7 @@ html { scroll-behavior: smooth; }
 
             {% if b.likes %}
             <div class="mb-1 mt-2">
-              <div class="pd-subhead" style="color: var(--dark-green);">Likes</div>
+              <div class="pd-subhead text-accent-green">Likes</div>
               <ul class="pd-body mb-0 ps-3">
                 {% for item in b.likes %}<li>{{ item }}</li>{% endfor %}
               </ul>

@@ -10,26 +10,26 @@
    segments (hover for the value + label); a +/- per row swaps that for the
    plain green bar + a row of clickable chips below, for anyone who'd rather
    read the breakdown as a list. ---- */
-.fnl-panel { background: #fff; border: 1px solid #e2ebeb; border-radius: 12px; padding: 22px 24px 18px; }
+.fnl-panel { background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 12px; padding: 22px 24px 18px; }
 .fnl-panel-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 8px; }
 .fnl-panel-head h5 { margin: 0 0 2px; }
 .sm-panel-head h5 { font-size: 1.05rem; }
-.fnl-hint { font-size: .76rem; color: #8a9a9a; }
+.fnl-hint { font-size: .76rem; color: var(--text-muted); }
 
-.fnl-stagewrap { border-bottom: 1px solid #eef2f2; }
+.fnl-stagewrap { border-bottom: 1px solid var(--border-color); }
 .fnl-stagewrap:last-of-type { border-bottom: none; }
 
 .fnl-row3 { display: flex; align-items: center; gap: 16px; width: 100%; padding: 13px 2px; }
-.fnl-row3 .lbl { flex: 0 0 132px; font-size: .72rem; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: #4a5a60; }
-.fnl-row3 .track { position: relative; flex: 1 1 auto; min-width: 0; height: 30px; background: #f0f3f3; border-radius: 5px; display: flex; overflow: visible; }
-.fnl-row3 .val { flex: 0 0 56px; text-align: right; font-weight: 700; font-size: 1.15rem; color: #1f2a2a; }
+.fnl-row3 .lbl { flex: 0 0 132px; font-size: .72rem; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--text-muted); }
+.fnl-row3 .track { position: relative; flex: 1 1 auto; min-width: 0; height: 30px; background: var(--bg-hover); border-radius: 5px; display: flex; overflow: visible; }
+.fnl-row3 .val { flex: 0 0 56px; text-align: right; font-weight: 700; font-size: 1.15rem; color: var(--text-primary); }
 
 .fnl-toggle, .fnl-toggle-spacer { flex: 0 0 22px; width: 22px; height: 22px; }
 .fnl-toggle {
-  border-radius: 999px; border: 1px solid #d8e0df; background: #fff; padding: 0;
-  display: flex; align-items: center; justify-content: center; font-size: .85rem; color: #566664; cursor: pointer;
+  border-radius: 999px; border: 1px solid var(--border-color); background: var(--bg-surface); padding: 0;
+  display: flex; align-items: center; justify-content: center; font-size: .85rem; color: var(--text-muted); cursor: pointer;
 }
-.fnl-toggle:hover { border-color: #b9c8c8; color: #1f2a2a; }
+.fnl-toggle:hover { border-color: #b9c8c8; color: var(--text-primary); }
 
 .seg {
   position: relative; display: flex; align-items: center; justify-content: center; height: 100%;
@@ -55,24 +55,24 @@
 
 .fnl-stats { display: flex; gap: 12px; align-items: stretch; }
 .fnl-stat-card {
-  background: #fff; border: 1px solid #e2ebeb; border-top: 3px solid var(--stat-accent, #e2ebeb);
+  background: var(--bg-surface); border: 1px solid var(--border-color); border-top: 3px solid var(--stat-accent, var(--border-color));
   border-radius: 10px; padding: 10px 18px; min-width: 96px; text-align: right;
   display: flex; flex-direction: column; justify-content: center; gap: 2px; text-decoration: none;
 }
-.fnl-stat-card .n { font-size: 1.3rem; font-weight: 700; color: #1f2a2a; line-height: 1; }
-.fnl-stat-card .t { font-size: .62rem; text-transform: uppercase; letter-spacing: .4px; color: #8a9a9a; margin-top: 2px; }
+.fnl-stat-card .n { font-size: 1.3rem; font-weight: 700; color: var(--text-primary); line-height: 1; }
+.fnl-stat-card .t { font-size: .62rem; text-transform: uppercase; letter-spacing: .4px; color: var(--text-muted); margin-top: 2px; }
 a.fnl-stat-card { cursor: pointer; transition: box-shadow .12s ease, border-color .12s ease; }
 a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color: #cbd9d9; }
 
 .fnl-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 2px 2px 16px 148px; }
 .fnl-chip {
   display: block; text-decoration: none; color: inherit; min-width: 92px;
-  padding: 8px 12px 8px 10px; background: #f6f8f8; border: 1px solid #e2ebeb; border-left-width: 3px;
+  padding: 8px 12px 8px 10px; background: var(--bg-hover); border: 1px solid var(--border-color); border-left-width: 3px;
   border-radius: 6px; transition: box-shadow .12s ease, border-color .12s ease;
 }
 .fnl-chip:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color: #cbd9d9; }
-.fnl-chip .n { font-weight: 700; font-size: 1rem; color: #1f2a2a; }
-.fnl-chip .t { font-size: .66rem; text-transform: uppercase; letter-spacing: .3px; color: #7a8a8a; }
+.fnl-chip .n { font-weight: 700; font-size: 1rem; color: var(--text-primary); }
+.fnl-chip .t { font-size: .66rem; text-transform: uppercase; letter-spacing: .3px; color: var(--text-muted); }
 
 @media (max-width: 700px) {
   .fnl-panel-head { flex-direction: column; gap: 10px; }
@@ -86,11 +86,11 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
 
 /* ---- Summary tab: plain stat cards + tables ---- */
 .sm-kpis { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 22px; }
-.sm-kpi { flex: 1 1 150px; min-width: 150px; background: #fff; border: 1px solid #e2ebeb; border-top: 3px solid var(--kpi-accent, #e2ebeb); border-radius: 12px; padding: 16px 20px; }
-.sm-kpi .lbl { font-size: .72rem; text-transform: uppercase; letter-spacing: .5px; color: #6b7a7a; font-weight: 600; }
-.sm-kpi .val { font-size: 1.9rem; font-weight: 700; color: #1f2a2a; margin-top: 4px; }
-.sm-kpi .sub { font-size: .72rem; color: #8a9a9a; margin-top: 4px; }
-.sm-kpi-subval { margin-top: 10px; padding-top: 8px; border-top: 1px solid #edf1f0; }
+.sm-kpi { flex: 1 1 150px; min-width: 150px; background: var(--bg-surface); border: 1px solid var(--border-color); border-top: 3px solid var(--kpi-accent, var(--border-color)); border-radius: 12px; padding: 16px 20px; }
+.sm-kpi .lbl { font-size: .72rem; text-transform: uppercase; letter-spacing: .5px; color: var(--text-muted); font-weight: 600; }
+.sm-kpi .val { font-size: 1.9rem; font-weight: 700; color: var(--text-primary); margin-top: 4px; }
+.sm-kpi .sub { font-size: .72rem; color: var(--text-muted); margin-top: 4px; }
+.sm-kpi-subval { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border-color); }
 .sm-kpi-subval .lbl { font-size: .66rem; }
 .sm-kpi-subval .val { font-size: 1rem; margin-top: 2px; }
 
@@ -101,16 +101,16 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
    is required, not just 1fr - a grid item's default min-width:auto would
    otherwise let a long unbroken name blow the track out wider than the
    header instead of wrapping inside it. */
-.sm-thead { display: grid; align-items: center; gap: 10px; padding: 10px 0 8px; border-bottom: 1px solid #e2ebeb; font-size: .66rem; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: #6b7a7a; }
-.sm-row { display: grid; align-items: center; gap: 10px; padding: 13px 0; border-bottom: 1px solid #eef2f2; }
+.sm-thead { display: grid; align-items: center; gap: 10px; padding: 10px 0 8px; border-bottom: 1px solid var(--border-color); font-size: .66rem; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--text-muted); }
+.sm-row { display: grid; align-items: center; gap: 10px; padding: 13px 0; border-bottom: 1px solid var(--border-color); }
 .sm-row:last-child { border-bottom: none; }
 .sm-thead-job, .sm-row-job { grid-template-columns: minmax(0, 1fr) 66px 78px 70px 82px 68px 54px; }
 .sm-thead-source, .sm-row-source { grid-template-columns: minmax(0, 1fr) 78px 70px 82px 68px 54px; }
-.sm-col-name { min-width: 0; font-size: .82rem; font-weight: 500; color: #1f2a2a; }
-.sm-col-num { text-align: center; font-size: .78rem; font-weight: 600; color: #1f2a2a; }
-.sm-col-plain { text-align: center; font-size: .76rem; color: #1f2a2a; }
-.sm-col-short { text-align: center; font-size: .76rem; font-weight: 600; color: #0e6f6b; }
-.sm-col-hired { text-align: center; font-size: .76rem; color: #8a9a9a; }
+.sm-col-name { min-width: 0; font-size: .82rem; font-weight: 500; color: var(--text-primary); }
+.sm-col-num { text-align: center; font-size: .78rem; font-weight: 600; color: var(--text-primary); }
+.sm-col-plain { text-align: center; font-size: .76rem; color: var(--text-primary); }
+.sm-col-short { text-align: center; font-size: .76rem; font-weight: 600; color: var(--accent-teal); }
+.sm-col-hired { text-align: center; font-size: .76rem; color: var(--text-muted); }
 /* The header row reuses the same per-column classes as the data rows (so
    alignment always matches) - but its own text must stay the small, bold,
    uppercase treatment above, not inherit each column's data styling
@@ -125,21 +125,21 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
 /* ---- Daily View tab: date-range picker + bar chart ---- */
 .daily-range { position: relative; }
 .daily-range-btn {
-  display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid #d8e0df;
-  border-radius: 8px; padding: 7px 14px; font-size: .82rem; color: #45534f; cursor: pointer;
+  display: flex; align-items: center; gap: 8px; background: var(--bg-surface); border: 1px solid var(--border-color);
+  border-radius: 8px; padding: 7px 14px; font-size: .82rem; color: var(--text-muted); cursor: pointer;
 }
 .daily-range-btn:hover { border-color: #b9c8c8; }
-.daily-range-btn i { font-size: .7rem; color: #8a9a9a; }
-.daily-range-days { color: #8a9a9a; margin-left: 2px; }
+.daily-range-btn i { font-size: .7rem; color: var(--text-muted); }
+.daily-range-days { color: var(--text-muted); margin-left: 2px; }
 
 .daily-range-dropdown {
-  position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; background: #fff;
-  border: 1px solid #d8e0df; border-radius: 10px; box-shadow: 0 10px 28px rgba(0,0,0,.12); padding: 14px;
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; background: var(--bg-surface);
+  border: 1px solid var(--border-color); border-radius: 10px; box-shadow: 0 10px 28px rgba(0,0,0,.12); padding: 14px;
 }
 .daily-range-fields { display: flex; gap: 10px; margin-bottom: 10px; }
 .daily-range-field { flex: 1; }
-.daily-range-field label { display: block; font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #8a9a9a; margin-bottom: 3px; }
-.daily-range-field input { width: 100%; border: 1px solid #d8e0df; border-radius: 6px; padding: 5px 8px; font-size: .8rem; color: #1f2a2a; background: #f8fafa; }
+.daily-range-field label { display: block; font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); margin-bottom: 3px; }
+.daily-range-field input { width: 100%; border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 8px; font-size: .8rem; color: var(--text-primary); background: var(--bg-hover); }
 #dailyRangeInput { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .daily-range-dropdown .flatpickr-calendar.inline { box-shadow: none; margin: 0 auto; }
 .daily-range-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
@@ -150,13 +150,13 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
   text-decoration: none; color: inherit; border-radius: 8px; padding-top: 4px;
   transition: background .12s ease;
 }
-.daily-col:hover { background: #f6f8f8; }
-.daily-col:hover .daily-lbl { color: #0e6f6b; }
-.daily-val { font-size: 1rem; font-weight: 700; color: #1f2a2a; margin-bottom: 1px; }
-.daily-val-sub { font-size: .62rem; color: #8a9a9a; margin-bottom: 8px; }
+.daily-col:hover { background: var(--bg-hover); }
+.daily-col:hover .daily-lbl { color: var(--accent-teal); }
+.daily-val { font-size: 1rem; font-weight: 700; color: var(--text-primary); margin-bottom: 1px; }
+.daily-val-sub { font-size: .62rem; color: var(--text-muted); margin-bottom: 8px; }
 .daily-bar-track { flex: 1; width: 100%; max-width: 96px; display: flex; flex-direction: column; justify-content: flex-end; }
 .daily-bar { width: 100%; border-radius: 6px 6px 0 0; min-height: 3px; transition: height .2s ease; }
-.daily-lbl { font-size: .66rem; font-weight: 700; letter-spacing: .3px; text-transform: uppercase; color: #566664; margin-top: 10px; text-align: center; transition: color .12s ease; }
+.daily-lbl { font-size: .66rem; font-weight: 700; letter-spacing: .3px; text-transform: uppercase; color: var(--text-muted); margin-top: 10px; text-align: center; transition: color .12s ease; }
 
 /* Per-bar tooltip: the split of actions that make up that column's total,
    from the exact same source list the bar itself is summed from. */
@@ -231,7 +231,7 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
   <div class="tab-pane fade {% if view != 'overview' and view != 'daily' %}show active{% endif %}" id="summaryPane">
     {% with s=summary %}
     <div class="sm-kpis">
-      <div class="sm-kpi" style="--kpi-accent:#1f2a2a">
+      <div class="sm-kpi" style="--kpi-accent:var(--text-primary)">
         <div class="lbl">Open Positions</div>
         <div class="val">{{ open_positions }}</div>
         <div class="sub">Openings</div>
@@ -241,20 +241,20 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
         <div class="val">{{ s.total }}</div>
         <div class="sm-kpi-subval">
           <div class="lbl">Attended</div>
-          <div class="val" style="color:#6b7a7a">{{ s.attended }}</div>
+          <div class="val" style="color:var(--text-muted)">{{ s.attended }}</div>
         </div>
       </div>
-      <div class="sm-kpi" style="--kpi-accent:#0e6f6b">
+      <div class="sm-kpi" style="--kpi-accent:var(--accent-teal)">
         <div class="lbl">Active Pool</div>
-        <div class="val" style="color:#0e6f6b">{{ s.shortlisted }}</div>
+        <div class="val" style="color:var(--accent-teal)">{{ s.shortlisted }}</div>
         <div class="sm-kpi-subval">
           <div class="lbl">Rejected</div>
           <div class="val" style="color:#b02a37">{{ s.rejected }}</div>
         </div>
       </div>
-      <div class="sm-kpi" style="--kpi-accent:#0e6f6b">
+      <div class="sm-kpi" style="--kpi-accent:var(--accent-teal)">
         <div class="lbl">Hired</div>
-        <div class="val" style="color:#0e6f6b">{{ s.hired }}</div>
+        <div class="val" style="color:var(--accent-teal)">{{ s.hired }}</div>
       </div>
     </div>
     {% endwith %}
@@ -321,16 +321,16 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
           <span class="fnl-hint">Hover a stage's bar for its breakdown, or use +/- to list it below instead</span>
         </div>
         <div class="fnl-stats">
-          <div class="fnl-stat-card" style="--stat-accent:#1f2a2a">
+          <div class="fnl-stat-card" style="--stat-accent:var(--text-primary)">
             <div class="n">{{ funnel_top.requirement }}</div>
             <div class="t">Openings</div>
           </div>
-          <a class="fnl-stat-card" style="--stat-accent:#0e6f6b"
+          <a class="fnl-stat-card" style="--stat-accent:var(--accent-teal)"
              href="{% url 'candidate_repository' %}{% if jobq %}?job={{ jobq }}{% endif %}">
-            <div class="n" style="color:#0e6f6b">{{ funnel_top.total }}</div>
+            <div class="n" style="color:var(--accent-teal)">{{ funnel_top.total }}</div>
             <div class="t">Total Candidates</div>
           </a>
-          <a class="fnl-stat-card" style="--stat-accent:#8a9a9a"
+          <a class="fnl-stat-card" style="--stat-accent:var(--text-muted)"
              href="{% url 'candidate_repository' %}?flow=open{% if jobq %}&job={{ jobq }}{% endif %}">
             <div class="n">{{ funnel_top.screening_pending }}</div>
             <div class="t">Screening Pending</div>
