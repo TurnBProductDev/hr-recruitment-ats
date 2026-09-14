@@ -53,6 +53,10 @@
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-end mb-4 gap-2">
   <h3 class="mb-0">Reports</h3>
+  <div class="form-check form-switch mb-1">
+    <input type="checkbox" class="form-check-input" role="switch" id="repRatioSwitch">
+    <label class="form-check-label small text-muted" for="repRatioSwitch">Show as ratio (1 : N)</label>
+  </div>
   <form method="get" class="d-flex align-items-end flex-wrap gap-3">
     <div>
       <label class="form-label small text-muted mb-0">Job Code</label>
@@ -94,7 +98,7 @@
   <div class="col-md-3 col-6">
     <div class="rep-kpi">
       <div class="lbl">Qualified Ratio</div>
-      <div class="val-row"><span class="val accent">{% if qualified_pct is not None %}{{ qualified_pct }}%{% else %}&ndash;{% endif %}</span><span class="hint">{{ qualified }} of {{ applicants }}</span></div>
+      <div class="val-row"><span class="val accent">{% if qualified_pct is not None %}<span class="rep-pctval" data-pct="{{ qualified_pct }}" data-denom="{{ applicants }}">{{ qualified_pct|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span><span class="hint">{{ qualified }} of {{ applicants }}</span></div>
     </div>
   </div>
   <div class="col-md-3 col-6">
@@ -106,7 +110,7 @@
   <div class="col-md-3 col-6">
     <div class="rep-kpi">
       <div class="lbl">Hiring Ratio</div>
-      <div class="val-row"><span class="val accent">{% if hired_pct_total is not None %}{{ hired_pct_total }}%{% else %}&ndash;{% endif %}</span><span class="hint">{{ hired }} of {{ applicants }}</span></div>
+      <div class="val-row"><span class="val accent">{% if hired_pct_total is not None %}<span class="rep-pctval" data-pct="{{ hired_pct_total }}" data-denom="{{ applicants }}">{{ hired_pct_total|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span><span class="hint">{{ hired }} of {{ applicants }}</span></div>
     </div>
   </div>
 </div>
@@ -159,5 +163,34 @@ document.querySelectorAll('.rep-toggle').forEach(function (btn) {
     btn.setAttribute('aria-expanded', showing ? 'true' : 'false');
   });
 });
+
+// %/Ratio switch: every percentage on the page carries its full-precision
+// value in data-pct (see _reports_row.html) - re-rendered here as either a
+// whole percent or a "1:N" ratio ("how many candidates to get 1 success"),
+// computed from that same precise number so a genuinely rare outcome still
+// gives a meaningful ratio instead of being rounded away to "0%" first.
+(function () {
+  var switchEl = document.getElementById('repRatioSwitch');
+  if (!switchEl) return;
+
+  function formatRatio(pct, denom) {
+    // A genuine 0% has no "1 in how many" to compute - shown as "0:N"
+    // (0 successes out of N candidates) instead of a nonsensical "1:0".
+    if (pct <= 0) return '0:' + (isNaN(denom) ? '0' : denom);
+    return '1:' + Math.round(100 / pct);
+  }
+
+  function render() {
+    var asRatio = switchEl.checked;
+    document.querySelectorAll('.rep-pctval').forEach(function (el) {
+      var pct = parseFloat(el.getAttribute('data-pct'));
+      if (isNaN(pct)) return;
+      el.innerHTML = asRatio ? formatRatio(pct, parseInt(el.getAttribute('data-denom'), 10)) : Math.round(pct) + '%';
+    });
+  }
+
+  switchEl.addEventListener('change', render);
+  render();
+})();
 </script>
 {% endblock %}

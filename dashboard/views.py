@@ -392,9 +392,15 @@ def _report_metrics(qs):
     own CV Screening peak (dashboard.views.HRDashboardView) excludes them.
 
     Each "_pct" is None (not 0) when its base is 0, so the template can show
-    "-" instead of a misleading 0.0%."""
+    "-" instead of a misleading 0%. Kept at 4 decimal places, not rounded to
+    a whole percent yet - the template displays it rounded to 0 decimals,
+    but reports.html also lets HR switch to a "1:N" ratio instead, computed
+    client-side from this same, still-precise number: a whole percent alone
+    would round anything under 0.5% down to a useless "0%" and make the
+    ratio for a genuinely-rare outcome (e.g. a true 0.1% -> 1:1000)
+    impossible to recover."""
     def pct(numerator, denominator):
-        return round(numerator / denominator * 100, 1) if denominator else None
+        return round(numerator / denominator * 100, 4) if denominator else None
 
     qualified = flow_count(qs, 'ever_shortlisted')
     screened_out = flow_count(qs, 'screened_out')

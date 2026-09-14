@@ -2,26 +2,34 @@
   One By Job/Role or Source Level row - same shape either way (see
   dashboard/views.py's _report_metrics), so both tables in reports.html
   include this instead of duplicating the row/expand markup twice.
+
+  Each percentage is shown in a .rep-pctval span carrying the full-precision
+  value in data-pct (needed so the %/ratio switch can compute a meaningful
+  ratio even for something under 0.5%, which would otherwise round away to
+  a useless "0%") and its denominator's raw count in data-denom (needed so
+  a genuine 0% can render as "0:N" instead of a nonsensical "1:0") while
+  the visible text itself is rounded to a whole percent - reports.html's JS
+  rewrites that text on toggle.
 {% endcomment %}
 <div class="rep-rowwrap">
   <div class="rep-row">
     <span class="name">{{ r.name }}</span>
     <span class="col"><span class="rep-num">{{ r.applicants }}</span></span>
-    <span class="col"><span class="rep-num">{{ r.qualified }}</span> <span class="rep-pct">({% if r.qualified_pct is not None %}{{ r.qualified_pct }}%{% else %}&ndash;{% endif %})</span></span>
-    <span class="col"><span class="rep-num">{{ r.shortlisted }}</span> <span class="rep-pct">({% if r.shortlisted_pct is not None %}{{ r.shortlisted_pct }}%{% else %}&ndash;{% endif %})</span></span>
-    <span class="col"><span class="rep-num">{{ r.r1_cleared }}</span> <span class="rep-pct">({% if r.r1_cleared_pct is not None %}{{ r.r1_cleared_pct }}%{% else %}&ndash;{% endif %})</span></span>
-    <span class="col"><span class="rep-num">{{ r.r2_cleared }}</span> <span class="rep-pct">({% if r.r2_cleared_pct is not None %}{{ r.r2_cleared_pct }}%{% else %}&ndash;{% endif %})</span></span>
-    <span class="col hired"><span class="rep-num">{{ r.hired }}</span> <span class="rep-pct">({% if r.hired_pct is not None %}{{ r.hired_pct }}%{% else %}&ndash;{% endif %})</span></span>
+    <span class="col"><span class="rep-num">{{ r.qualified }}</span> <span class="rep-pct">({% if r.qualified_pct is not None %}<span class="rep-pctval" data-pct="{{ r.qualified_pct }}" data-denom="{{ r.applicants }}">{{ r.qualified_pct|floatformat:0 }}%</span>{% else %}&ndash;{% endif %})</span></span>
+    <span class="col"><span class="rep-num">{{ r.shortlisted }}</span> <span class="rep-pct">({% if r.shortlisted_pct is not None %}<span class="rep-pctval" data-pct="{{ r.shortlisted_pct }}" data-denom="{{ r.qualified }}">{{ r.shortlisted_pct|floatformat:0 }}%</span>{% else %}&ndash;{% endif %})</span></span>
+    <span class="col"><span class="rep-num">{{ r.r1_cleared }}</span> <span class="rep-pct">({% if r.r1_cleared_pct is not None %}<span class="rep-pctval" data-pct="{{ r.r1_cleared_pct }}" data-denom="{{ r.shortlisted }}">{{ r.r1_cleared_pct|floatformat:0 }}%</span>{% else %}&ndash;{% endif %})</span></span>
+    <span class="col"><span class="rep-num">{{ r.r2_cleared }}</span> <span class="rep-pct">({% if r.r2_cleared_pct is not None %}<span class="rep-pctval" data-pct="{{ r.r2_cleared_pct }}" data-denom="{{ r.r1_cleared }}">{{ r.r2_cleared_pct|floatformat:0 }}%</span>{% else %}&ndash;{% endif %})</span></span>
+    <span class="col hired"><span class="rep-num">{{ r.hired }}</span> <span class="rep-pct">({% if r.hired_pct is not None %}<span class="rep-pctval" data-pct="{{ r.hired_pct }}" data-denom="{{ r.r2_cleared }}">{{ r.hired_pct|floatformat:0 }}%</span>{% else %}&ndash;{% endif %})</span></span>
     <button type="button" class="rep-toggle" aria-expanded="false" aria-label="Show % of Applicants for {{ r.name }}">+</button>
   </div>
   <div class="rep-row-expand">
     <span class="name">% of Applicants</span>
     <span class="col">&ndash;</span>
-    <span class="col">{% if r.qualified_pct_total is not None %}{{ r.qualified_pct_total }}%{% else %}&ndash;{% endif %}</span>
-    <span class="col">{% if r.shortlisted_pct_total is not None %}{{ r.shortlisted_pct_total }}%{% else %}&ndash;{% endif %}</span>
-    <span class="col">{% if r.r1_cleared_pct_total is not None %}{{ r.r1_cleared_pct_total }}%{% else %}&ndash;{% endif %}</span>
-    <span class="col">{% if r.r2_cleared_pct_total is not None %}{{ r.r2_cleared_pct_total }}%{% else %}&ndash;{% endif %}</span>
-    <span class="col">{% if r.hired_pct_total is not None %}{{ r.hired_pct_total }}%{% else %}&ndash;{% endif %}</span>
+    <span class="col">{% if r.qualified_pct_total is not None %}<span class="rep-pctval" data-pct="{{ r.qualified_pct_total }}" data-denom="{{ r.applicants }}">{{ r.qualified_pct_total|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span>
+    <span class="col">{% if r.shortlisted_pct_total is not None %}<span class="rep-pctval" data-pct="{{ r.shortlisted_pct_total }}" data-denom="{{ r.applicants }}">{{ r.shortlisted_pct_total|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span>
+    <span class="col">{% if r.r1_cleared_pct_total is not None %}<span class="rep-pctval" data-pct="{{ r.r1_cleared_pct_total }}" data-denom="{{ r.applicants }}">{{ r.r1_cleared_pct_total|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span>
+    <span class="col">{% if r.r2_cleared_pct_total is not None %}<span class="rep-pctval" data-pct="{{ r.r2_cleared_pct_total }}" data-denom="{{ r.applicants }}">{{ r.r2_cleared_pct_total|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span>
+    <span class="col">{% if r.hired_pct_total is not None %}<span class="rep-pctval" data-pct="{{ r.hired_pct_total }}" data-denom="{{ r.applicants }}">{{ r.hired_pct_total|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span>
     <span></span>
   </div>
 </div>

@@ -807,7 +807,7 @@ class ReportsViewTests(TestCase):
         response = self._get()
         # 3 reached Round 1 (Round1/ClearedR1/Hired); 2 of those cleared it.
         self.assertEqual(response.context['shortlisted'], 3)
-        self.assertEqual(response.context['r1_cleared_pct'], round(2 / 3 * 100, 1))
+        self.assertEqual(response.context['r1_cleared_pct'], round(2 / 3 * 100, 4))
 
     def test_r2_cleared(self):
         response = self._get()
@@ -889,10 +889,10 @@ class ReportsViewTests(TestCase):
         reports.html/_reports_row.html."""
         response = self._get()
         row = next(r for r in response.context['by_job'] if r['name'] == 'Program Manager')
-        self.assertEqual(row['shortlisted_pct'], round(3 / 4 * 100, 1))        # vs Qualified
-        self.assertEqual(row['shortlisted_pct_total'], round(3 / 4 * 100, 1))  # vs Applicants (same here)
-        self.assertEqual(row['r2_cleared_pct'], round(1 / 2 * 100, 1))         # vs Round 1 Cleared
-        self.assertEqual(row['r2_cleared_pct_total'], round(1 / 4 * 100, 1))   # vs Applicants
+        self.assertEqual(row['shortlisted_pct'], round(3 / 4 * 100, 4))        # vs Qualified
+        self.assertEqual(row['shortlisted_pct_total'], round(3 / 4 * 100, 4))  # vs Applicants (same here)
+        self.assertEqual(row['r2_cleared_pct'], round(1 / 2 * 100, 4))         # vs Round 1 Cleared
+        self.assertEqual(row['r2_cleared_pct_total'], round(1 / 4 * 100, 4))   # vs Applicants
 
     def test_reports_page_renders_the_new_columns_and_expand_toggle(self):
         response = self._get()
@@ -901,3 +901,42 @@ class ReportsViewTests(TestCase):
         self.assertIn('Round 2 Cleared', content)
         self.assertIn('rep-toggle', content)
         self.assertIn('% of Applicants', content)
+
+
+class ReportsRatioPrecisionTests(TestCase):
+    """A percentage rounded to a whole number would round anything under
+    0.5% down to a useless "0%", losing the precision the %/ratio switch
+    needs to show something meaningful (a true 0.1% as "1:1000", not
+    "1:inf" or "0%") - see dashboard.views._report_metrics's pct()."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser('hr8', 'hr8@example.com', 'pw')
+        self.client.force_login(self.user)
+        self.job = Job.objects.create(title='Rare Role')
+        qualified = Candidate.objects.create(job=self.job, full_name='Qualified', email='q@example.com')
+        services.record_creation(qualified)
+        services.change_status(qualified, Candidate.Status.SHORTLISTED)
+        Candidate.objects.bulk_create([
+            Candidate(job=self.job, status=Candidate.Status.REJECTED, candidate_code=f'TESTR{i:04d}',
+                     full_name=f'Rejected{i}', email=f'rejected{i}@example.com')
+            for i in range(999)
+        ])
+
+    def test_a_true_tenth_of_a_percent_is_not_rounded_away(self):
+        response = self.client.get(reverse('hr_reports'), {'job': self.job.pk})
+        self.assertEqual(response.context['applicants'], 1000)
+        self.assertEqual(response.context['qualified'], 1)
+        self.assertAlmostEqual(response.context['qualified_pct'], 0.1, places=3)
+
+    def test_page_still_displays_it_rounded_to_a_whole_percent(self):
+        response = self.client.get(reverse('hr_reports'), {'job': self.job.pk})
+        self.assertContains(response, 'data-pct="0.1"')
+        self.assertNotContains(response, '0.1%')  # displayed text is rounded, the data attribute isn't
+
+    def test_page_carries_the_denominator_for_a_genuine_zero_percent(self):
+        """0 hired out of 1000 Applicants has no "1 in how many" to show -
+        the denominator is carried in data-denom so the ratio switch can
+        render "0:1000" instead of a nonsensical "1:0"."""
+        response = self.client.get(reverse('hr_reports'), {'job': self.job.pk})
+        self.assertEqual(response.context['hired_pct_total'], 0)
+        self.assertContains(response, 'data-denom="1000"')
