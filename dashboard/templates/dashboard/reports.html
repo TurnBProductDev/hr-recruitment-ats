@@ -8,7 +8,6 @@
 .rep-kpi .val-row { display: flex; align-items: baseline; gap: 10px; margin-top: 10px; }
 .rep-kpi .val { font-size: 1.9rem; font-weight: 700; color: #1f2a2a; }
 .rep-kpi .val.accent { color: #0e6f6b; }
-.rep-kpi .hint { font-size: .76rem; color: #8a9a9a; }
 
 .rep-panel { background: #fff; border: 1px solid #e2ebeb; border-radius: 12px; padding: 22px 24px 18px; height: 100%; }
 .rep-panel h5 { margin: 0 0 14px; }
@@ -98,7 +97,7 @@
   <div class="col-md-3 col-6">
     <div class="rep-kpi">
       <div class="lbl">Qualified Ratio</div>
-      <div class="val-row"><span class="val accent">{% if qualified_pct is not None %}<span class="rep-pctval" data-pct="{{ qualified_pct }}" data-denom="{{ applicants }}">{{ qualified_pct|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span><span class="hint">{{ qualified }} of {{ applicants }}</span></div>
+      <div class="val-row"><span class="val accent">{% if qualified_pct is not None %}<span class="rep-pctval" data-pct="{{ qualified_pct }}" data-denom="{{ applicants }}">{{ qualified_pct|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span></div>
     </div>
   </div>
   <div class="col-md-3 col-6">
@@ -110,7 +109,7 @@
   <div class="col-md-3 col-6">
     <div class="rep-kpi">
       <div class="lbl">Hiring Ratio</div>
-      <div class="val-row"><span class="val accent">{% if hired_pct_total is not None %}<span class="rep-pctval" data-pct="{{ hired_pct_total }}" data-denom="{{ applicants }}">{{ hired_pct_total|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span><span class="hint">{{ hired }} of {{ applicants }}</span></div>
+      <div class="val-row"><span class="val accent">{% if hired_pct_total is not None %}<span class="rep-pctval" data-pct="{{ hired_pct_total }}" data-denom="{{ applicants }}">{{ hired_pct_total|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span></div>
     </div>
   </div>
 </div>

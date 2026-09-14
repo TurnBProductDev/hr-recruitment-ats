@@ -940,3 +940,17 @@ class ReportsRatioPrecisionTests(TestCase):
         response = self.client.get(reverse('hr_reports'), {'job': self.job.pk})
         self.assertEqual(response.context['hired_pct_total'], 0)
         self.assertContains(response, 'data-denom="1000"')
+
+    def test_previous_stage_zero_shows_a_dash_even_when_an_earlier_stage_is_not(self):
+        """Qualified (1) is non-zero, but nobody reached Round 1 -
+        Shortlisted (0) is the denominator that actually matters for
+        r1_cleared_pct, so it's a dash, not a 0% or a ratio computed
+        against some other, earlier stage."""
+        response = self.client.get(reverse('hr_reports'), {'job': self.job.pk})
+        self.assertEqual(response.context['qualified'], 1)
+        self.assertEqual(response.context['shortlisted'], 0)
+        self.assertIsNone(response.context['r1_cleared_pct'])
+        # The Round 1 Cleared cell renders a bare dash, never wrapped as a
+        # toggleable .rep-pctval - so the %/Ratio switch can't turn it into
+        # "0%"/"0:0" on its own.
+        self.assertContains(response, '<span class="rep-num">0</span> <span class="rep-pct">(&ndash;)</span>')
