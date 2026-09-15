@@ -82,7 +82,7 @@ ROUND_INTERVIEW_TYPES = {STATUS.ROUND1: ROUND1_TYPES, STATUS.INTERVIEW: ROUND2_T
 HIRING_STAGES = [
     {'key': 'open', 'status': STATUS.OPEN, 'label': 'CV Screening', 'short_label': 'CV Screening',
      'comm_channel': None, 'interview_rounds': (), 'actions': [
-         {'url': 'candidate_shortlist', 'target': STATUS.SHORTLISTED, 'label': 'Qualify', 'tone': 'advance'},
+         {'url': 'candidate_shortlist', 'target': STATUS.SHORTLISTED, 'label': 'Qualified', 'tone': 'advance'},
          {'url': 'candidate_screening_hold', 'target': STATUS.SCREENING_HOLD, 'label': 'Hold', 'tone': 'hold'},
          {'url': 'candidate_reject', 'target': STATUS.REJECTED, 'label': 'Reject', 'tone': 'reject'},
          {'url': 'candidate_blacklist', 'target': STATUS.BLACKLISTED, 'label': 'Blacklist', 'tone': 'blacklist', 'require_reason': True},
@@ -218,6 +218,20 @@ def _settle_round_interview(candidate, target_status):
     interview.result = Interview.Result.PASS_ if target_status in ADVANCE_STATUSES else Interview.Result.FAIL
     interview.status = Interview.Status.COMPLETED
     interview.save(update_fields=['result', 'status'])
+
+
+def _auto_log_call_attended(candidate, source_status, message, user):
+    """Tele Screening's Shortlist/Hold/Reject/Blacklist buttons double as
+    logging the call as attended, instead of requiring a separate "Add Log"
+    click first (see timeline.html's Phone Communication Log). `source_status`
+    is the candidate's status *before* this action's transition, so a
+    resumed Hold is attributed to the stage it was held from."""
+    stage = next((s for s in HIRING_STAGES if s['status'] == source_status), None)
+    if not stage or stage['comm_channel'] != CommunicationLog.Channel.PHONE:
+        return
+    CommunicationLog.objects.create(
+        candidate=candidate, channel=CommunicationLog.Channel.PHONE,
+        outcome=CommunicationLog.Outcome.ATTENDED, message=message or None, logged_by=user)
 
 
 def _first_matching_history(history, predicate):
@@ -1253,6 +1267,9 @@ class CandidateStatusActionView(GroupRequiredMixin, View):
             messages.error(request, 'A reason is required.')
             return redirect(request.POST.get('next') or reverse('candidate_timeline', args=[pk]))
 
+        source_status = candidate.hold_from_status if candidate.status == STATUS.SCREENING_HOLD else candidate.status
+        _auto_log_call_attended(candidate, source_status, reason, request.user)
+
         _settle_round_interview(candidate, self.target_status)
 
         if self.target_status == STATUS.BLACKLISTED:
@@ -1334,9 +1351,12 @@ class CandidateSendRejectionView(GroupRequiredMixin, View):
 
 
 class CandidateMoveToFutureView(GroupRequiredMixin, View):
-    """Re-tag a held candidate (any stage) as a Future Prospect - see
+    """Re-tag a candidate as a Future Prospect - see
     services.move_to_future_prospects. Offered alongside the normal
-    resume-the-pipeline action, not instead of it."""
+    resume-the-pipeline action while on Hold, and as its own quick decision
+    from an active stage (e.g. Round 1/Round 2 before an interview is even
+    scheduled) - in that case the candidate is put on Hold first so
+    move_to_future_prospects has a hold row to re-tag."""
     allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
 
     def post(self, request, pk):
@@ -1344,8 +1364,12 @@ class CandidateMoveToFutureView(GroupRequiredMixin, View):
         reason = request.POST.get('reason', '').strip()
         role_id = request.POST.get('suggested_role', '').strip()
         suggested_role = get_object_or_404(Job, pk=role_id) if role_id else None
+        performed_by = _performed_by(request)
+        if candidate.status != STATUS.SCREENING_HOLD:
+            services.change_status(candidate, STATUS.SCREENING_HOLD, user=request.user,
+                                   remarks=reason or None, performed_by=performed_by)
         services.move_to_future_prospects(
-            candidate, user=request.user, remarks=reason or None, performed_by=_performed_by(request),
+            candidate, user=request.user, remarks=reason or None, performed_by=performed_by,
             suggested_role=suggested_role)
         messages.success(request, f'{candidate.full_name} moved to Future Prospects.')
         next_url = request.POST.get('next')

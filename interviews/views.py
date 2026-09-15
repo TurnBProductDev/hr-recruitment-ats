@@ -12,7 +12,7 @@ from django.views import View
 from django.views.generic import CreateView, ListView, UpdateView
 
 from candidates import logic_app_mail, services
-from candidates.models import Candidate, Note
+from candidates.models import Candidate, CommunicationLog, Note
 from candidates.permissions import (
     ANY_STAFF, HIRING_MANAGER, HR_ADMIN, INTERVIEWER, RECRUITER, GroupRequiredMixin, in_interviewer_portal,
 )
@@ -468,8 +468,8 @@ class InterviewResultView(GroupRequiredMixin, UpdateView):
             # remarks box), instead of it silently deciding the outcome.
             picked = form.cleaned_data.get('result')
             recommendation = {
-                Interview.Result.PASS_: 'Recommended: Pass.',
-                Interview.Result.FAIL: 'Recommended: Fail.',
+                Interview.Result.PASS_: 'Recommended: Move to Next Round.',
+                Interview.Result.FAIL: 'Recommended: Reject.',
                 Interview.Result.HOLD: 'Recommended: Hold.',
             }.get(picked)
             if recommendation:
@@ -477,11 +477,18 @@ class InterviewResultView(GroupRequiredMixin, UpdateView):
                 form.instance.feedback = f'{recommendation} {feedback}'.strip()
             form.instance.result = Interview.Result.PENDING
         response = super().form_valid(form)
+        interview = self.object
+        candidate = interview.candidate
+        # Marking any result (Move to Next Round/Reject/Hold) means the
+        # candidate actually attended the interview - log it automatically
+        # instead of requiring a separate manual Interview Communication Log
+        # entry (see timeline.html's Round 1/2 stage cards).
+        CommunicationLog.objects.create(
+            candidate=candidate, channel=CommunicationLog.Channel.INTERVIEW,
+            outcome=CommunicationLog.Outcome.ATTENDED, logged_by=self.request.user)
         if not can_decide_pipeline:
             messages.success(self.request, 'Result recorded - HR/Recruiter will confirm the next step.')
             return response
-        interview = self.object
-        candidate = interview.candidate
         performed_by = self.request.user.get_full_name() or self.request.user.get_username()
         round_label = interview.get_round_type_display()
         if interview.result == Interview.Result.PASS_:

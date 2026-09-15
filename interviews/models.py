@@ -34,8 +34,8 @@ class Interview(models.Model):
         RESCHEDULED = 'RESCHEDULED', 'Rescheduled'
 
     class Result(models.TextChoices):
-        PASS_ = 'PASS', 'Pass'
-        FAIL = 'FAIL', 'Fail'
+        PASS_ = 'PASS', 'Move to Next Round'
+        FAIL = 'FAIL', 'Reject'
         PENDING = 'PENDING', 'Pending'
         # A transient pick on the Mark Result form only - a Hold pauses the
         # candidate, it doesn't decide the interview, so it's never the value

@@ -210,7 +210,8 @@ html { scroll-behavior: smooth; }
             <div><div class="field-label">Phone</div><div class="field-value">{{ candidate.phone|default:"-" }}</div></div>
             <div><div class="field-label">DOB</div><div class="field-value {% if not candidate.dob %}text-muted{% endif %}">{{ candidate.dob|default:"-" }}</div></div>
             <div><div class="field-label">Location</div><div class="field-value {% if not candidate.current_location %}text-muted{% endif %}">{{ candidate.current_location|default:"-" }}</div></div>
-            <div class="field-full"><div class="field-label">LinkedIn</div><div class="field-value {% if not candidate.linkedin %}text-muted{% endif %}">{% if candidate.linkedin %}<a href="{{ candidate.linkedin }}" target="_blank">{{ candidate.linkedin }}</a>{% else %}-{% endif %}</div></div>
+            <div><div class="field-label">Notice Period</div><div class="field-value {% if not candidate.notice_period %}text-muted{% endif %}">{{ candidate.notice_period|default:"-" }}</div></div>
+            <div><div class="field-label">LinkedIn</div><div class="field-value {% if not candidate.linkedin %}text-muted{% endif %}">{% if candidate.linkedin %}<a href="{{ candidate.linkedin }}" target="_blank">{{ candidate.linkedin }}</a>{% else %}-{% endif %}</div></div>
           </div>
         </div>
 
@@ -255,14 +256,6 @@ html { scroll-behavior: smooth; }
               {% for a in attachments %}
                 <div class="mt-1"><a href="{{ a.file.url }}" target="_blank">{{ a.label|default:a.file.name }}</a> <span class="text-muted pd-meta">{{ a.uploaded_at|date:"d M Y" }}</span></div>
               {% endfor %}
-            </div>
-            <div>
-              <div class="field-label">Notice Period</div>
-              <div class="field-value {% if not candidate.notice_period %}text-muted{% endif %}">{{ candidate.notice_period|default:"-" }}</div>
-            </div>
-            <div>
-              <div class="field-label">Current / Expected Salary</div>
-              <div class="field-value">{{ candidate.current_salary|default:"-" }} / {{ candidate.expected_salary|default:"-" }}</div>
             </div>
           </div>
         </div>
@@ -522,44 +515,75 @@ html { scroll-behavior: smooth; }
           </button>
           {% endif %}
         </div>
+
+        {% if not stage.interview_request and not stage.open_interview and not stage.cancelled_interview %}
+        <div class="stage-subsection">
+          <div class="stage-subsection-title">Or Decide Without an Interview</div>
+          <form method="post" class="js-stage-form">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <input type="hidden" name="performed_by" value="{{ user.get_full_name|default:user.get_username }}">
+            <textarea name="reason" class="form-control form-control-sm mb-2 js-stage-reason" rows="2" placeholder="Remarks / reason…"></textarea>
+            <div class="stage-action-row">
+              {% for action in stage.actions %}
+              {% if action.tone == 'reject' %}
+              <button type="button" class="stage-action-btn stage-tone-reject"
+                      data-bs-toggle="modal" data-bs-target="#rejectionModal"
+                      data-load-url="{% url 'candidate_rejection_draft' candidate.pk %}">
+                {{ action.label }}
+              </button>
+              {% else %}
+              <button type="submit" formaction="{% url action.url candidate.pk %}"
+                      class="stage-action-btn stage-tone-{{ action.tone }}"
+                      {% if action.require_reason %}data-require-reason="1" disabled{% endif %}>
+                {{ action.label }}
+              </button>
+              {% endif %}
+              {% endfor %}
+              <button type="button" class="stage-action-btn stage-tone-hold" data-bs-toggle="modal" data-bs-target="#moveToFutureModal">Move to Future</button>
+            </div>
+          </form>
+        </div>
+        {% endif %}
         {% endif %}
 
         {% if not stage.interview_rounds or stage.round_phase == 'decision' %}
         {% if stage.comm_channel == 'PHONE' %}
         {% comment %}
           Tele Screening: one shared Remarks box for both the call log and the
-          status decision, instead of two separate ones - see AddCommunicationLogView,
-          which reads this same "reason" field as the log's message.
+          status decision - see AddCommunicationLogView, which reads this same
+          "reason" field as the log's message. Call Back/Unable to Connect just
+          log the call outcome (their "outcome" comes from the clicked button's
+          own name/value, not a dropdown); Shortlist/Hold/Reject/Blacklist
+          decide the candidate AND automatically log the call as Attended (see
+          candidates.views._auto_log_call_attended) instead of requiring a
+          separate Add Log step first.
         {% endcomment %}
         <div class="stage-subsection">
           <div class="stage-subsection-title">Phone Communication Log</div>
-          <form method="post" class="js-stage-form">
+          {% with logs=comm_logs_by_channel|dict_get:stage.comm_channel %}
+          {% for l in logs %}
+          <div class="pd-body mb-1 pb-1 {% if not forloop.last %}border-bottom{% endif %}">
+            {% if l.outcome %}<strong>{{ l.get_outcome_display }}</strong>{% endif %}
+            {% if l.message %} &middot; {{ l.message }}{% endif %}
+            <div class="text-muted pd-meta">{{ l.logged_by|default:"Unknown" }} &middot; {{ l.logged_at|date:"d M Y H:i" }}</div>
+          </div>
+          {% endfor %}
+          {% endwith %}
+
+          <form method="post" class="js-stage-form mt-2">
             {% csrf_token %}
             <input type="hidden" name="channel" value="{{ stage.comm_channel }}">
             <input type="hidden" name="next" value="{{ request.get_full_path }}">
             <input type="hidden" name="performed_by" value="{{ user.get_full_name|default:user.get_username }}">
-            <select name="outcome" class="form-select form-select-sm mb-2">
-              <option value="">— Outcome —</option>
-              <option value="UNABLE">Unable to connect</option>
-              <option value="CALLBACK">Call back</option>
-              <option value="ATTENDED">Attended</option>
-            </select>
-            {% with logs=comm_logs_by_channel|dict_get:stage.comm_channel %}
-            {% for l in logs %}
-            <div class="pd-body mb-1 pb-1 {% if not forloop.last %}border-bottom{% endif %}">
-              {% if l.outcome %}<strong>{{ l.get_outcome_display }}</strong>{% endif %}
-              {% if l.message %} &middot; {{ l.message }}{% endif %}
-              <div class="text-muted pd-meta">{{ l.logged_by|default:"Unknown" }} &middot; {{ l.logged_at|date:"d M Y H:i" }}</div>
-            </div>
-            {% endfor %}
-            {% endwith %}
 
-            <div class="stage-subsection-title mt-3">Remarks</div>
+            <div class="stage-subsection-title">Remarks</div>
             <textarea name="reason" class="form-control form-control-sm mb-2 js-stage-reason" rows="2" placeholder="Remarks…"></textarea>
 
             <div class="stage-subsection-title">Update {{ stage.label }} Status</div>
             <div class="stage-action-row">
-              <button type="submit" formaction="{% url 'candidate_add_log' candidate.pk %}" class="btn btn-sm btn-outline-app">Add Log</button>
+              <button type="submit" formaction="{% url 'candidate_add_log' candidate.pk %}" name="outcome" value="UNABLE" class="btn btn-sm btn-outline-app">Unable to Connect</button>
+              <button type="submit" formaction="{% url 'candidate_add_log' candidate.pk %}" name="outcome" value="CALLBACK" class="btn btn-sm btn-outline-app">Call Back</button>
               {% for action in stage.actions %}
               <button type="submit" formaction="{% url action.url candidate.pk %}"
                       class="stage-action-btn stage-tone-{{ action.tone }}"
@@ -774,7 +798,13 @@ html { scroll-behavior: smooth; }
   </div>
 </div>
 
-{% if is_on_hold and candidate.hold_from_status != 'OPEN' %}
+{% comment %}
+  Move to Future's modal is shared by two triggers: the Final Status
+  section's resume-while-on-Hold action, and the Round 1/Round 2 schedule
+  card's "Or Decide Without an Interview" quick action (candidate need not
+  already be on Hold for that one - see CandidateMoveToFutureView) - so it's
+  always rendered rather than gated on is_on_hold.
+{% endcomment %}
 <div class="modal fade" id="moveToFutureModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <form method="post" action="{% url 'candidate_move_to_future' candidate.pk %}">
@@ -812,7 +842,6 @@ html { scroll-behavior: smooth; }
     </form>
   </div>
 </div>
-{% endif %}
 {% endblock %}
 
 {% block extra_js %}
