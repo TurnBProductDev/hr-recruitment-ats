@@ -11,13 +11,18 @@ from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.generic import TemplateView
 from django.views.static import serve as serve_static_file
 
-from .auth_views import HRLoginView, HRLogoutView, HRPasswordChangeView
+from .auth_views import AzureCallbackView, AzureLoginView, HRLoginView, HRLogoutView, HRPasswordChangeView
 from .password_forms import BootstrapSetPasswordForm, LogicAppPasswordResetForm
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('login/', HRLoginView.as_view(template_name='registration/login.html'), name='login'),
     path('logout/', HRLogoutView.as_view(), name='logout'),
+    # "Sign in with Microsoft" (HR_management/azure_auth.py) - one redirect
+    # URI shared by both the HR and Interviewer login doors, told apart by
+    # ?portal=interviewer on the link each template renders.
+    path('azure/login/', AzureLoginView.as_view(), name='azure_login'),
+    path('azure/callback/', AzureCallbackView.as_view(), name='azure_callback'),
     path('password/change/', HRPasswordChangeView.as_view(), name='password_change'),
     path('password/reset/', auth_views.PasswordResetView.as_view(
         template_name='registration/password_reset_form.html',

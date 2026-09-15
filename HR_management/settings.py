@@ -255,3 +255,16 @@ GRAPH_TENANT_ID = os.environ.get("GRAPH_TENANT_ID", "")
 GRAPH_CLIENT_ID = os.environ.get("GRAPH_CLIENT_ID", "")
 GRAPH_CLIENT_SECRET = os.environ.get("GRAPH_CLIENT_SECRET", "")
 GRAPH_ORGANIZER_EMAIL = os.environ.get("GRAPH_ORGANIZER_EMAIL", "careers@turnb.com")
+
+# --- "Sign in with Microsoft" (HR_management/azure_auth.py) --------------
+# Lets a person already added as a User here (with their role/Group already
+# assigned on the Users page) sign in via the org's own Azure AD/Microsoft
+# Entra ID tenant instead of a password - they must also already be added as
+# an external (B2B guest) user there. A separate Azure AD app registration
+# from GRAPH_* above (delegated sign-in vs. Graph's app-only calendar/Teams
+# access). Blank (the default) = azure_auth.is_configured() is False, the
+# "Sign in with Microsoft" button is hidden, and password sign-in works
+# exactly as before.
+AZURE_AD_TENANT_ID = os.environ.get("AZURE_AD_TENANT_ID", "")
+AZURE_AD_CLIENT_ID = os.environ.get("AZURE_AD_CLIENT_ID", "")
+AZURE_AD_CLIENT_SECRET = os.environ.get("AZURE_AD_CLIENT_SECRET", "")

@@ -1071,3 +1071,99 @@ class InviteAndSlotEmailTests(TestCase):
                 request_obj, login_url='https://ats.example/interviewer/login/')
         payload = post.call_args.kwargs['json']
         self.assertIn('https://ats.example/interviewer/login/', payload['body'])
+
+
+@override_settings(
+    AZURE_AD_TENANT_ID='test-tenant', AZURE_AD_CLIENT_ID='test-client', AZURE_AD_CLIENT_SECRET='test-secret')
+class AzureSignInTests(TestCase):
+    """"Sign in with Microsoft" (HR_management/azure_auth.py,
+    HR_management/auth_views.py) - verifies identity only. Authorization
+    stays exactly what a password sign-in already gives an account (its
+    Group membership), so a matched account lands wherever it always would:
+    an Interviewer-only account on the portal, everyone else on hr_dashboard
+    (mirrors InterviewerLoginTests above, one door at a time)."""
+
+    def setUp(self):
+        self.recruiter = get_user_model().objects.create_user('hr1', 'Person@Turnb.com', 'pw')
+        self.recruiter.groups.add(Group.objects.get_or_create(name=RECRUITER)[0])
+        self.interviewer = get_user_model().objects.create_user('int1', 'panel@turnb.com', 'pw')
+        self.interviewer.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
+
+    def _sign_in(self, email, portal=False, next_url=''):
+        """Drives both legs of the flow: azure_login stashes state/next (and
+        the portal flag) in the session exactly like a real Microsoft
+        redirect round trip would, then azure_callback is hit with the token
+        exchange mocked to return the given email - the only part that
+        actually talks to Microsoft."""
+        login_url = reverse('azure_login')
+        if portal:
+            login_url += '?portal=interviewer'
+        self.client.get(login_url)
+        with mock.patch('HR_management.azure_auth.acquire_user_email',
+                         return_value=(email, next_url)):
+            return self.client.get(reverse('azure_callback'), {'code': 'abc', 'state': 'ignored'})
+
+    # ---- Button visibility ----
+
+    def test_button_hidden_when_azure_ad_not_configured(self):
+        with override_settings(AZURE_AD_TENANT_ID='', AZURE_AD_CLIENT_ID='', AZURE_AD_CLIENT_SECRET=''):
+            response = self.client.get(reverse('login'))
+        self.assertNotContains(response, 'Sign in with Microsoft')
+
+    def test_button_shown_on_both_doors_when_configured(self):
+        self.assertContains(self.client.get(reverse('login')), 'Sign in with Microsoft')
+        self.assertContains(self.client.get(reverse('interviewer_login')), 'Sign in with Microsoft')
+
+    # ---- HR door ----
+
+    def test_matching_active_user_is_signed_in_case_insensitively(self):
+        response = self._sign_in('person@turnb.com')
+        self.assertRedirects(response, reverse('hr_dashboard'))
+        self.assertIn('_auth_user_id', self.client.session)
+
+    def test_unknown_email_is_denied_not_provisioned(self):
+        response = self._sign_in('nobody@turnb.com', next_url='')
+        self.assertRedirects(response, reverse('login'))
+        self.assertNotIn('_auth_user_id', self.client.session)
+        self.assertEqual(get_user_model().objects.filter(email__iexact='nobody@turnb.com').count(), 0)
+
+    def test_inactive_matching_user_is_denied(self):
+        self.recruiter.is_active = False
+        self.recruiter.save(update_fields=['is_active'])
+        response = self._sign_in('Person@Turnb.com')
+        self.assertRedirects(response, reverse('login'))
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_more_than_one_matching_user_is_denied(self):
+        get_user_model().objects.create_user('hr2', 'person@turnb.com', 'pw')
+        response = self._sign_in('Person@Turnb.com')
+        self.assertRedirects(response, reverse('login'))
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_safe_next_url_is_honored(self):
+        response = self._sign_in('person@turnb.com', next_url='/some/allowed/path/')
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, '/some/allowed/path/')
+
+    # ---- Interviewer door ----
+
+    def test_interviewer_door_denies_a_non_interviewer_account(self):
+        response = self._sign_in('person@turnb.com', portal=True)
+        self.assertRedirects(response, reverse('interviewer_login'))
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_interviewer_door_signs_in_an_interviewer_and_marks_portal_mode(self):
+        response = self._sign_in('panel@turnb.com', portal=True)
+        self.assertRedirects(response, reverse('interviewer_home'))
+        self.assertTrue(self.client.session.get('in_interviewer_portal'))
+
+    # ---- CSRF-style protection ----
+
+    def test_mismatched_state_is_denied_without_calling_microsoft(self):
+        self.client.get(reverse('azure_login'))
+        with mock.patch('HR_management.azure_auth.requests.post') as post:
+            response = self.client.get(
+                reverse('azure_callback'), {'code': 'abc', 'state': 'not-the-real-state'})
+        post.assert_not_called()
+        self.assertRedirects(response, reverse('login'))
+        self.assertNotIn('_auth_user_id', self.client.session)

@@ -17,6 +17,7 @@ from django.views.generic import DetailView, ListView
 
 from notifications import services as notifications
 
+from HR_management import azure_auth
 from candidates import logic_app_mail
 from candidates.models import Candidate
 from candidates.permissions import HR_ADMIN, INTERVIEWER, PORTAL_SESSION_KEY, GroupRequiredMixin
@@ -42,6 +43,11 @@ class InterviewerLoginView(auth_views.LoginView):
     same way, but refuses anyone who isn't actually an Interviewer or Admin
     (or a superuser) - they're pointed at the HR sign-in instead."""
     template_name = 'registration/interviewer_login.html'
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx['azure_login_available'] = azure_auth.is_configured()
+        return ctx
 
     def get_success_url(self):
         return reverse('interviewer_home')
