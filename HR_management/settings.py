@@ -44,6 +44,8 @@ INSTALLED_APPS = [
     'interviews',
     'dashboard',
     'notifications',
+    'prompts',
+    'email_templates',
 ]
 
 MIDDLEWARE = [

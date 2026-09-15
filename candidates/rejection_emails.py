@@ -11,28 +11,39 @@ Same shape as interviews/invites.py's interview invite: a starting draft the
 HR user reviews and can edit before sending, with the recipient/CC always
 derived server-side rather than trusted from the client.
 """
+from email_templates.store import render_email
+
 from . import logic_app_mail
+
+# Fallback defaults, used only if the 'rejection' EmailTemplate row is
+# missing (e.g. before migrations run) - the seeded row
+# (email_templates/migrations/0002_seed_defaults.py) carries this same text,
+# and is what an admin actually edits at /admin/.
+_DEFAULT_SUBJECT = 'Update on your application to TurnB Business Services'
+_DEFAULT_BODY = (
+    'Hello {candidate_name},\n\n'
+    'I hope this e-mail finds you well. I wanted to reach out to you personally and thank you '
+    'for all the time and energy that you have invested for the interview process at TurnB '
+    'Business Services Pvt. Ltd.  We have thoroughly enjoyed getting to know you throughout the '
+    'process.\n\n'
+    'Our performance bars were high but unfortunately you could not meet those this time. We '
+    'have planned to move forward with other candidates this time whose skills closely align '
+    'with the specific needs of the position.\n\n'
+    'We wish you every success in your future endeavors!\n\n'
+    'Regards,\n'
+    'HRBP\n'
+    'TurnB Business Services Pvt Ltd'
+)
 
 
 def default_subject(candidate):
-    return 'Update on your application to TurnB Business Services'
+    subject, _ = render_email('rejection', _DEFAULT_SUBJECT, _DEFAULT_BODY, candidate_name=candidate.full_name)
+    return subject
 
 
 def default_body(candidate):
-    return (
-        f'Hello {candidate.full_name},\n\n'
-        'I hope this e-mail finds you well. I wanted to reach out to you personally and thank you '
-        'for all the time and energy that you have invested for the interview process at TurnB '
-        'Business Services Pvt. Ltd.  We have thoroughly enjoyed getting to know you throughout the '
-        'process.\n\n'
-        'Our performance bars were high but unfortunately you could not meet those this time. We '
-        'have planned to move forward with other candidates this time whose skills closely align '
-        'with the specific needs of the position.\n\n'
-        'We wish you every success in your future endeavors!\n\n'
-        'Regards,\n'
-        'HRBP\n'
-        'TurnB Business Services Pvt Ltd'
-    )
+    _, body = render_email('rejection', _DEFAULT_SUBJECT, _DEFAULT_BODY, candidate_name=candidate.full_name)
+    return body
 
 
 def default_cc_list():

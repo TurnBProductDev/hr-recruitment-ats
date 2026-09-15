@@ -19,6 +19,7 @@ from django.conf import settings
 
 from HR_management import pdf_text
 from prompts.jd_extraction import RESPONSE_JSON_SCHEMA, SYSTEM_PROMPT
+from prompts.store import render_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +72,7 @@ def extract_fields(content, title_hint=None):
 
     payload = {
         'messages': [
-            {'role': 'system', 'content': SYSTEM_PROMPT},
+            {'role': 'system', 'content': render_prompt('jd_extraction', SYSTEM_PROMPT)},
             {'role': 'user', 'content': content_block},
         ],
         'temperature': 0,

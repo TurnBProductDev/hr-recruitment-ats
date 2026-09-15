@@ -15,13 +15,17 @@ import requests
 from django.conf import settings
 
 from prompts import screening_questions as prompts
+from prompts.store import render_prompt
 
 logger = logging.getLogger(__name__)
 
 QUESTION_COUNT = 10
 
 RESPONSE_JSON_SCHEMA = prompts.response_json_schema(QUESTION_COUNT)
-SYSTEM_PROMPT = prompts.system_prompt(QUESTION_COUNT)
+# A template default (the {question_count} token left literal, not baked in)
+# so an admin-edited override (prompts/store.py) can still have the real
+# count substituted in at call time - see generate_questions() below.
+_DEFAULT_SYSTEM_PROMPT_TEMPLATE = prompts.system_prompt('{question_count}')
 
 
 class ScreeningQuestionsError(Exception):
@@ -64,9 +68,11 @@ def generate_questions(candidate):
         raise ScreeningQuestionsError(
             'Question generation is not configured - set AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_KEY.')
 
+    system_prompt = render_prompt(
+        'screening_questions', _DEFAULT_SYSTEM_PROMPT_TEMPLATE, question_count=QUESTION_COUNT)
     payload = {
         'messages': [
-            {'role': 'system', 'content': SYSTEM_PROMPT},
+            {'role': 'system', 'content': system_prompt},
             {'role': 'user', 'content': _profile_text(candidate)},
         ],
         'temperature': 0.3,

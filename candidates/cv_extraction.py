@@ -24,6 +24,7 @@ from django.conf import settings
 
 from HR_management import pdf_text
 from prompts.cv_extraction import RESPONSE_JSON_SCHEMA, SYSTEM_PROMPT
+from prompts.store import render_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +112,7 @@ def _build_messages(cv_text, page_images):
         b64 = base64.b64encode(image_bytes).decode('ascii')
         content.append({'type': 'image_url', 'image_url': {'url': f'data:image/png;base64,{b64}'}})
     return [
-        {'role': 'system', 'content': SYSTEM_PROMPT},
+        {'role': 'system', 'content': render_prompt('cv_extraction', SYSTEM_PROMPT)},
         {'role': 'user', 'content': content},
     ]
 

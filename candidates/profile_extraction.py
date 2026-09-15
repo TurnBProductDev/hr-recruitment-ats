@@ -24,6 +24,7 @@ from django.conf import settings
 from django.core.cache import cache
 
 from prompts import profile_extraction as prompts
+from prompts.store import render_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +79,7 @@ def extract_from_summary(cv_summary):
 
     payload = {
         'messages': [
-            {'role': 'system', 'content': SYSTEM_PROMPT},
+            {'role': 'system', 'content': render_prompt('profile_extraction', SYSTEM_PROMPT)},
             {'role': 'user', 'content': f'AI CV Summary:\n\n{cv_summary}'},
         ],
         'temperature': 0,

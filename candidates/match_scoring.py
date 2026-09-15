@@ -35,6 +35,7 @@ from django.core.cache import cache
 
 from .models import ScoringCriteria
 from prompts.match_scoring import RESPONSE_JSON_SCHEMA, SYSTEM_PROMPT
+from prompts.store import render_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +116,9 @@ def _build_system_prompt(must_have, extra_criteria):
             'Additional scoring criteria set by HR - apply these on top of everything above:\n'
             f'{extra_criteria}\n\n'
         )
-    return SYSTEM_PROMPT.format(must_have_block=must_have_block, extra_criteria_block=extra_criteria_block)
+    return render_prompt(
+        'match_scoring', SYSTEM_PROMPT,
+        must_have_block=must_have_block, extra_criteria_block=extra_criteria_block)
 
 
 def build_cache_key(job_text, candidate_text, must_have, extra_criteria):

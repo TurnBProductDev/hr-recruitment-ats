@@ -16,6 +16,8 @@ from django.utils.dateformat import format as django_date_format
 
 from icalendar import Calendar, Event, vCalAddress, vText
 
+from email_templates.store import render_email
+
 from candidates import logic_app_mail
 
 from .models import INTERVIEW_DURATION
@@ -26,10 +28,38 @@ MODE_WORDING = {
     'ONSITE': 'an in-person interview at our office',
 }
 
+# Fallback defaults, used only if the 'interview_invite' EmailTemplate row is
+# missing (e.g. before migrations run) - the seeded row
+# (email_templates/migrations/0002_seed_defaults.py) carries this same text,
+# and is what an admin actually edits at /admin/.
+_DEFAULT_SUBJECT = 'Interview Invitation - {role} ({round_type})'
+_DEFAULT_BODY = (
+    'Hello {candidate_name},\n'
+    'Greetings from TurnB!\n'
+    'We are pleased to invite you for {interview_kind} for the position of {role}.\n'
+    'Please find the interview details below:\n'
+    'Date: {date_str}\n'
+    'Time: {time_str}\n'
+    '{meeting_link_line}'
+    'Please confirm your availability by accepting the invite. Also, ensure a stable internet '
+    'connection and a quiet environment for the interview.\n'
+    'Looking forward to speaking with you.\n'
+    '\n'
+    'Regards,\n'
+    '{sender_name}\n'
+    'HR Business Partner\n'
+    'TurnB Business Services Pvt. Ltd – Edapally, Kochi\n'
+    '(+91 9567558557)\n'
+    'http://www.turnb.com/'
+)
+
 
 def default_subject(interview):
     role = _role_name(interview)
-    return f'Interview Invitation - {role} ({interview.get_round_type_display()})'
+    subject, _ = render_email(
+        'interview_invite', _DEFAULT_SUBJECT, _DEFAULT_BODY,
+        role=role, round_type=interview.get_round_type_display())
+    return subject
 
 
 def default_body(interview, sender):
@@ -40,30 +70,14 @@ def default_body(interview, sender):
     time_str = django_date_format(when, 'g.i A')
     interview_kind = MODE_WORDING.get(interview.mode, 'an interview')
     sender_name = sender.get_full_name() or sender.get_username()
+    meeting_link_line = f'Join link: {interview.meeting_link}\n' if interview.meeting_link else ''
 
-    lines = [
-        f'Hello {candidate.full_name},',
-        'Greetings from TurnB!',
-        f'We are pleased to invite you for {interview_kind} for the position of {role}.',
-        'Please find the interview details below:',
-        f'Date: {date_str}',
-        f'Time: {time_str}',
-    ]
-    if interview.meeting_link:
-        lines.append(f'Join link: {interview.meeting_link}')
-    lines += [
-        'Please confirm your availability by accepting the invite. Also, ensure a stable internet '
-        'connection and a quiet environment for the interview.',
-        'Looking forward to speaking with you.',
-        '',
-        'Regards,',
-        sender_name,
-        'HR Business Partner',
-        'TurnB Business Services Pvt. Ltd – Edapally, Kochi',
-        '(+91 9567558557)',
-        'http://www.turnb.com/',
-    ]
-    return '\n'.join(lines)
+    _, body = render_email(
+        'interview_invite', _DEFAULT_SUBJECT, _DEFAULT_BODY,
+        candidate_name=candidate.full_name, role=role, round_type=interview.get_round_type_display(),
+        interview_kind=interview_kind, date_str=date_str, time_str=time_str,
+        meeting_link_line=meeting_link_line, sender_name=sender_name)
+    return body
 
 
 def default_cc_list(interview):

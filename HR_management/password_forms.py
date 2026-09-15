@@ -15,8 +15,25 @@ from django.utils.http import urlsafe_base64_encode
 
 from candidates import logic_app_mail
 from dashboard.user_forms import BootstrapFormMixin
+from email_templates.store import render_email
 
 logger = logging.getLogger(__name__)
+
+# Fallback defaults, used only if the 'password_reset' EmailTemplate row is
+# missing (e.g. before migrations run) - the seeded row
+# (email_templates/migrations/0002_seed_defaults.py) carries this same text,
+# and is what an admin actually edits at /admin/.
+_DEFAULT_SUBJECT = 'Reset your HireB password'
+_DEFAULT_BODY = (
+    'Hello {name},\n\n'
+    'We received a request to reset your HireB password. Click the link below to '
+    'choose a new one:\n\n'
+    '{reset_url}\n\n'
+    "If you didn't request this, you can safely ignore this email - your password "
+    "won't be changed.\n\n"
+    'Regards,\n'
+    'HireB'
+)
 
 
 class BootstrapPasswordChangeForm(BootstrapFormMixin, PasswordChangeForm):
@@ -54,16 +71,11 @@ class LogicAppPasswordResetForm(BootstrapFormMixin, PasswordResetForm):
             token = default_token_generator.make_token(user)
             reset_path = reverse('password_reset_confirm', kwargs={'uidb64': uid, 'token': token})
             reset_url = request.build_absolute_uri(reset_path) if request else reset_path
-            body = (
-                f'Hello {user.get_full_name() or user.get_username()},\n\n'
-                f'We received a request to reset your HireB password. Click the link below to '
-                f'choose a new one:\n\n{reset_url}\n\n'
-                f"If you didn't request this, you can safely ignore this email - your password "
-                f"won't be changed.\n\n"
-                f'Regards,\nHireB'
-            )
+            subject, body = render_email(
+                'password_reset', _DEFAULT_SUBJECT, _DEFAULT_BODY,
+                name=user.get_full_name() or user.get_username(), reset_url=reset_url)
             try:
-                logic_app_mail.send_email(to_email=user.email, subject='Reset your HireB password', body=body)
+                logic_app_mail.send_email(to_email=user.email, subject=subject, body=body)
             except logic_app_mail.EmailSendError as exc:
                 # Best-effort, same as every other notification email in this
                 # app - and never surfaced to the requester, who shouldn't be
