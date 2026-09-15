@@ -198,6 +198,9 @@
                           },
                           "experience": {
                             "type": "array"
+                          },
+                          "education": {
+                            "type": "array"
                           }
                         }
                       }
@@ -234,7 +237,8 @@
                             "notice_period": "@body('Parse_extract_response')?['notice_period']",
                             "expected_salary": "@body('Parse_extract_response')?['expected_salary']",
                             "current_salary": "@body('Parse_extract_response')?['current_salary']",
-                            "experience_json": "@string(coalesce(body('Parse_extract_response')?['experience'], json('[]')))"
+                            "experience_json": "@string(coalesce(body('Parse_extract_response')?['experience'], json('[]')))",
+                            "education_json": "@string(coalesce(body('Parse_extract_response')?['education'], json('[]')))"
                           },
                           "host": {
                             "connection": {
@@ -272,7 +276,8 @@
                               "notice_period": "@body('Parse_extract_response')?['notice_period']",
                               "expected_salary": "@body('Parse_extract_response')?['expected_salary']",
                               "current_salary": "@body('Parse_extract_response')?['current_salary']",
-                              "experience_json": "@string(coalesce(body('Parse_extract_response')?['experience'], json('[]')))"
+                              "experience_json": "@string(coalesce(body('Parse_extract_response')?['experience'], json('[]')))",
+                              "education_json": "@string(coalesce(body('Parse_extract_response')?['education'], json('[]')))"
                             },
                             "host": {
                               "connection": {

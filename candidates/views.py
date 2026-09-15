@@ -898,6 +898,24 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
         ctx['hiring_stages'] = hiring_stages
         ctx['active_stage_index'] = active_stage_index
 
+        # Whether the Move to Future modal/trigger should exist on the page
+        # at all - either the Final Status section's resume-while-on-Hold
+        # trigger, or the Round 1/Round 2 schedule card's own quick-action
+        # trigger (offered before an interview is even allocated - see
+        # CandidateMoveToFutureView, which puts the candidate on Hold first
+        # in that case). Computed once here, rather than duplicating both
+        # conditions in the template, so the modal's own URL never renders
+        # onto the page when neither trigger actually shows.
+        ctx['show_move_to_future_modal'] = (
+            (ctx['is_on_hold'] and candidate.hold_from_status != STATUS.OPEN)
+            or any(
+                stage['is_active'] and stage['interview_rounds'] and stage['round_phase'] == 'schedule'
+                and not stage['interview_request'] and not stage['open_interview']
+                and not stage['cancelled_interview']
+                for stage in hiring_stages
+            )
+        )
+
         if active_stage_index is None:
             outcome_label = {STATUS.HIRED: 'Hired', STATUS.REJECTED: 'Rejected',
                              STATUS.BLACKLISTED: 'Blacklisted'}.get(candidate.status, candidate.status_label)
@@ -1595,27 +1613,6 @@ class CandidateBulkDeleteView(GroupRequiredMixin, View):
             messages.info(request, 'No candidates were selected.')
         next_url = request.POST.get('next')
         return redirect(next_url or _remembered_list_url(request) or reverse('candidate_repository'))
-
-
-class BulkRejectClosedVacanciesView(GroupRequiredMixin, View):
-    """Move every still-active candidate under a CLOSED vacancy to Rejected.
-    Hired and already-terminal candidates are left untouched."""
-    allowed_groups = (HR_ADMIN, RECRUITER)
-    ACTIVE = (STATUS.OPEN, STATUS.SHORTLISTED, STATUS.ROUND1, STATUS.INTERVIEW, STATUS.FINAL_SELECTION)
-
-    def post(self, request):
-        performed_by = _performed_by(request)
-        cands = list(Candidate.objects.filter(
-            job__status=Job.Status.CLOSED, status__in=self.ACTIVE).select_related('job'))
-        history = [CandidateStatusHistory(
-            candidate=c, old_status=c.status, new_status=STATUS.REJECTED,
-            changed_by=request.user, performed_by=performed_by,
-            remarks=f'Auto-rejected: vacancy "{c.job.title}" is closed.') for c in cands]
-        Candidate.objects.filter(pk__in=[c.pk for c in cands]).update(
-            status=STATUS.REJECTED, updated_at=timezone.now())
-        CandidateStatusHistory.objects.bulk_create(history, batch_size=100)
-        messages.success(request, f'{len(cands)} candidate(s) in closed vacancies moved to Rejected.')
-        return redirect('job_manage_list')
 
 
 # ---------------------------------------------------------------------------

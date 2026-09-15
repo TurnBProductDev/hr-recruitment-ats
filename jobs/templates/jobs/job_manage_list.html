@@ -44,42 +44,9 @@
     <div class="vac-subtitle">{{ total_vacancies }} vacanc{{ total_vacancies|pluralize:"y,ies" }}</div>
   </div>
   <div class="vac-head-actions">
-    {% if is_hr_admin or is_recruiter %}
-    <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#rejectClosedModal">
-      <i class="bi bi-x-octagon"></i> Reject candidates of closed vacancies
-    </button>
-    {% endif %}
     <a href="{% url 'job_add' %}" class="btn btn-fill-app btn-sm"><i class="bi bi-plus-lg"></i> Create Vacancy</a>
   </div>
 </div>
-
-{% if is_hr_admin or is_recruiter %}
-<div class="modal fade" id="rejectClosedModal" tabindex="-1">
-  <div class="modal-dialog">
-    <form method="post" action="{% url 'candidate_reject_closed' %}">
-      {% csrf_token %}
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">Reject candidates of closed vacancies</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body">
-          <p class="small text-muted mb-2">Every candidate still in an active stage
-            (Open, Qualified, Round 1, Round 2, Final Selection) under a <strong>Closed</strong>
-            vacancy will be moved to <strong>Rejected</strong>. Hired candidates are left untouched.</p>
-          <label class="form-label">Done by</label>
-          <input type="text" name="performed_by" class="form-control"
-                 value="{{ user.get_full_name|default:user.get_username }}">
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline-app btn-sm" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-outline-danger btn-sm">Reject all</button>
-        </div>
-      </div>
-    </form>
-  </div>
-</div>
-{% endif %}
 
 <div class="app-card">
   <div class="vac-toolbar">
@@ -126,9 +93,8 @@
               <ul class="dropdown-menu dropdown-menu-end">
                 {% if job.status == 'OPEN' %}
                 <li>
-                  <form method="post" action="{% url 'job_close' job.pk %}" onsubmit="return confirm('Close this vacancy?');">
-                    {% csrf_token %}<button type="submit" class="dropdown-item text-danger">Close</button>
-                  </form>
+                  <button type="button" class="dropdown-item text-danger"
+                          data-bs-toggle="modal" data-bs-target="#closeJobModal{{ job.pk }}">Close</button>
                 </li>
                 {% else %}
                 <li>
@@ -153,6 +119,44 @@
     </table>
   </div>
 </div>
+
+{% comment %}
+  One modal per open vacancy (kept outside #jobTable so DataTables doesn't
+  count these as extra data rows) - closing asks right here whether to sweep
+  its still-active candidates into Future Prospects, replacing the old
+  separate "Reject candidates of closed vacancies" action.
+{% endcomment %}
+{% for job in jobs %}
+{% if job.status == 'OPEN' %}
+<div class="modal fade" id="closeJobModal{{ job.pk }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <form method="post" action="{% url 'job_close' job.pk %}">
+      {% csrf_token %}
+      <input type="hidden" name="performed_by" value="{{ user.get_full_name|default:user.get_username }}">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Close Vacancy</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-muted mb-3">This closes "{{ job.title }}" so it no longer accepts new applications.</p>
+          <div class="form-check">
+            <input type="checkbox" class="form-check-input" id="moveFuture{{ job.pk }}" name="move_to_future" value="1" checked>
+            <label class="form-check-label" for="moveFuture{{ job.pk }}">
+              Move candidates still active for this vacancy to Future Prospects
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-app btn-sm" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-outline-danger btn-sm">Close Vacancy</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+{% endfor %}
 {% endblock %}
 
 {% block extra_js %}

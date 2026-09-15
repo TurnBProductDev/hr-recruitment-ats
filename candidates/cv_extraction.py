@@ -105,6 +105,28 @@ def _clean_experience(raw_list):
     return entries
 
 
+def _clean_education(raw_list):
+    entries = []
+    for item in (raw_list or [])[:20]:
+        if not isinstance(item, dict):
+            continue
+        qualification = _clean(item.get('qualification'), 255)
+        if not qualification:
+            continue
+        try:
+            year = int(item.get('year_completed')) if item.get('year_completed') is not None else None
+        except (TypeError, ValueError):
+            year = None
+        entries.append({
+            'qualification': qualification,
+            'institution': _clean(item.get('institution'), 255),
+            'year_completed': year,
+            'percentage': _clean_decimal(item.get('percentage')),
+            'specialization': _clean(item.get('specialization'), 255),
+        })
+    return entries
+
+
 def _build_messages(cv_text, page_images):
     content = [{'type': 'text', 'text': f'CV text:\n\n{cv_text}' if cv_text else
                 'The CV text layer was unreadable - read the attached page images instead.'}]
@@ -119,7 +141,8 @@ def _build_messages(cv_text, page_images):
 
 def extract_profile(content, role_hint=None, source_hint=None, email_context=None):
     """Read a CV (raw PDF bytes) and return a dict of Candidate-shaped fields
-    plus an 'experience' list of CandidateExperience-shaped dicts.
+    plus an 'experience' list of CandidateExperience-shaped dicts and an
+    'education' list of CandidateEducation-shaped dicts.
 
     role_hint/source_hint are pre-known values (Bulk Upload CV: the vacancy/
     source HR already picked on the upload screen) - a steer, not something
@@ -204,4 +227,5 @@ def extract_profile(content, role_hint=None, source_hint=None, email_context=Non
         'source': _clean(raw.get('source'), 255) or (source_hint or None),
         'cv_summary': _clean(raw.get('summary')),
         'experience': _clean_experience(raw.get('experience')),
+        'education': _clean_education(raw.get('education')),
     }

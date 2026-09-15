@@ -120,10 +120,12 @@ def blacklist_candidate(candidate, reason, user=None, performed_by=None):
 def create_from_parsed_cv(fields, job, source, user=None, performed_by=None, remarks=None):
     """Create a Candidate from Logic-App-parsed CV fields (Bulk Upload CV).
 
-    Runs the same duplicate/blacklist checks as the careers form, and builds the
-    structured education record from the "Degree - College - Year" string the
-    same way sql/sp_intake_add_candidate.sql does. The vacancy and source come
-    from the upload screen, not from the CV.
+    Runs the same duplicate/blacklist checks as the careers form, and builds
+    one CandidateEducation row per entry in fields['education'] (every degree
+    the CV lists) - or, for the older Logic-App path that only ever produced
+    a single "Degree - College - Year" string, splits that one string into a
+    single row the same way sql/sp_intake_add_candidate.sql does. The vacancy
+    and source come from the upload screen, not from the CV.
     """
     from . import cv_parser  # local import: cv_parser imports settings/requests
 
@@ -161,14 +163,29 @@ def create_from_parsed_cv(fields, job, source, user=None, performed_by=None, rem
     if has_real_email:
         register_application(candidate)
 
-    qualification, institution, year = cv_parser.split_education(fields.get('qualification'))
-    if qualification:
-        CandidateEducation.objects.create(
-            candidate=candidate, qualification=qualification,
-            institution=institution, year_completed=year,
-        )
-        candidate.institution = institution
+    # Structured education list - present when the CV was read by
+    # candidates/cv_extraction.py (see its 'education' list); the older
+    # Logic-App path only ever gave one "Degree - College - Year" string, so
+    # it falls back to splitting that into a single CandidateEducation row.
+    education_entries = fields.get('education') or []
+    if education_entries:
+        for entry in education_entries:
+            CandidateEducation.objects.create(
+                candidate=candidate, qualification=entry['qualification'],
+                institution=entry.get('institution'), year_completed=entry.get('year_completed'),
+                percentage=entry.get('percentage'), specialization=entry.get('specialization'),
+            )
+        candidate.institution = education_entries[0].get('institution')
         candidate.save(update_fields=['institution'])
+    else:
+        qualification, institution, year = cv_parser.split_education(fields.get('qualification'))
+        if qualification:
+            CandidateEducation.objects.create(
+                candidate=candidate, qualification=qualification,
+                institution=institution, year_completed=year,
+            )
+            candidate.institution = institution
+            candidate.save(update_fields=['institution'])
 
     # Structured job history - present when the CV was read by
     # candidates/cv_extraction.py (see its 'experience' list); the older

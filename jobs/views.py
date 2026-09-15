@@ -6,7 +6,8 @@ from django.urls import reverse, reverse_lazy
 from django.views import View
 from django.views.generic import CreateView, DetailView, ListView, UpdateView
 
-from candidates.models import ScoringCriteria
+from candidates import services
+from candidates.models import Candidate, ScoringCriteria
 from candidates.permissions import HR_ADMIN, RECRUITER, GroupRequiredMixin
 from candidates.views import GENERAL_APPLICATION
 
@@ -154,13 +155,41 @@ class JobExtractJDView(GroupRequiredMixin, View):
 
 
 class JobCloseView(GroupRequiredMixin, View):
+    """Closing a vacancy optionally sweeps its still-active candidates
+    (anyone not already Hired/Rejected/Blacklisted/on Hold) into Future
+    Prospects in the same step - see job_manage_list.html's Close Vacancy
+    modal, which asks this every time rather than a separate global "Reject
+    candidates of closed vacancies" action."""
     allowed_groups = (HR_ADMIN, RECRUITER)
+    ACTIVE_STATUSES = (
+        Candidate.Status.OPEN, Candidate.Status.SHORTLISTED, Candidate.Status.ROUND1,
+        Candidate.Status.INTERVIEW, Candidate.Status.FINAL_SELECTION,
+    )
 
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk)
         job.status = Job.Status.CLOSED
         job.save(update_fields=['status'])
-        messages.success(request, f'Vacancy "{job.title}" closed.')
+
+        moved = 0
+        if request.POST.get('move_to_future') == '1':
+            performed_by = (request.POST.get('performed_by', '').strip()
+                            or request.user.get_full_name() or request.user.get_username())
+            remarks = f'Vacancy "{job.title}" closed.'
+            for candidate in Candidate.objects.filter(job=job, status__in=self.ACTIVE_STATUSES):
+                # move_to_future_prospects only re-tags a hold already in
+                # place, so put the candidate on Hold first (mirrors
+                # CandidateMoveToFutureView's own active-stage path).
+                services.change_status(candidate, Candidate.Status.SCREENING_HOLD, user=request.user,
+                                       remarks=remarks, performed_by=performed_by)
+                services.move_to_future_prospects(
+                    candidate, user=request.user, remarks=remarks, performed_by=performed_by)
+                moved += 1
+
+        message = f'Vacancy "{job.title}" closed.'
+        if moved:
+            message += f' {moved} candidate(s) moved to Future Prospects.'
+        messages.success(request, message)
         return redirect('job_manage_list')
 
 

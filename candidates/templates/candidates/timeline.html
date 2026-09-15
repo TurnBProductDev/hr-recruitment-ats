@@ -802,9 +802,12 @@ html { scroll-behavior: smooth; }
   Move to Future's modal is shared by two triggers: the Final Status
   section's resume-while-on-Hold action, and the Round 1/Round 2 schedule
   card's "Or Decide Without an Interview" quick action (candidate need not
-  already be on Hold for that one - see CandidateMoveToFutureView) - so it's
-  always rendered rather than gated on is_on_hold.
+  already be on Hold for that one - see CandidateMoveToFutureView). Gated on
+  show_move_to_future_modal (computed once in the view) rather than
+  duplicating both triggers' conditions here, so the modal's own URL never
+  renders onto the page when neither trigger is actually shown.
 {% endcomment %}
+{% if show_move_to_future_modal %}
 <div class="modal fade" id="moveToFutureModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <form method="post" action="{% url 'candidate_move_to_future' candidate.pk %}">
@@ -842,6 +845,7 @@ html { scroll-behavior: smooth; }
     </form>
   </div>
 </div>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}

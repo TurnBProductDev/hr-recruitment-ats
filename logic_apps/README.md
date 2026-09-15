@@ -45,10 +45,13 @@ reasoning.
 
 `sp_intake_add_candidate`'s new parameters (skills, linkedin, current_location,
 dob, last_role, last_company, total_experience_years, notice_period,
-expected/current salary, and an `experience_json` array for structured
-`CandidateExperience` rows) are all optional and default to `NULL` - this kept
-`CV-Automation-Flow` working unchanged for as long as it stayed live, calling
-the procedure with only its original parameter set.
+expected/current salary, an `experience_json` array for structured
+`CandidateExperience` rows, and an `education_json` array for structured
+`CandidateEducation` rows - every degree the CV lists, not just the highest
+one) are all optional and default to `NULL` - this kept `CV-Automation-Flow`
+working unchanged for as long as it stayed live, calling the procedure with
+only its original parameter set (which still includes the older, single-
+string `@education` parameter as a fallback for exactly that reason).
 
 ### `djangoApiKey` is never committed here - it's blank in this file on purpose
 

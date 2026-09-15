@@ -1254,11 +1254,16 @@ class MoveToFutureProspectsTests(TestCase):
         self.assertEqual(counts['rejected'], 1)
         self.assertEqual(counts['shortlisted'], 0)
 
-    def test_a_candidate_not_on_hold_is_unaffected(self):
-        services.change_status(self.candidate, Candidate.Status.ROUND1)  # takes them off hold
+    def test_move_to_future_also_works_from_an_active_stage(self):
+        """Not just while already on Hold - CandidateMoveToFutureView puts
+        the candidate on Hold first when they're still active (e.g. the
+        Round 1/Round 2 schedule card's own "Move to Future" quick action,
+        offered before an interview is even allocated)."""
+        services.change_status(self.candidate, Candidate.Status.ROUND1)  # resumed off hold
         self.client.post(reverse('candidate_move_to_future', args=[self.candidate.pk]))
         self.candidate.refresh_from_db()
-        self.assertEqual(self.candidate.status, Candidate.Status.ROUND1)
+        self.assertEqual(self.candidate.status, Candidate.Status.SCREENING_HOLD)
+        self.assertEqual(self.candidate.hold_from_status, Candidate.Status.OPEN)
 
     def test_final_status_box_offers_resume_reject_and_move_to_future(self):
         response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
@@ -1311,7 +1316,7 @@ class HiringBlockStageLabelTests(TestCase):
         response = self.client.get(reverse('candidate_timeline', args=[c.pk]))
         self.assertContains(response, 'CV Screening')
         self.assertContains(response, 'Update CV Screening Status')
-        self.assertContains(response, 'Qualify')
+        self.assertContains(response, 'Qualified')
 
     def test_tele_screening_stage(self):
         c = self._candidate(Candidate.Status.SHORTLISTED)
@@ -1324,10 +1329,14 @@ class HiringBlockStageLabelTests(TestCase):
         c = self._candidate(Candidate.Status.ROUND1)
         response = self.client.get(reverse('candidate_timeline', args=[c.pk]))
         self.assertContains(response, 'Round 1 Schedule')
-        # The decision card (Cleared/Hold/Reject) is hidden entirely until
-        # the interview is marked Done - only Schedule/Reschedule show.
+        # The full decision card (its own "Update Round 1 Status" heading) is
+        # still hidden until the interview is marked Done, but a quick "Or
+        # Decide Without an Interview" row (Cleared/Hold/Reject/Move to
+        # Future) is available even before one is scheduled/allocated, for
+        # candidates who don't need to go through this round at all.
         self.assertNotContains(response, 'Update Round 1 Status')
-        self.assertNotContains(response, reverse('candidate_interview_stage', args=[c.pk]))
+        self.assertContains(response, 'Or Decide Without an Interview')
+        self.assertContains(response, reverse('candidate_interview_stage', args=[c.pk]))
 
     def test_round1_decision_options_have_no_blacklist(self):
         c = self._candidate(Candidate.Status.ROUND1)

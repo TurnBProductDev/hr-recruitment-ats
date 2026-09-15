@@ -70,10 +70,10 @@
           <div class="vacancy-section-title">Content</div>
           <div class="row g-3">
             <div class="col-12"><label class="form-label">Description</label>{{ form.description }}</div>
-            <div class="col-12"><label class="form-label">Requirements</label>{{ form.requirements }}</div>
+            <div class="col-12"><label class="form-label">Must Have</label>{{ form.requirements }}</div>
             {% if is_hr_admin or is_recruiter %}
             <div class="col-12">
-              <label class="form-label">Extra Scoring Criteria</label>
+              <label class="form-label">Extra Requirements</label>
               {{ form.extra_scoring_criteria }}
               <div class="form-text">{{ form.extra_scoring_criteria.help_text }}</div>
             </div>

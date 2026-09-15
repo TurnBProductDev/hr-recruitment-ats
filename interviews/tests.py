@@ -475,7 +475,7 @@ class InterviewerRecommendationTests(TestCase):
         self.interview.refresh_from_db()
         self.candidate.refresh_from_db()
         self.assertEqual(self.interview.result, Interview.Result.PENDING)
-        self.assertEqual(self.interview.feedback, 'Recommended: Fail. Strong candidate.')
+        self.assertEqual(self.interview.feedback, 'Recommended: Reject. Strong candidate.')
         self.assertEqual(self.candidate.status, Candidate.Status.ROUND1)
 
     def test_interviewer_feedback_is_prefilled_on_the_candidate_page(self):
@@ -491,7 +491,7 @@ class InterviewerRecommendationTests(TestCase):
         hr.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
         self.client.force_login(hr)
         response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
-        self.assertContains(response, 'Recommended: Pass. Great communication skills.')
+        self.assertContains(response, 'Recommended: Move to Next Round. Great communication skills.')
 
     def test_hr_admin_pass_still_advances_the_candidate_immediately(self):
         hr = get_user_model().objects.create_user('hr3', 'hr3@turnb.com', 'pw')
@@ -826,7 +826,7 @@ class InterviewerPortalTests(TestCase):
         # together so HR sees both in one place.
         self.assertEqual(self.interview.status, Interview.Status.COMPLETED)
         self.assertEqual(self.interview.result, Interview.Result.PENDING)
-        self.assertEqual(self.interview.feedback, 'Recommended: Pass. Strong candidate.')
+        self.assertEqual(self.interview.feedback, 'Recommended: Move to Next Round. Strong candidate.')
         self.candidate.refresh_from_db()
         self.assertEqual(self.candidate.status, Candidate.Status.OPEN)
 

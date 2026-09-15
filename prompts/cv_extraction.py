@@ -47,11 +47,27 @@ RESPONSE_JSON_SCHEMA = {
                     'additionalProperties': False,
                 },
             },
+            'education': {
+                'type': 'array',
+                'description': 'Every degree/qualification listed on the CV, most recent first - not just the highest one.',
+                'items': {
+                    'type': 'object',
+                    'properties': {
+                        'qualification': {'type': 'string', 'description': "Degree name, e.g. 'MBA', 'B.Tech Computer Science', '12th Grade'."},
+                        'institution': {'type': ['string', 'null']},
+                        'year_completed': {'type': ['integer', 'null']},
+                        'percentage': {'type': ['number', 'null'], 'description': 'Percentage/CGPA as stated, else null.'},
+                        'specialization': {'type': ['string', 'null']},
+                    },
+                    'required': ['qualification', 'institution', 'year_completed', 'percentage', 'specialization'],
+                    'additionalProperties': False,
+                },
+            },
         },
         'required': ['name', 'email', 'mobile', 'dob', 'current_location', 'linkedin', 'portfolio_url',
                      'qualification', 'last_role', 'last_company', 'total_experience_years', 'skills',
                      'notice_period', 'expected_salary', 'current_salary', 'role_applied', 'source',
-                     'summary', 'experience'],
+                     'summary', 'experience', 'education'],
         'additionalProperties': False,
     },
 }
@@ -69,6 +85,9 @@ SYSTEM_PROMPT = (
     "anywhere in the CV (a Skills section, project descriptions, work experience bullets).\n"
     "6. experience: one entry per job, most recent first, with the skills/tools actually used in that role - "
     "not a repeat of the whole top-level skills list.\n"
+    "6b. education: one entry per degree/qualification listed on the CV (school, diploma, bachelor's, "
+    "master's, etc.), most recent first - list ALL of them, not just the highest. The top-level "
+    "'qualification' field should still mirror the highest/most recent entry here.\n"
     "7. total_experience_years: total professional experience as a decimal number (e.g. 5.5), not per-job.\n"
     "8. role_applied: the job title the candidate is applying for, from a subject line/cover note if given, "
     "else null - do not guess it from their current job title.\n"

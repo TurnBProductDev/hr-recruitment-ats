@@ -47,10 +47,22 @@ CREATE OR ALTER PROCEDURE dbo.sp_intake_add_candidate
     @current_salary          nvarchar(100)  = NULL,
     -- JSON array: [{"company_name":"...","designation":"...",
     -- "start_date":"YYYY-MM-DD","end_date":"YYYY-MM-DD","skills":"..."}, ...]
-    -- Mirrors CandidateExperience the same way @education already mirrors
-    -- CandidateEducation. A malformed entry (bad date, missing company) is
-    -- skipped, not a hard failure - never blocks the candidate being created.
-    @experience_json         nvarchar(max)  = NULL
+    -- A malformed entry (bad date, missing company) is skipped, not a hard
+    -- failure - never blocks the candidate being created.
+    @experience_json         nvarchar(max)  = NULL,
+    -- JSON array: [{"qualification":"...","institution":"...",
+    -- "year_completed":2024,"percentage":72.5,"specialization":"..."}, ...] -
+    -- every degree the CV lists, most recent first (mirrors
+    -- candidates/cv_extraction.py's 'education' list, same shape
+    -- candidates/services.py::create_from_parsed_cv writes via the ORM).
+    -- When supplied, this is used INSTEAD of @education for both the
+    -- candidate row's own institution column and the CandidateEducation
+    -- rows - @education is still accepted and still used as-is for the
+    -- candidate row's qualification column (the AI's single "highest/most
+    -- recent degree" string), and as the sole source of both when
+    -- @education_json is NULL/empty, so the disabled legacy
+    -- CV-Automation-Flow (single-string only) keeps working unmodified.
+    @education_json          nvarchar(max)  = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -103,13 +115,25 @@ BEGIN
     -- so the General Applications page can still group them by what they wanted.
     DECLARE @role nvarchar(255) = NULLIF(LTRIM(RTRIM(ISNULL(@role_applied, ''))), '');
 
-    -- Best-effort parse of "Degree - College - Year" - done up front (unlike
-    -- the old version, which parsed this after the main insert) so the split
-    -- institution can go straight onto the candidate row too, matching
+    -- Institution for the candidate row itself: from the first (most recent)
+    -- entry in @education_json when supplied - same as
+    -- candidates/services.py::create_from_parsed_cv using
+    -- education_entries[0].get('institution') - else the best-effort parse
+    -- of "Degree - College - Year" done up front (unlike the old version,
+    -- which parsed this after the main insert) so the split institution can
+    -- go straight onto the candidate row too, matching
     -- candidates/cv_extraction.py + services.py's own qualification/
-    -- institution split.
+    -- institution split. @edu_qual/@edu_yr are only ever used for the
+    -- legacy single-row CandidateEducation insert below.
     DECLARE @edu_qual nvarchar(255) = NULL, @edu_inst nvarchar(255) = NULL, @edu_yr int = NULL;
-    IF @education IS NOT NULL AND LEN(LTRIM(RTRIM(@education))) > 0
+    DECLARE @has_edu_json bit = CASE WHEN @education_json IS NOT NULL
+                                      AND LEN(LTRIM(RTRIM(@education_json))) > 0 THEN 1 ELSE 0 END;
+    IF @has_edu_json = 1
+        SELECT TOP 1 @edu_inst = NULLIF(LTRIM(RTRIM(x.institution)), '')
+        FROM OPENJSON(@education_json) j
+        CROSS APPLY OPENJSON(j.value) WITH (institution nvarchar(255) '$.institution') x
+        ORDER BY TRY_CAST(j.[key] AS int);
+    ELSE IF @education IS NOT NULL AND LEN(LTRIM(RTRIM(@education))) > 0
     BEGIN
         DECLARE @edu nvarchar(255) = LTRIM(RTRIM(@education));
         DECLARE @p1 int = CHARINDEX(' - ', @edu);
@@ -158,8 +182,27 @@ BEGIN
         (old_status, new_status, remarks, changed_at, candidate_id, performed_by)
     VALUES ('', @status, 'Applied via careers intake (Logic App)', @created, @cid, 'Careers Intake');
 
-    -- Structured Education record, from the same split computed above.
-    IF @edu_qual IS NOT NULL
+    -- Structured Education records: every entry in @education_json when
+    -- supplied (mirrors @experience_json's OPENJSON pattern - year_completed/
+    -- percentage are read as text and TRY_CONVERTed rather than typed
+    -- directly in the WITH clause, so one malformed value yields NULL
+    -- instead of failing the whole batch, same as @experience_json's dates).
+    IF @has_edu_json = 1
+        INSERT INTO dbo.candidates_candidateeducation
+            (candidate_id, qualification, institution, year_completed, percentage, specialization)
+        SELECT @cid, LEFT(x.qualification, 255), NULLIF(LEFT(x.institution, 255), ''),
+               TRY_CONVERT(int, x.year_completed), TRY_CONVERT(decimal(5,2), x.percentage),
+               NULLIF(LEFT(x.specialization, 255), '')
+        FROM OPENJSON(@education_json) j
+        CROSS APPLY OPENJSON(j.value) WITH (
+            qualification  nvarchar(255)  '$.qualification',
+            institution    nvarchar(255)  '$.institution',
+            year_completed nvarchar(20)   '$.year_completed',
+            percentage     nvarchar(20)   '$.percentage',
+            specialization nvarchar(255)  '$.specialization'
+        ) x
+        WHERE x.qualification IS NOT NULL AND LTRIM(RTRIM(x.qualification)) <> '';
+    ELSE IF @edu_qual IS NOT NULL
         INSERT INTO dbo.candidates_candidateeducation
             (candidate_id, qualification, institution, year_completed)
         VALUES (@cid, LEFT(NULLIF(@edu_qual, ''), 255), NULLIF(@edu_inst, ''), @edu_yr);

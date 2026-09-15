@@ -76,8 +76,6 @@ urlpatterns = [
 
     path('hr/candidates/<int:pk>/revert/', views.CandidateRevertLastActionView.as_view(), name='candidate_revert'),
     path('hr/candidates/<int:pk>/delete/', views.CandidateDeleteView.as_view(), name='candidate_delete'),
-    path('hr/candidates/reject-closed-vacancies/', views.BulkRejectClosedVacanciesView.as_view(),
-         name='candidate_reject_closed'),
 
     path('hr/candidates/bulk-upload/', views.BulkUploadCVView.as_view(), name='candidate_bulk_upload'),
     path('hr/candidates/bulk-upload/<int:pk>/', views.BulkUploadProgressView.as_view(),

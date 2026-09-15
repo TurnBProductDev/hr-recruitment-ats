@@ -30,7 +30,7 @@ class JobForm(BootstrapFormMixin, forms.ModelForm):
     # rendering this field for them). The dedicated Scoring Criteria page
     # stays HR_ADMIN-only regardless.
     extra_scoring_criteria = forms.CharField(
-        label='Extra Scoring Criteria', required=False,
+        label='Extra Requirements', required=False,
         widget=forms.Textarea(attrs={
             'rows': 4,
             'placeholder': 'e.g. Give extra weight to candidates with hands-on AI/ML project '

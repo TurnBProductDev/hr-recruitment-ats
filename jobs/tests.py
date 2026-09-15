@@ -179,7 +179,7 @@ class JobFormScoringCriteriaTests(TestCase):
     def test_recruiter_sees_the_field_and_can_set_it(self):
         self.client.login(username='recruiter', password='pw')
         response = self.client.get(reverse('job_add'))
-        self.assertContains(response, 'Extra Scoring Criteria')
+        self.assertContains(response, 'Extra Requirements')
 
         response = self.client.post(reverse('job_add'), self._post_data(
             extra_scoring_criteria='Prefer candidates with call-centre experience.'))
