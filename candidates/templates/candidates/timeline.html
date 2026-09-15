@@ -200,37 +200,21 @@ html { scroll-behavior: smooth; }
       <span class="block-header-icon"><i class="bi bi-person-vcard"></i></span>
       <span class="block-header-title">Candidate Details</span>
     </div>
-    <div class="row g-3">
-      <div class="col-lg-7">
-        <div class="card app-card p-4 mb-3">
+    <div class="card app-card p-4 mb-3">
+      <h2 style="font-size:1.3rem; font-weight:800; margin-bottom:20px;">{{ candidate.full_name }}</h2>
+      <div class="row g-4">
+        <div class="col-lg-7">
           <div class="section-eyebrow">Contact</div>
           <div class="field-grid">
             <div><div class="field-label">Email</div><div class="field-value">{{ candidate.email }}</div></div>
             <div><div class="field-label">Phone</div><div class="field-value">{{ candidate.phone|default:"-" }}</div></div>
             <div><div class="field-label">DOB</div><div class="field-value {% if not candidate.dob %}text-muted{% endif %}">{{ candidate.dob|default:"-" }}</div></div>
             <div><div class="field-label">Location</div><div class="field-value {% if not candidate.current_location %}text-muted{% endif %}">{{ candidate.current_location|default:"-" }}</div></div>
-            <div><div class="field-label">LinkedIn</div><div class="field-value {% if not candidate.linkedin %}text-muted{% endif %}">{% if candidate.linkedin %}<a href="{{ candidate.linkedin }}" target="_blank">{{ candidate.linkedin }}</a>{% else %}-{% endif %}</div></div>
-            <div><div class="field-label">Portfolio</div><div class="field-value {% if not candidate.portfolio_url %}text-muted{% endif %}">{% if candidate.portfolio_url %}<a href="{{ candidate.portfolio_url }}" target="_blank">{{ candidate.portfolio_url }}</a>{% else %}-{% endif %}</div></div>
+            <div class="field-full"><div class="field-label">LinkedIn</div><div class="field-value {% if not candidate.linkedin %}text-muted{% endif %}">{% if candidate.linkedin %}<a href="{{ candidate.linkedin }}" target="_blank">{{ candidate.linkedin }}</a>{% else %}-{% endif %}</div></div>
           </div>
         </div>
 
-        <div class="card app-card p-4 mb-3">
-          <div class="section-eyebrow">Background</div>
-          <div class="field-grid">
-            <div class="field-full"><div class="field-label">Qualification</div><div class="field-value {% if not candidate.qualification %}text-muted{% endif %}">{{ candidate.qualification|default:"-" }}</div></div>
-            <div class="field-full">
-              <div class="field-label">Experience</div>
-              <div class="field-value {% if not candidate.total_experience_years %}text-muted{% endif %}">
-                {% if candidate.total_experience_years %}{{ candidate.total_experience_years }} yrs{% else %}-{% endif %}
-              </div>
-            </div>
-            <div><div class="field-label">Notice Period</div><div class="field-value {% if not candidate.notice_period %}text-muted{% endif %}">{{ candidate.notice_period|default:"-" }}</div></div>
-            <div><div class="field-label">Current / Expected Salary</div><div class="field-value">{{ candidate.current_salary|default:"-" }} / {{ candidate.expected_salary|default:"-" }}</div></div>
-          </div>
-        </div>
-
-        <div class="card app-card p-4">
-          <div class="section-eyebrow">Application</div>
+        <div class="col-lg-5" style="border-left:1px solid var(--border-color); padding-left:28px;">
           <div class="d-flex flex-column gap-3">
             <div>
               <div class="field-label">Applied Position</div>
@@ -254,76 +238,85 @@ html { scroll-behavior: smooth; }
               </form>
             </div>
             <div>
-              <div class="field-label mb-1">Source</div>
+              <div class="field-label mb-1">Mapped Source</div>
               <form method="post" action="{% url 'candidate_change_source' candidate.pk %}" class="d-flex gap-2 align-items-center">
                 {% csrf_token %}
                 <input type="text" name="source" value="{{ candidate.source|default:'' }}" class="form-control form-control-sm flex-grow-1" placeholder="e.g. Careers">
                 <button type="submit" class="btn btn-sm btn-outline-app">Save</button>
               </form>
             </div>
+            <div>
+              <div class="field-label">Attachments</div>
+              {% if candidate.resume_url or candidate.resume_blob_url %}
+              <div class="field-value"><a href="{% url 'candidate_cv' candidate.pk %}" target="_blank"><i class="bi bi-file-earmark-person"></i> Open CV</a></div>
+              {% else %}
+              <div class="field-value text-muted">No attachments.</div>
+              {% endif %}
+              {% for a in attachments %}
+                <div class="mt-1"><a href="{{ a.file.url }}" target="_blank">{{ a.label|default:a.file.name }}</a> <span class="text-muted pd-meta">{{ a.uploaded_at|date:"d M Y" }}</span></div>
+              {% endfor %}
+            </div>
+            <div>
+              <div class="field-label">Notice Period</div>
+              <div class="field-value {% if not candidate.notice_period %}text-muted{% endif %}">{{ candidate.notice_period|default:"-" }}</div>
+            </div>
+            <div>
+              <div class="field-label">Current / Expected Salary</div>
+              <div class="field-value">{{ candidate.current_salary|default:"-" }} / {{ candidate.expected_salary|default:"-" }}</div>
+            </div>
           </div>
         </div>
       </div>
+    </div>
 
-      <div class="col-lg-5">
-        <div class="card app-card p-4 mb-3">
-          <div class="section-eyebrow">Education</div>
-          {% for e in candidate.education.all %}
-            <div class="mb-2 pb-2 {% if not forloop.last %}border-bottom{% endif %}">
-              <strong>{{ e.qualification }}</strong> {% if e.specialization %}({{ e.specialization }}){% endif %}<br>
-              <span class="text-muted pd-meta">{{ e.institution|default:"-" }} &middot; {{ e.year_completed|default:"-" }} &middot; {{ e.percentage|default:"-" }}%</span>
-            </div>
-          {% empty %}<p class="text-muted mb-0">No education records.</p>{% endfor %}
+    <div class="card app-card p-4 mb-3">
+      <div class="section-eyebrow">Education</div>
+      {% for e in candidate.education.all %}
+        <div class="mb-2 pb-2 {% if not forloop.last %}border-bottom{% endif %}">
+          <strong>{{ e.qualification }}</strong> {% if e.specialization %}({{ e.specialization }}){% endif %}<br>
+          <span class="text-muted pd-meta">{{ e.institution|default:"-" }} &middot; {{ e.year_completed|default:"-" }} &middot; {{ e.percentage|default:"-" }}%</span>
         </div>
+      {% empty %}<p class="text-muted mb-0">No education records.</p>{% endfor %}
+    </div>
 
-        <div class="card app-card p-4 mb-3">
-          <div class="section-eyebrow">Experience</div>
-          {% for e in candidate.experience_set.all %}
-            <div class="mb-2 pb-2 {% if not forloop.last %}border-bottom{% endif %}">
-              <strong>{{ e.designation|default:"-" }}</strong> @ {{ e.company_name }}<br>
-              <span class="text-muted pd-meta">{{ e.start_date|default:"-" }} &rarr; {{ e.end_date|default:"Present" }} &middot; {{ e.skills|default:"" }}</span>
-            </div>
-          {% empty %}
-            {% if candidate.last_role or candidate.last_company %}
-              <div>
-                <strong>{{ candidate.last_role|default:"-" }}</strong><br>
-                <span class="text-muted pd-meta">{{ candidate.last_company|default:"-" }}</span>
-              </div>
-            {% else %}<p class="text-muted mb-0">No experience records.</p>{% endif %}
-          {% endfor %}
-        </div>
-
-        <div class="card app-card p-4 mb-3">
-          <div class="section-eyebrow">Attachments</div>
-          {% if candidate.resume_url or candidate.resume_blob_url %}
-          <div class="mb-{% if attachments %}3{% else %}0{% endif %}">
-            <div class="field-label">Resume (CV)</div>
-            <div class="field-value"><a href="{% url 'candidate_cv' candidate.pk %}" target="_blank"><i class="bi bi-file-earmark-person"></i> Open CV</a></div>
+    <div class="card app-card p-4 mb-3">
+      <div class="card-head-row">
+        <div class="section-eyebrow mb-0">Experience</div>
+        <div class="text-end">
+          <div class="pd-meta text-muted fw-bold">TOTAL EXPERIENCE</div>
+          <div style="font-size:1.15rem; font-weight:800; color:var(--dark-green);" class="text-accent-green">
+            {% if candidate.total_experience_years %}{{ candidate.total_experience_years }} yrs{% else %}-{% endif %}
           </div>
-          {% endif %}
-          {% for a in attachments %}
-            <div><a href="{{ a.file.url }}" target="_blank">{{ a.label|default:a.file.name }}</a> <span class="text-muted pd-meta">{{ a.uploaded_at|date:"d M Y" }}</span></div>
-          {% endfor %}
-          {% if not candidate.resume_url and not candidate.resume_blob_url and not attachments %}
-            <p class="text-muted mb-0">No attachments.</p>
-          {% endif %}
-        </div>
-
-        <div class="card app-card p-4">
-          <div class="section-eyebrow">Notes</div>
-          <form method="post" action="{% url 'candidate_add_note' candidate.pk %}" class="mb-3 js-autosave">
-            {% csrf_token %}
-            {{ note_form.text }}
-            <div class="text-end mt-2"><button type="submit" class="btn btn-sm btn-fill-app js-savebtn">Save Note</button></div>
-          </form>
-          {% for n in notes %}
-            <div class="mb-2 pb-2 border-bottom">
-              <div class="pd-body">{{ n.text }}</div>
-              <div class="pd-meta text-muted">{{ n.author|default:"Unknown" }} &middot; {{ n.created_at|date:"d M Y H:i" }}</div>
-            </div>
-          {% empty %}<p class="text-muted mb-0">No notes yet.</p>{% endfor %}
         </div>
       </div>
+      {% for e in candidate.experience_set.all %}
+        <div class="mb-2 pb-2 {% if not forloop.last %}border-bottom{% endif %}">
+          <strong>{{ e.designation|default:"-" }}</strong> @ {{ e.company_name }}<br>
+          <span class="text-muted pd-meta">{{ e.start_date|default:"-" }} &rarr; {{ e.end_date|default:"Present" }} &middot; {{ e.skills|default:"" }}</span>
+        </div>
+      {% empty %}
+        {% if candidate.last_role or candidate.last_company %}
+          <div>
+            <strong>{{ candidate.last_role|default:"-" }}</strong><br>
+            <span class="text-muted pd-meta">{{ candidate.last_company|default:"-" }}</span>
+          </div>
+        {% else %}<p class="text-muted mb-0">No experience records.</p>{% endif %}
+      {% endfor %}
+    </div>
+
+    <div class="card app-card p-4">
+      <div class="section-eyebrow">Notes</div>
+      <form method="post" action="{% url 'candidate_add_note' candidate.pk %}" class="mb-3 js-autosave">
+        {% csrf_token %}
+        {{ note_form.text }}
+        <div class="text-end mt-2"><button type="submit" class="btn btn-sm btn-fill-app js-savebtn">Save Note</button></div>
+      </form>
+      {% for n in notes %}
+        <div class="mb-2 pb-2 border-bottom">
+          <div class="pd-body">{{ n.text }}</div>
+          <div class="pd-meta text-muted">{{ n.author|default:"Unknown" }} &middot; {{ n.created_at|date:"d M Y H:i" }}</div>
+        </div>
+      {% empty %}<p class="text-muted mb-0">No notes yet.</p>{% endfor %}
     </div>
   </div>
 
