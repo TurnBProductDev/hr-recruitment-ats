@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import portal_views, views
+from . import portal_views, public_views, views
 
 urlpatterns = [
     path('hr/interviews/', views.InterviewSchedulerListView.as_view(), name='interview_scheduler'),
@@ -11,11 +11,14 @@ urlpatterns = [
     path('hr/interviews/<int:pk>/cancel/', views.InterviewCancelView.as_view(), name='interview_cancel'),
     path('hr/interviews/<int:pk>/result/', views.InterviewResultView.as_view(), name='interview_result'),
     path('hr/interviews/<int:pk>/send-invite/', views.InterviewSendInviteView.as_view(), name='interview_send_invite'),
-    path('hr/interview-requests/<int:pk>/select-slot/', views.InterviewSelectSlotView.as_view(), name='interview_request_select_slot'),
+    path('hr/interview-requests/<int:pk>/approve/', views.InterviewRequestApproveView.as_view(), name='interview_request_approve'),
     path('hr/interview-requests/<int:pk>/new-slots/', views.InterviewRequestNewSlotsView.as_view(), name='interview_request_new_slots'),
 
     path('interviewer/login/', portal_views.InterviewerLoginView.as_view(), name='interviewer_login'),
     path('interviewer/', portal_views.InterviewerHomeView.as_view(), name='interviewer_home'),
     path('interviewer/candidates/<int:pk>/', portal_views.InterviewerCandidateView.as_view(), name='interviewer_candidate'),
     path('interviewer/requests/<int:pk>/propose-slots/', portal_views.InterviewProposeSlotsView.as_view(), name='interviewer_propose_slots'),
+
+    # Public, unauthenticated - reached only from the emailed slot-pick link.
+    path('interview-slots/<str:token>/', public_views.CandidateSlotPickView.as_view(), name='candidate_slot_pick'),
 ]

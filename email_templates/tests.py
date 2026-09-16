@@ -9,7 +9,9 @@ from candidates.models import Candidate
 from candidates.rejection_emails import default_body, default_subject
 from interviews.invites import default_body as invite_body, default_subject as invite_subject
 from interviews.models import Interview, InterviewRequest
-from interviews.slot_emails import notify_hr_slots_proposed, notify_interviewer_new_request
+from interviews.slot_emails import (
+    notify_candidate_select_slot, notify_hr_candidate_selected, notify_interviewer_new_request,
+)
 from jobs.models import Job
 
 from .models import EmailTemplate
@@ -17,11 +19,12 @@ from .store import render_email
 
 
 class EmailTemplateSeedTests(TestCase):
-    def test_all_six_are_seeded(self):
+    def test_all_eight_are_seeded(self):
         keys = set(EmailTemplate.objects.values_list('key', flat=True))
         self.assertEqual(keys, {
             'rejection', 'interview_invite', 'interviewer_new_request',
             'hr_slots_proposed', 'interviewer_new_slots_needed', 'password_reset',
+            'candidate_select_slot', 'hr_candidate_selected_slot',
         })
 
     def test_rejection_seed_matches_todays_wording(self):
@@ -82,19 +85,38 @@ class EmailCallSiteWiringTests(TestCase):
             notify_interviewer_new_request(request_obj)
         self.assertEqual(post.call_args.kwargs['json']['body'], 'CUSTOM MARKER for Rose E G.')
 
-    def test_editing_hr_slots_proposed_body_reaches_the_sent_email(self):
+    def test_editing_candidate_select_slot_body_reaches_the_sent_email(self):
+        interviewer = get_user_model().objects.create_user('panel', 'panel@turnb.com', 'pw')
+        request_obj = InterviewRequest.objects.create(
+            candidate=self.candidate, round_type=Interview.RoundType.ROUND1, interviewer=interviewer)
+        row = EmailTemplate.objects.get(key='candidate_select_slot')
+        row.body = 'CUSTOM MARKER, pick here: {select_url}'
+        row.save()
+        with mock.patch('candidates.logic_app_mail.requests.post',
+                         return_value=mock.Mock(status_code=200, text='')) as post:
+            notify_candidate_select_slot(request_obj, 'https://ats.example/interview-slots/tok123/')
+        payload = post.call_args.kwargs['json']
+        self.assertEqual(payload['to'], self.candidate.email)
+        self.assertIn('CUSTOM MARKER, pick here: https://ats.example/interview-slots/tok123/', payload['body'])
+
+    def test_editing_hr_candidate_selected_slot_body_reaches_the_sent_email(self):
         hr_user = get_user_model().objects.create_user('hr', 'hr@turnb.com', 'pw')
         interviewer = get_user_model().objects.create_user('panel', 'panel@turnb.com', 'pw')
         request_obj = InterviewRequest.objects.create(
             candidate=self.candidate, round_type=Interview.RoundType.ROUND1,
             interviewer=interviewer, created_by=hr_user)
-        row = EmailTemplate.objects.get(key='hr_slots_proposed')
-        row.body = 'CUSTOM MARKER, slots: {slot_lines}'
+        slot = request_obj.slots.create(start_datetime=timezone.now() + timezone.timedelta(days=1))
+        request_obj.candidate_selected_slot = slot
+        request_obj.save(update_fields=['candidate_selected_slot'])
+        row = EmailTemplate.objects.get(key='hr_candidate_selected_slot')
+        row.body = 'CUSTOM MARKER, slot: {selected_slot}'
         row.save()
         with mock.patch('candidates.logic_app_mail.requests.post',
                          return_value=mock.Mock(status_code=200, text='')) as post:
-            notify_hr_slots_proposed(request_obj)
-        self.assertIn('CUSTOM MARKER, slots:', post.call_args.kwargs['json']['body'])
+            notify_hr_candidate_selected(request_obj, 'https://ats.example/candidate/1/')
+        payload = post.call_args.kwargs['json']
+        self.assertEqual(payload['to'], hr_user.email)
+        self.assertIn('CUSTOM MARKER, slot:', payload['body'])
 
 
 class EmailTemplateAdminTests(TestCase):

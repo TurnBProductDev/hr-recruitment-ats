@@ -971,18 +971,20 @@ class HoldNamingTests(TestCase):
         self.client.post(reverse('candidate_revert', args=[self.candidate.pk]))
         self.assertEqual(self.candidate.interview_requests.count(), 0)
 
-    def test_undo_right_after_selecting_a_slot_reverts_to_awaiting_selection(self):
+    def test_undo_right_after_approving_a_selected_slot_reverts_to_awaiting_hr_approval(self):
         interviewer = self._interviewer()
         req = InterviewRequest.objects.create(
             candidate=self.candidate, round_type=Interview.RoundType.ROUND1,
-            interviewer=interviewer, status=InterviewRequest.Status.AWAITING_SELECTION)
+            interviewer=interviewer, status=InterviewRequest.Status.AWAITING_HR_APPROVAL)
         slot = req.slots.create(start_datetime=timezone.now() + timezone.timedelta(days=1))
-        self.client.post(reverse('interview_request_select_slot', args=[req.pk]), {'slot': slot.pk})
+        req.candidate_selected_slot = slot
+        req.save(update_fields=['candidate_selected_slot'])
+        self.client.post(reverse('interview_request_approve', args=[req.pk]))
         self.assertEqual(self.candidate.interviews.count(), 1)
         self.client.post(reverse('candidate_revert', args=[self.candidate.pk]))
         self.assertEqual(self.candidate.interviews.count(), 0)
         req.refresh_from_db()
-        self.assertEqual(req.status, InterviewRequest.Status.AWAITING_SELECTION)
+        self.assertEqual(req.status, InterviewRequest.Status.AWAITING_HR_APPROVAL)
         self.assertIsNone(req.interview_id)
 
     def test_undo_right_after_cancelling_restores_the_interview(self):

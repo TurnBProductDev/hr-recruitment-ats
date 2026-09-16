@@ -46,7 +46,8 @@
               <td>{{ r.get_round_type_display }}</td>
               <td>
                 {% if r.status == 'AWAITING_SLOTS' %}<span class="text-muted">Awaiting your slots</span>
-                {% else %}<span class="text-muted">Waiting on HR to pick a slot</span>{% endif %}
+                {% elif r.status == 'AWAITING_SELECTION' %}<span class="text-muted">Waiting on the candidate to pick a slot</span>
+                {% else %}<span class="text-muted">Candidate picked a slot - awaiting HR approval</span>{% endif %}
               </td>
               <td class="text-nowrap text-end">
                 {% if r.status == 'AWAITING_SLOTS' %}

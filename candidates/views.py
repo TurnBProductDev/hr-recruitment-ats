@@ -797,7 +797,7 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
         ctx['interviews'] = candidate.interviews.select_related('interviewer').all()
         ctx['interview_requests'] = (
             candidate.interview_requests.filter(status__in=InterviewRequest.OPEN_STATUSES)
-            .select_related('interviewer').prefetch_related('slots'))
+            .select_related('interviewer', 'candidate_selected_slot').prefetch_related('slots'))
         ctx['note_form'] = CandidateNoteForm()
 
         # Unified activity feed: every action (status changes, notes, calls,
@@ -1462,13 +1462,15 @@ class CandidateRevertLastActionView(GroupRequiredMixin, View):
         messages.success(request, f'Last action undone — {candidate.full_name} is back to "{candidate.status_label}".')
 
     def _undo_interview_created(self, request, candidate, interview):
-        # If this interview came from picking a proposed slot rather than a
-        # direct schedule (interviews.views.InterviewSelectSlotView), put its
-        # InterviewRequest back to awaiting HR's pick instead of leaving it
-        # pointing at an interview that's about to stop existing.
+        # If this interview came from HR approving a candidate's picked slot
+        # (interviews.views.InterviewRequestApproveView) rather than a direct
+        # schedule, put its InterviewRequest back to awaiting HR's approval -
+        # the candidate's pick itself is still valid, only the approval is
+        # being undone - instead of leaving it pointing at an interview
+        # that's about to stop existing.
         req = InterviewRequest.objects.filter(interview=interview).first()
         if req:
-            req.status = InterviewRequest.Status.AWAITING_SELECTION
+            req.status = InterviewRequest.Status.AWAITING_HR_APPROVAL
             req.interview = None
             req.save(update_fields=['status', 'interview'])
         interview.delete()

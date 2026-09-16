@@ -1,0 +1,74 @@
+{% extends "public_base.html" %}
+{% block title %}{% if state == 'open' %}Pick Your Interview Time{% else %}Interview Scheduling{% endif %}{% endblock %}
+
+{% block extra_css %}
+<style>
+.slot-option-list { display:flex; flex-direction:column; gap:10px; }
+.slot-option {
+  display:flex; align-items:center; justify-content:space-between; gap:16px;
+  border:1.5px solid var(--border-color); border-radius:10px; padding:16px 20px;
+  cursor:pointer; transition:border-color .15s ease, background-color .15s ease;
+}
+.slot-option:hover { border-color: var(--primary-green); }
+.slot-option:has(input:checked) { border-color: var(--primary-green); background:#f0f9f8; }
+.slot-option-time { font-size:1rem; font-weight:600; color:#1a2e35; }
+.slot-option input[type="radio"] {
+  width:20px; height:20px; margin:0; flex-shrink:0; cursor:pointer; accent-color: var(--primary-green);
+}
+.pick-icon { font-size:2.5rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card app-card p-4 p-md-5" style="max-width:640px; margin:0 auto;">
+  {% if state == 'open' %}
+    <h3 class="mb-1">Pick your interview time</h3>
+    <p class="text-muted mb-1">{{ interview_request.candidate.full_name }} &middot; {{ interview_request.get_round_type_display }}</p>
+    <p class="text-muted small">All times shown in Indian Standard Time (IST).</p>
+
+    <form method="post">
+      {% csrf_token %}
+      {% for e in form.non_field_errors %}<div class="alert alert-danger py-2 small">{{ e }}</div>{% endfor %}
+      <div class="slot-option-list mb-4">
+        {% for radio in form.slot %}
+        <label class="slot-option">
+          <span class="slot-option-time">{{ radio.choice_label }}</span>
+          {{ radio.tag }}
+        </label>
+        {% endfor %}
+        {% for e in form.slot.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
+      </div>
+      <button type="submit" class="btn btn-fill-app">Confirm This Time</button>
+    </form>
+
+  {% elif state == 'already_selected' %}
+    <i class="bi bi-check-circle-fill pick-icon" style="color:var(--primary-green);"></i>
+    <h3 class="mt-3">You've already selected a time</h3>
+    <p>
+      You picked <strong>{{ interview_request.candidate_selected_slot.start_datetime|date:"l, d M Y, h:i A" }} IST</strong>
+      for your {{ interview_request.get_round_type_display }} interview. We'll be in touch shortly to confirm.
+      If you need to change this, please get in touch with us.
+    </p>
+    <p class="text-muted small mb-0">TurnB Business Services Pvt Ltd</p>
+
+  {% elif state == 'expired' %}
+    <i class="bi bi-clock-history pick-icon text-muted"></i>
+    <h3 class="mt-3">This link has expired</h3>
+    <p>
+      This interview scheduling link is no longer active - it was valid for 48 hours after being sent.
+      Please get in touch with us and we'll share new time options
+      {% if interview_request %}for your {{ interview_request.get_round_type_display }} interview{% endif %}.
+    </p>
+    <p class="text-muted small mb-0">TurnB Business Services Pvt Ltd</p>
+
+  {% else %}
+    <i class="bi bi-x-circle pick-icon text-muted"></i>
+    <h3 class="mt-3">This link isn't valid</h3>
+    <p>
+      We couldn't find an interview scheduling request for this link. If you're expecting to
+      schedule an interview with us, please get in touch and we'll help sort it out.
+    </p>
+    <p class="text-muted small mb-0">TurnB Business Services Pvt Ltd</p>
+  {% endif %}
+</div>
+{% endblock %}

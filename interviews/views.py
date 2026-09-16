@@ -2,7 +2,7 @@ import logging
 
 from django.contrib import messages
 from django.db.models import BooleanField, Case, Value, When
-from django.http import Http404, HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -20,7 +20,7 @@ from candidates.permissions import (
 from notifications import services as notifications
 
 from . import graph_client, invites, slot_emails
-from .forms import InterviewAllocationForm, InterviewForm, InterviewResultForm, InterviewSelectSlotForm
+from .forms import InterviewAllocationForm, InterviewForm, InterviewResultForm
 from .models import (
     INTERVIEW_DURATION, Interview, InterviewReschedule, InterviewRequest,
     interviewer_conflict_message, open_interview_message, open_interview_request_message,
@@ -196,71 +196,64 @@ class InterviewAllocateView(GroupRequiredMixin, CreateView):
         return reverse('candidate_timeline', args=[self.candidate.pk])
 
 
-class InterviewSelectSlotView(GroupRequiredMixin, View):
-    """Step 3: HR picks one of the interviewer's proposed slots. This is what
-    actually creates the Interview row - everything after this point (invite
-    review/send, results, reschedule) is the existing flow, untouched."""
+class InterviewRequestApproveView(GroupRequiredMixin, View):
+    """HR approves the slot the candidate picked. This is what actually
+    creates the Interview row - everything after this point (invite
+    review/send, results, reschedule) is the existing flow, untouched. No
+    invite is auto-sent (the popup's Send button is already paused - see
+    _invite_draft_response); HR sends it manually for now."""
     allowed_groups = (HR_ADMIN, RECRUITER)
 
-    def _request_or_404(self, pk):
-        request_obj = get_object_or_404(InterviewRequest, pk=pk)
-        if request_obj.status != InterviewRequest.Status.AWAITING_SELECTION:
-            raise Http404('No slots awaiting selection for this request.')
-        return request_obj
-
-    def get(self, request, pk):
-        request_obj = self._request_or_404(pk)
-        form = InterviewSelectSlotForm(request=request_obj)
-        html = render_to_string('interviews/_slot_selection_form.html', {
-            'interview_request': request_obj, 'form': form,
-        }, request=request)
-        return HttpResponse(html)
-
     def post(self, request, pk):
-        request_obj = self._request_or_404(pk)
-        form = InterviewSelectSlotForm(request.POST, request=request_obj)
-        if not form.is_valid():
-            html = render_to_string('interviews/_slot_selection_form.html', {
-                'interview_request': request_obj, 'form': form,
-            }, request=request)
-            return HttpResponse(html, status=400)
+        request_obj = get_object_or_404(
+            InterviewRequest, pk=pk, status=InterviewRequest.Status.AWAITING_HR_APPROVAL)
+        slot = request_obj.candidate_selected_slot
+        if not slot:
+            messages.error(request, 'No selected slot to approve.')
+            return redirect('candidate_timeline', pk=request_obj.candidate_id)
 
-        slot = form.cleaned_data['slot']
         clash = Interview.conflicts_for(request_obj.interviewer, slot.start_datetime).first()
         if clash:
-            form.add_error(None, interviewer_conflict_message(clash))
-            html = render_to_string('interviews/_slot_selection_form.html', {
-                'interview_request': request_obj, 'form': form,
-            }, request=request)
-            return HttpResponse(html, status=400)
+            messages.error(request, interviewer_conflict_message(clash))
+            return redirect('candidate_timeline', pk=request_obj.candidate_id)
 
         interview = Interview.objects.create(
             candidate=request_obj.candidate, round_type=request_obj.round_type,
             interviewer=request_obj.interviewer, scheduled_date=slot.start_datetime,
-            mode=request_obj.mode, meeting_link=form.cleaned_data.get('meeting_link') or '',
-            created_by=request.user,
+            mode=request_obj.mode, created_by=request.user,
         )
         request_obj.status = InterviewRequest.Status.SCHEDULED
         request_obj.interview = interview
         request_obj.save(update_fields=['status', 'interview'])
         _maybe_create_teams_meeting(interview)
-        return _invite_draft_response(request, interview, form.cleaned_data.get('candidate_email'))
+        if _is_ajax(request):
+            return _invite_draft_response(request, interview, None)
+        messages.success(request, f'Interview approved for {request_obj.candidate.full_name}.')
+        return redirect('candidate_timeline', pk=request_obj.candidate_id)
 
 
 class InterviewRequestNewSlotsView(GroupRequiredMixin, View):
-    """HR isn't happy with any of the proposed slots - clears them and sends
+    """HR isn't happy with any of the proposed slots, or wants to reschedule
+    after the candidate already picked one - clears the slots/pick and sends
     the interviewer back to propose a fresh set."""
     allowed_groups = (HR_ADMIN, RECRUITER)
 
     def post(self, request, pk):
-        request_obj = get_object_or_404(InterviewRequest, pk=pk, status=InterviewRequest.Status.AWAITING_SELECTION)
+        request_obj = get_object_or_404(
+            InterviewRequest, pk=pk,
+            status__in=(InterviewRequest.Status.AWAITING_SELECTION, InterviewRequest.Status.AWAITING_HR_APPROVAL))
         request_obj.slots.all().delete()
         request_obj.status = InterviewRequest.Status.AWAITING_SLOTS
-        request_obj.save(update_fields=['status'])
+        request_obj.candidate_token = None
+        request_obj.slots_proposed_at = None
+        request_obj.candidate_selected_slot = None
+        request_obj.candidate_selected_at = None
+        request_obj.save(update_fields=[
+            'status', 'candidate_token', 'slots_proposed_at', 'candidate_selected_slot', 'candidate_selected_at'])
         note = (request.POST.get('note') or '').strip()
         notifications.notify(
             request_obj.interviewer, title=f'New slots needed - {request_obj.candidate.full_name}',
-            message=note or 'None of the proposed slots worked for HR - please propose new ones.',
+            message=note or 'Please propose a fresh set of slots.',
             url=reverse('interviewer_propose_slots', args=[request_obj.pk]))
         try:
             slot_emails.notify_interviewer_new_slots_needed(

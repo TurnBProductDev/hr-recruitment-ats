@@ -176,18 +176,36 @@ class InterviewProposeSlotsView(GroupRequiredMixin, View):
         InterviewSlot.objects.bulk_create(
             InterviewSlot(request=request_obj, start_datetime=slot) for slot in form.cleaned_data['slots'])
         request_obj.status = InterviewRequest.Status.AWAITING_SELECTION
-        request_obj.save(update_fields=['status'])
+        request_obj.slots_proposed_at = timezone.now()
+        request_obj.new_candidate_token()
+        request_obj.save(update_fields=['status', 'slots_proposed_at', 'candidate_token'])
+        candidate = request_obj.candidate
         if request_obj.created_by:
             notifications.notify(
-                request_obj.created_by, title=f'Slots proposed - {request_obj.candidate.full_name}',
+                request_obj.created_by, title=f'Slots proposed - {candidate.full_name}',
                 message=f'{request_obj.interviewer.get_full_name() or request_obj.interviewer.get_username()} '
-                        f'proposed slots for {request_obj.get_round_type_display()} - pick one to confirm.',
+                        f'proposed slots for {request_obj.get_round_type_display()} - '
+                        f'{candidate.full_name} has been emailed to pick one.',
                 url=reverse('candidate_timeline', args=[request_obj.candidate_id]))
-        try:
-            slot_emails.notify_hr_slots_proposed(request_obj)
-        except logic_app_mail.EmailSendError as exc:
-            logger.warning('Could not email the slots-proposed notice for request %s: %s', request_obj.pk, exc)
-        messages.success(request, 'Slots submitted - HR will pick one and confirm the interview.')
+        if candidate.email_is_placeholder:
+            # No real email to send the picker link to - flag it instead of
+            # silently going nowhere; HR will need to sort out contact info
+            # or fall back to Manual Slot Allocate for this candidate.
+            if request_obj.created_by:
+                notifications.notify(
+                    request_obj.created_by, title=f'No email on file - {candidate.full_name}',
+                    message="Slots were proposed, but this candidate has no real email to send the "
+                            "slot-pick link to. Update their contact details, or use Manual Slot "
+                            "Allocate instead.",
+                    url=reverse('candidate_timeline', args=[request_obj.candidate_id]))
+        else:
+            select_url = request.build_absolute_uri(
+                reverse('candidate_slot_pick', args=[request_obj.candidate_token]))
+            try:
+                slot_emails.notify_candidate_select_slot(request_obj, select_url)
+            except logic_app_mail.EmailSendError as exc:
+                logger.warning('Could not email the slot-pick link for request %s: %s', request_obj.pk, exc)
+        messages.success(request, f'Slots submitted - {candidate.full_name} will pick one to confirm the interview.')
         return redirect('interviewer_home')
 
     def _render(self, request, request_obj, form, status=200):

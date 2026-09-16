@@ -490,20 +490,31 @@ html { scroll-behavior: smooth; }
               {{ stage.interview_request.interviewer.get_full_name|default:stage.interview_request.interviewer.username }}
               to propose available slots.
             </div>
-            {% else %}
+            {% elif stage.interview_request.status == 'AWAITING_SELECTION' %}
+            <div class="alert alert-info py-2 px-3 mb-2 small">
+              <i class="bi bi-hourglass-split"></i>
+              {{ stage.interview_request.slots.all|length }} slot(s) proposed -
+              waiting on {{ candidate.full_name }} to pick a time (link emailed to them, valid 48 hours).
+            </div>
+            <form method="post" action="{% url 'interview_request_new_slots' stage.interview_request.pk %}">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-outline-app">Request Different Slots</button>
+            </form>
+            {% elif stage.interview_request.status == 'AWAITING_HR_APPROVAL' %}
             <div class="alert alert-info py-2 px-3 mb-2 small">
               <i class="bi bi-calendar-check"></i>
-              {{ stage.interview_request.slots.all|length }} slot(s) proposed - pick one to confirm.
+              {{ candidate.full_name }} selected
+              <strong>{{ stage.interview_request.candidate_selected_slot.start_datetime|date:"d M Y, H:i" }}</strong> -
+              approve to schedule the interview.
             </div>
             <div class="d-flex flex-wrap gap-2">
-              <button type="button" class="btn btn-sm btn-fill-app"
-                      data-bs-toggle="modal" data-bs-target="#interviewModal"
-                      data-load-url="{% url 'interview_request_select_slot' stage.interview_request.pk %}" data-modal-title="Select Interview Slot">
-                <i class="bi bi-calendar-check"></i> Select Slot
-              </button>
+              <form method="post" action="{% url 'interview_request_approve' stage.interview_request.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-fill-app"><i class="bi bi-check2-circle"></i> Approve &amp; Mail Send</button>
+              </form>
               <form method="post" action="{% url 'interview_request_new_slots' stage.interview_request.pk %}">
                 {% csrf_token %}
-                <button type="submit" class="btn btn-sm btn-outline-app">Request Different Slots</button>
+                <button type="submit" class="btn btn-sm btn-outline-app">Reschedule</button>
               </form>
             </div>
             {% endif %}

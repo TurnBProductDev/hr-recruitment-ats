@@ -1,3 +1,4 @@
+import secrets
 from datetime import timedelta
 
 from django.conf import settings
@@ -12,6 +13,12 @@ from candidates.models import Candidate
 # and the length of a slot an interviewer proposes in InterviewSlot below - keep
 # all three in sync since they describe the same one-hour meeting block.
 INTERVIEW_DURATION = timedelta(hours=1)
+
+# How long a candidate's "pick your interview slot" link stays usable, counted
+# from whenever the interviewer (most recently) proposed slots. Also how long
+# the proposed-but-unpicked slots stay held against the interviewer's other
+# interviews - see InterviewSlot.held_conflicts_for.
+CANDIDATE_SLOT_LINK_HOURS = 48
 
 
 class Interview(models.Model):
@@ -158,18 +165,20 @@ class InterviewReschedule(models.Model):
 class InterviewRequest(models.Model):
     """The interviewer-proposes-slots scheduling flow: HR allocates an
     interviewer to a candidate (no date yet), the interviewer proposes 2-3
-    one-hour slots, and HR picks one - at which point a real Interview row
-    (above) is created with that date. This row tracks that in-between state;
-    once a slot is picked it just sits there as SCHEDULED, linked to the
-    Interview it produced, for history."""
+    one-hour slots, the candidate picks one via an emailed link
+    (candidate_token), and HR approves it (or asks for a reschedule) - at
+    which point a real Interview row (above) is created with that date. This
+    row tracks that in-between state; once approved it just sits there as
+    SCHEDULED, linked to the Interview it produced, for history."""
     class Status(models.TextChoices):
         AWAITING_SLOTS = 'AWAITING_SLOTS', 'Awaiting Slots'
-        AWAITING_SELECTION = 'AWAITING_SELECTION', 'Awaiting HR Selection'
+        AWAITING_SELECTION = 'AWAITING_SELECTION', 'Awaiting Candidate Selection'
+        AWAITING_HR_APPROVAL = 'AWAITING_HR_APPROVAL', 'Awaiting HR Approval'
         SCHEDULED = 'SCHEDULED', 'Scheduled'
         CANCELLED = 'CANCELLED', 'Cancelled'
 
-    # Only these two count as "still in progress" - see open_for().
-    OPEN_STATUSES = (Status.AWAITING_SLOTS, Status.AWAITING_SELECTION)
+    # These three count as "still in progress" - see open_for().
+    OPEN_STATUSES = (Status.AWAITING_SLOTS, Status.AWAITING_SELECTION, Status.AWAITING_HR_APPROVAL)
 
     candidate = models.ForeignKey(Candidate, on_delete=models.CASCADE, related_name='interview_requests')
     round_type = models.CharField(max_length=20, choices=Interview.RoundType.choices, default=Interview.RoundType.ROUND1)
@@ -183,6 +192,19 @@ class InterviewRequest(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+'
     )
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    # The candidate's "pick your slot" link is this token, not the row's own
+    # pk - a bearer credential, regenerated every time slots are (re-)proposed
+    # so an old emailed link can never resurface and match a later round of
+    # slots. Blank until slots are first proposed.
+    candidate_token = models.CharField(max_length=50, unique=True, blank=True, null=True, db_index=True)
+    # Set (and reset) every time slots move to AWAITING_SELECTION - the
+    # candidate's link, and the hold on every proposed slot (see
+    # InterviewSlot.held_conflicts_for), are only valid for
+    # CANDIDATE_SLOT_LINK_HOURS from this timestamp.
+    slots_proposed_at = models.DateTimeField(null=True, blank=True)
+    candidate_selected_slot = models.ForeignKey(
+        'InterviewSlot', on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    candidate_selected_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['-created_at']
@@ -192,16 +214,32 @@ class InterviewRequest(models.Model):
 
     @classmethod
     def open_for(cls, candidate):
-        """This candidate's requests still in progress (awaiting slots or
-        awaiting HR's pick) - mirrors Interview.open_for so a candidate can't
-        have both an open request and an open interview at once."""
+        """This candidate's requests still in progress (awaiting slots,
+        awaiting the candidate's pick, or awaiting HR's approval) - mirrors
+        Interview.open_for so a candidate can't have both an open request and
+        an open interview at once."""
         return cls.objects.filter(candidate=candidate, status__in=cls.OPEN_STATUSES)
+
+    def new_candidate_token(self):
+        """Generate and set a fresh bearer token for the candidate's slot-pick
+        link. Doesn't save - the caller is already about to save alongside
+        the other propose-slots fields."""
+        self.candidate_token = secrets.token_urlsafe(32)
+        return self.candidate_token
+
+    @property
+    def candidate_link_expired(self):
+        if not self.slots_proposed_at:
+            return True
+        return timezone.now() > self.slots_proposed_at + timedelta(hours=CANDIDATE_SLOT_LINK_HOURS)
 
 
 class InterviewSlot(models.Model):
     """One of the 2-3 one-hour times an interviewer proposed for an
-    InterviewRequest. Picking one (InterviewSelectSlotView) turns it into the
-    actual Interview's scheduled_date; the rest are left behind, unpicked."""
+    InterviewRequest. The candidate picking one (see the public
+    candidate_slot_pick view) records it as the request's
+    candidate_selected_slot; HR approving that turns it into the actual
+    Interview's scheduled_date. The rest are left behind, unpicked."""
     request = models.ForeignKey(InterviewRequest, on_delete=models.CASCADE, related_name='slots')
     start_datetime = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
@@ -211,6 +249,35 @@ class InterviewSlot(models.Model):
 
     def __str__(self):
         return f"{self.request_id}: {self.start_datetime:%Y-%m-%d %H:%M}"
+
+    @classmethod
+    def held_conflicts_for(cls, interviewer, scheduled_date, exclude_request_pk=None):
+        """Slots currently "holding" this interviewer's time against a
+        pending candidate-selection flow, overlapping scheduled_date - every
+        still-unpicked proposed slot while its link is still valid, plus
+        whichever single slot a candidate has already picked (held
+        indefinitely, until HR approves it into a real Interview or asks for
+        a reschedule). Checked alongside Interview.conflicts_for wherever an
+        interview gets booked (proposing slots, manual/direct scheduling,
+        rescheduling), so none of those paths can double-book over a request
+        this one hasn't resolved yet."""
+        if interviewer is None:
+            return cls.objects.none()
+        start, end = scheduled_date, scheduled_date + INTERVIEW_DURATION
+        cutoff = timezone.now() - timedelta(hours=CANDIDATE_SLOT_LINK_HOURS)
+        held = (
+            models.Q(request__status=InterviewRequest.Status.AWAITING_SELECTION,
+                     request__slots_proposed_at__gt=cutoff)
+            | models.Q(request__status=InterviewRequest.Status.AWAITING_HR_APPROVAL,
+                      request__candidate_selected_slot=models.F('pk'))
+        )
+        qs = cls.objects.filter(
+            held, request__interviewer=interviewer,
+            start_datetime__lt=end, start_datetime__gt=start - INTERVIEW_DURATION,
+        )
+        if exclude_request_pk:
+            qs = qs.exclude(request_id=exclude_request_pk)
+        return qs
 
 
 def open_interview_message(interview):
@@ -224,8 +291,11 @@ def open_interview_message(interview):
 
 def open_interview_request_message(request):
     """Why a new allocation was refused, phrased for the HR user."""
-    waiting_on = ('the interviewer to propose slots' if request.status == InterviewRequest.Status.AWAITING_SLOTS
-                  else 'you to pick a slot')
+    waiting_on = {
+        InterviewRequest.Status.AWAITING_SLOTS: 'the interviewer to propose slots',
+        InterviewRequest.Status.AWAITING_SELECTION: 'the candidate to pick a slot',
+        InterviewRequest.Status.AWAITING_HR_APPROVAL: 'you to approve the candidate\'s pick',
+    }.get(request.status, 'this to resolve')
     return (f'{request.candidate.full_name} already has an interviewer allocated '
             f'({request.interviewer.get_full_name() or request.interviewer.get_username()}) for '
             f'{request.get_round_type_display()}, awaiting {waiting_on}.')
@@ -237,3 +307,15 @@ def interviewer_conflict_message(interview):
     name = interview.interviewer.get_full_name() or interview.interviewer.get_username()
     return (f'{name} is already interviewing {interview.candidate.full_name} '
             f'at {when:%d %b %Y %H:%M}. Pick a different time or interviewer.')
+
+
+def held_slot_conflict_message(slot):
+    """Why a schedule/reschedule/slot-proposal was refused for overlapping a
+    slot currently held by a pending candidate-selection flow - see
+    InterviewSlot.held_conflicts_for."""
+    when = timezone.localtime(slot.start_datetime)
+    request = slot.request
+    name = request.interviewer.get_full_name() or request.interviewer.get_username()
+    return (f'{name} has a proposed/selected interview slot with '
+            f'{request.candidate.full_name} at {when:%d %b %Y %H:%M} that is still pending. '
+            f'Pick a different time or interviewer.')

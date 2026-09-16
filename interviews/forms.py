@@ -8,8 +8,8 @@ from candidates.permissions import INTERVIEWER
 
 from . import graph_client
 from .models import (
-    INTERVIEW_DURATION, Interview, InterviewRequest, interviewer_conflict_message,
-    open_interview_message, open_interview_request_message,
+    INTERVIEW_DURATION, Interview, InterviewRequest, InterviewSlot, held_slot_conflict_message,
+    interviewer_conflict_message, open_interview_message, open_interview_request_message,
 )
 
 logger = logging.getLogger(__name__)
@@ -78,6 +78,13 @@ class InterviewForm(BootstrapFormMixin, forms.ModelForm):
                 interviewer, scheduled_date, exclude_pk=self.instance.pk).first()
             if clash:
                 raise forms.ValidationError(interviewer_conflict_message(clash))
+
+            # Manual/direct scheduling and rescheduling must respect a slot
+            # currently proposed to (or already picked by) a candidate for a
+            # *different* request - see InterviewSlot.held_conflicts_for.
+            held = InterviewSlot.held_conflicts_for(interviewer, scheduled_date).first()
+            if held:
+                raise forms.ValidationError(held_slot_conflict_message(held))
 
             # Phase 2: also check the interviewer's real Outlook calendar, not
             # just other interviews scheduled through this app. Best-effort -
@@ -189,6 +196,9 @@ class InterviewSlotProposalForm(BootstrapFormMixin, forms.Form):
                 clash = Interview.conflicts_for(self.interviewer, slot).first()
                 if clash:
                     raise forms.ValidationError(interviewer_conflict_message(clash))
+                held = InterviewSlot.held_conflicts_for(self.interviewer, slot).first()
+                if held:
+                    raise forms.ValidationError(held_slot_conflict_message(held))
                 if graph_client.is_configured() and self.interviewer.email:
                     try:
                         busy = graph_client.is_interviewer_busy(
@@ -204,21 +214,17 @@ class InterviewSlotProposalForm(BootstrapFormMixin, forms.Form):
         return cleaned
 
 
-class InterviewSelectSlotForm(BootstrapFormMixin, forms.Form):
-    """Step 3: HR picks one of the interviewer's proposed slots, finalizing
-    the interview. candidate_email/meeting_link mirror InterviewForm's own
-    fields - deferred to here since only now is there an actual date to build
-    the invite/meeting around."""
+class CandidateSlotPickForm(BootstrapFormMixin, forms.Form):
+    """The public, token-secured page: the candidate picks one of the
+    interviewer's proposed slots. No email/meeting-link fields here - those
+    are only relevant once HR actually approves the pick (see
+    InterviewRequestApproveView)."""
     slot = forms.ModelChoiceField(queryset=None, widget=forms.RadioSelect, empty_label=None)
-    candidate_email = forms.EmailField(label='Candidate Email', required=False)
-    meeting_link = forms.URLField(label='Meeting Link', required=False)
 
     def __init__(self, *args, request=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.request_obj = request
         self.fields['slot'].queryset = request.slots.all()
         self.fields['slot'].label_from_instance = (
-            lambda s: timezone.localtime(s.start_datetime).strftime('%d %b %Y, %H:%M'))
-        if not self.is_bound:
-            self.fields['candidate_email'].initial = request.candidate.email
+            lambda s: f'{timezone.localtime(s.start_datetime).strftime("%A, %d %b %Y, %I:%M %p")} IST')
         self._add_bootstrap_classes()

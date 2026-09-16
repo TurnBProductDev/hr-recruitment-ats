@@ -23,13 +23,29 @@ _NEW_REQUEST_BODY = (
     'Regards,\n'
     'HireB'
 )
-_SLOTS_PROPOSED_SUBJECT = 'Interview slots proposed - {candidate_name} ({round_type})'
-_SLOTS_PROPOSED_BODY = (
+_CANDIDATE_SELECT_SLOT_SUBJECT = 'Pick your {round_type} interview time - {role}'
+_CANDIDATE_SELECT_SLOT_BODY = (
+    'Hello {candidate_name},\n\n'
+    'Thank you for your interest in the {role} position. We would like to schedule your '
+    '{round_type} interview.\n\n'
+    'Please choose a time that works for you using the link below (all times shown in Indian '
+    'Standard Time - IST):\n\n'
+    '{select_url}\n\n'
+    "This link is valid for 48 hours. If you don't pick a time within that window, please reach "
+    'out to us so we can share new options.\n\n'
+    'Regards\n'
+    'HRBP\n'
+    'TurnB Business Services Pvt Ltd'
+)
+_HR_CANDIDATE_SELECTED_SUBJECT = '{candidate_name} selected a slot - {round_type}'
+_HR_CANDIDATE_SELECTED_BODY = (
     'Hello {hr_name},\n\n'
-    '{interviewer_name} has proposed the following slots to interview {candidate_name} '
-    '({round_type}):\n\n'
-    '{slot_lines}\n\n'
-    "Please pick one from the candidate's profile to confirm the interview.\n\n"
+    '{candidate_name} has selected the following time for their {round_type} interview:\n\n'
+    '{selected_slot}\n\n'
+    "This has been recorded against the candidate's Round 1 stage. Please review and either "
+    'Approve & Send the invite, or ask the interviewer to Reschedule, from the candidate\'s '
+    'profile.\n\n'
+    '{profile_url}\n\n'
     'Regards,\n'
     'HireB'
 )
@@ -67,21 +83,38 @@ def notify_interviewer_new_request(interview_request, login_url=''):
         to_email=interviewer.email, cc_emails=logic_app_mail.default_cc_list(), subject=subject, body=body)
 
 
-def notify_hr_slots_proposed(interview_request):
-    """Sent to whoever allocated the interviewer, once the interviewer has
-    proposed their slots - asks HR to pick one."""
+def notify_candidate_select_slot(interview_request, select_url):
+    """Sent to the CANDIDATE once the interviewer has proposed their slots -
+    asks them to pick one via the link (a token-secured public page, valid
+    for CANDIDATE_SLOT_LINK_HOURS - see InterviewRequest.candidate_token).
+    Replaces the old "ask HR to pick" email now that the candidate picks
+    directly."""
+    candidate = interview_request.candidate
+    if not candidate.email or candidate.email_is_placeholder:
+        return
+    subject, body = render_email(
+        'candidate_select_slot', _CANDIDATE_SELECT_SLOT_SUBJECT, _CANDIDATE_SELECT_SLOT_BODY,
+        candidate_name=candidate.full_name, role=_role_name(candidate),
+        round_type=interview_request.get_round_type_display(), select_url=select_url)
+    logic_app_mail.send_email(
+        to_email=candidate.email, cc_emails=logic_app_mail.default_cc_list(), subject=subject, body=body)
+
+
+def notify_hr_candidate_selected(interview_request, profile_url):
+    """Sent to whoever allocated the interviewer, once the candidate has
+    picked a slot - asks HR to Approve & Send or Reschedule from the
+    candidate's profile."""
     hr_user = interview_request.created_by
     if not (hr_user and hr_user.email):
         return
     candidate = interview_request.candidate
-    interviewer_name = interview_request.interviewer.get_full_name() or interview_request.interviewer.get_username()
-    slot_lines = '\n'.join(
-        f'- {timezone.localtime(s.start_datetime):%d %b %Y, %H:%M}' for s in interview_request.slots.all())
+    slot = interview_request.candidate_selected_slot
+    selected_slot = f'{timezone.localtime(slot.start_datetime):%d %b %Y, %H:%M} IST' if slot else 'Unknown'
     subject, body = render_email(
-        'hr_slots_proposed', _SLOTS_PROPOSED_SUBJECT, _SLOTS_PROPOSED_BODY,
-        hr_name=hr_user.get_full_name() or hr_user.get_username(), interviewer_name=interviewer_name,
-        candidate_name=candidate.full_name, round_type=interview_request.get_round_type_display(),
-        slot_lines=slot_lines)
+        'hr_candidate_selected_slot', _HR_CANDIDATE_SELECTED_SUBJECT, _HR_CANDIDATE_SELECTED_BODY,
+        hr_name=hr_user.get_full_name() or hr_user.get_username(), candidate_name=candidate.full_name,
+        round_type=interview_request.get_round_type_display(), selected_slot=selected_slot,
+        profile_url=profile_url)
     logic_app_mail.send_email(
         to_email=hr_user.email, cc_emails=logic_app_mail.default_cc_list(), subject=subject, body=body)
 
