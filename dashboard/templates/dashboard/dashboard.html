@@ -464,6 +464,7 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
             {% endfor %}
           </div>
           <div class="daily-val">{{ c.candidate_count }}</div>
+          <div class="daily-val-sub">Candidate{{ c.candidate_count|pluralize }}</div>
           <div class="daily-bar-track">
             <div class="daily-bar" style="height:{{ c.bar_pct }}%;background:{{ c.color }}"></div>
           </div>
