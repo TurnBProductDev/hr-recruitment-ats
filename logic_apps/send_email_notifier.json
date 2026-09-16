@@ -1,0 +1,125 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "actions": {
+      "Response_Failed": {
+        "inputs": {
+          "body": {
+            "status": "failed"
+          },
+          "statusCode": 502
+        },
+        "runAfter": {
+          "Send_an_email_(V2)": [
+            "Failed",
+            "Skipped",
+            "TimedOut"
+          ]
+        },
+        "type": "Response"
+      },
+      "Response_Sent": {
+        "inputs": {
+          "body": {
+            "status": "sent"
+          },
+          "statusCode": 200
+        },
+        "runAfter": {
+          "Send_an_email_(V2)": [
+            "Succeeded"
+          ]
+        },
+        "type": "Response"
+      },
+      "Send_an_email_(V2)": {
+        "inputs": {
+          "body": {
+            "Attachments": "@triggerBody()?['attachments']",
+            "Body": "@triggerBody()?['body']",
+            "Cc": "@triggerBody()?['cc']",
+            "IsHtml": false,
+            "Subject": "@triggerBody()?['subject']",
+            "To": "@triggerBody()?['to']"
+          },
+          "host": {
+            "connection": {
+              "name": "@parameters('$connections')['office365']['connectionId']"
+            }
+          },
+          "method": "post",
+          "path": "/v2/Mail"
+        },
+        "runAfter": {},
+        "type": "ApiConnection"
+      }
+    },
+    "contentVersion": "1.0.0.0",
+    "outputs": {},
+    "parameters": {
+      "$connections": {
+        "defaultValue": {},
+        "type": "Object"
+      }
+    },
+    "triggers": {
+      "manual": {
+        "inputs": {
+          "schema": {
+            "properties": {
+              "attachments": {
+                "items": {
+                  "properties": {
+                    "ContentBytes": {
+                      "type": "string"
+                    },
+                    "ContentType": {
+                      "type": "string"
+                    },
+                    "Name": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "body": {
+                "type": "string"
+              },
+              "cc": {
+                "type": "string"
+              },
+              "subject": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "to",
+              "subject",
+              "body"
+            ],
+            "type": "object"
+          }
+        },
+        "kind": "Http",
+        "type": "Request"
+      }
+    }
+  },
+  "parameters": {
+    "$connections": {
+      "value": {
+        "office365": {
+          "connectionId": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/resourceGroups/HRMS/providers/Microsoft.Web/connections/office365-3",
+          "connectionName": "office365-3",
+          "connectionProperties": {},
+          "id": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/providers/Microsoft.Web/locations/centralindia/managedApis/office365"
+        }
+      }
+    }
+  }
+}

@@ -1,8 +1,9 @@
 # Logic Apps
 
-Workflows in the **HRMS** resource group that feed candidates into the ATS,
-tracked here so the prompt/config live in Azure can be diffed against git
-instead of trusted from memory:
+Workflows in the **HRMS** resource group, tracked here so the config live in
+Azure can be diffed against git instead of trusted from memory. Most feed
+candidates into the ATS; one (`Send-Email-Notifier`) is the opposite
+direction - every outbound email the app sends.
 
 | Workflow (Azure name) | File | Trigger | Writes candidates via | Status |
 |---|---|---|---|---|
@@ -12,6 +13,37 @@ instead of trusted from memory:
 
 Both intake paths now read CVs the same way - Form Recognizer has no callers
 left in either one.
+
+## `Send-Email-Notifier` - every outbound email
+
+`candidates/logic_app_mail.py::send_email()` is the one function every email
+this app sends goes through (rejections, interview invites, both interviewer
+slot-proposal notifications, HR's "pick a slot" email, password resets) -
+see [`send_email_notifier.json`](send_email_notifier.json). It's a tiny HTTP-
+triggered workflow: one `Send an email (V2)` action (the Office 365
+connection also used by the CV-intake flows) with **`IsHtml: false`** - every
+admin-editable template (the `email_templates` app) is plain text, and this
+is genuinely sent as plain text, not HTML.
+
+**Bare `\n` line breaks collapse in the received email.** The O365/Outlook
+plain-text send path needs a real CRLF (`\r\n`) to recognise a hard line
+break; bodies built with Python's default `\n` alone get silently
+collapsed, running every template paragraph and bulleted line together (this
+is exactly the "New Interview to Schedule" bug reported 2026-09-16, where
+every blank-line paragraph and "- " slot line ran into one block of text).
+Fixed once in `logic_app_mail.send_email()` - it normalises `\n` to `\r\n`
+right before posting to this workflow, so every template author (and every
+other email-composing function) can keep just writing plain `\n`. Do **not**
+"fix" this by making the body HTML instead (`IsHtml: true` + `<br>` tags) -
+that's a different, incompatible fix for a different symptom, and would ship
+literal `<br>` tags into what the connector is actually still treating as
+text.
+
+No Azure parameters/keys to patch here - `send_email_notifier.json` has
+nothing sensitive (no API key like `cv_automation_flow_final.json`'s
+`djangoApiKey`), so unlike that one this can be redeployed via the Portal's
+Code view directly, or `az logic workflow update --resource-group HRMS
+--name Send-Email-Notifier --definition @logic_apps/send_email_notifier.json`.
 
 ## The CV-reading rebuild (complete on both paths)
 

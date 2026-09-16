@@ -52,7 +52,16 @@ def send_email(*, to_email, subject, body, cc_emails=None, attachments=None):
         'to': to_email,
         'cc': '; '.join(cc_emails) if cc_emails else '',
         'subject': subject,
-        'body': body,
+        # Every admin-editable template (email_templates app) is authored as
+        # plain text with bare \n line endings - but the Send-Email-Notifier
+        # Logic App's "Send an email (V2)" action sends IsHtml: false (see
+        # logic_apps/send_email_notifier.json), and the O365/Outlook plain-
+        # text path needs a real CRLF to recognise a hard line break; a bare
+        # \n alone gets silently collapsed, running every paragraph and
+        # bullet line together (see the "New Interview to Schedule" bug
+        # report). Normalise to \r\n right here, once, so every template
+        # author can keep just writing plain \n.
+        'body': body.replace('\r\n', '\n').replace('\n', '\r\n'),
     }
     if attachments:
         payload['attachments'] = attachments
