@@ -30,7 +30,12 @@ CREATE OR ALTER PROCEDURE dbo.sp_intake_add_candidate
     @education    nvarchar(255)  = NULL,
     @cv_link      nvarchar(1000) = NULL,
     @source       nvarchar(255)  = NULL,
-    @mail_date    date           = NULL,
+    -- The FULL moment the email arrived (Office 365's receivedDateTime,
+    -- passed through unmodified as UTC ISO-8601, e.g. "2026-09-16T04:00:12Z"),
+    -- not just its date - a bare date (the old @mail_date date type, which
+    -- cannot hold a time at all) forced @created to always land on midnight
+    -- of that date, off by hours from when the application actually came in.
+    @mail_date    datetimeoffset(7) = NULL,
     @cv_summary   nvarchar(max)  = NULL,
     -- Added for the cv_extraction.py-based rebuild (CV-Automation-Flow-Final) -
     -- every one of these is optional and defaults to NULL, see note above.
@@ -83,9 +88,9 @@ BEGIN
             ELSE @src
         END;
     DECLARE @now datetimeoffset(7) = SYSDATETIMEOFFSET();
-    DECLARE @created datetimeoffset(7) =
-        CASE WHEN @mail_date IS NULL THEN @now
-             ELSE TODATETIMEOFFSET(CAST(@mail_date AS datetime2), DATEPART(TZOFFSET, @now)) END;
+    -- @mail_date already carries its own real timestamp and offset (UTC,
+    -- straight from Office 365) - just use it as-is; no reconstruction needed.
+    DECLARE @created datetimeoffset(7) = ISNULL(@mail_date, @now);
 
     -- Resolve vacancy: exact title match, else General Application, else NULL
     DECLARE @job_id bigint = (SELECT TOP 1 id FROM dbo.jobs_job

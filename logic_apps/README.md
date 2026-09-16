@@ -85,6 +85,25 @@ working unchanged for as long as it stayed live, calling the procedure with
 only its original parameter set (which still includes the older, single-
 string `@education` parameter as a fallback for exactly that reason).
 
+### `mail_date` carries the full timestamp now, not just a date (fixed 2026-09-16)
+
+Candidates coming through this flow were showing "Applied"/history timestamps
+hours off from when the email actually arrived - e.g. a mail received mid-
+morning IST showing as `05:30`. Cause: `mail_date` used to be
+`formatDateTime(triggerOutputs()?['body/receivedDateTime'], 'yyyy-MM-dd')` (a
+bare date, in both `Execute stored procedure` actions) mapped to `@mail_date
+date` in the stored procedure - a SQL `date` physically cannot hold a time, so
+the procedure reconstructed `@created` as **midnight** of that date, in
+whatever offset the Azure SQL server's own clock reports (UTC by default) -
+midnight UTC renders as 05:30 in IST, matching exactly what was seen. Fixed by
+passing the untouched `receivedDateTime` (already a UTC ISO-8601 timestamp)
+straight through, and changing the procedure's parameter to
+`@mail_date datetimeoffset(7)`, used as-is for `@created` with no
+reconstruction at all. Since this changes the parameter's actual type (not
+just adding a new optional one), deploy this one via the CLI command below,
+not Portal Code View - the same connector-schema-mismatch trap described next
+applies to a changed parameter type too, not only a new parameter.
+
 ### `djangoApiKey` is never committed here - it's blank in this file on purpose
 
 `cv_automation_flow_final.json`'s top-level `parameters.djangoApiKey.value` is
