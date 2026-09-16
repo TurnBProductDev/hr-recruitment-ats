@@ -4,24 +4,60 @@
 
 {% block extra_css %}
 <style>
+/* Mirrors candidates/templates/candidates/timeline.html's Candidate Details /
+   AI-Scan blocks - same box layout/styling as the HR page, just read-only
+   (no edit/notes/re-score) and without the Hiring/History blocks HR gets. */
 .pd-meta { font-size:.72rem; color:var(--text-muted); }
-.section-eyebrow { font-size:.72rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--primary-green); margin-bottom:14px; }
-.field-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px 28px; }
-.field-full { grid-column:1 / -1; }
-.field-label { font-size:.72rem; color:var(--text-muted); margin-bottom:3px; }
-.field-value { font-size:.8rem; color:var(--text-primary); }
-.field-value.text-muted { color:var(--text-muted) !important; }
-.match-score-num { font-size:1.8rem; font-weight:700; line-height:1; }
-.match-score-high { color: var(--primary-green); }
-.match-score-mid { color: #8a6a12; }
-:root[data-theme="dark"] .match-score-mid { color: #d4a94a; }
-.match-score-low { color: #dc3545; }
+.pd-body { font-size:.8rem; color:var(--text-primary); }
+.profile-sections { display:flex; flex-direction:column; gap:32px; }
+.profile-sections strong { font-size:.8rem; font-weight:600; color:var(--text-primary); }
+
 .cv-summary-md { font-size:.8rem; }
 .cv-summary-md h3 { font-size:.8rem; font-weight:600; color:var(--dark-green); margin:14px 0 6px; }
 .cv-summary-md h3:first-child { margin-top:0; }
 .cv-summary-md table { width:100%; font-size:.8rem; margin:6px 0 12px; border-collapse:collapse; }
 .cv-summary-md table th, .cv-summary-md table td { padding:4px 8px; border:1px solid var(--border-color); text-align:left; }
 .cv-summary-md ul { padding-left:1.2rem; margin-bottom:10px; }
+.cv-summary-md p { margin-bottom:8px; }
+.cv-summary-md p:last-child { margin-bottom:0; }
+
+.section-eyebrow { font-size:.72rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--primary-green); margin-bottom:14px; }
+.section-eyebrow i { margin-right:4px; }
+.card-head-row { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:14px; }
+.card-head-row .section-eyebrow { margin-bottom:0; }
+.field-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px 28px; }
+.field-full { grid-column:1 / -1; }
+.field-label { font-size:.72rem; color:var(--text-muted); margin-bottom:3px; }
+.field-value { font-size:.8rem; color:var(--text-primary); }
+.field-value.text-muted { color:var(--text-muted) !important; }
+
+.match-score-num { font-size:2.1rem; font-weight:700; line-height:1; }
+.match-score-high { color: var(--primary-green); }
+.match-score-mid { color: #8a6a12; }
+:root[data-theme="dark"] .match-score-mid { color: #d4a94a; }
+.match-score-low { color: #dc3545; }
+
+.text-accent-green { color: var(--dark-green); }
+:root[data-theme="dark"] .text-accent-green { color: var(--accent-teal); }
+
+.block-header { display:flex; align-items:center; gap:10px; padding-bottom:12px; margin-bottom:18px; border-bottom:2px solid; }
+.block-header-icon { width:30px; height:30px; border-radius:8px; display:inline-flex; align-items:center; justify-content:center; font-size:.92rem; flex-shrink:0; }
+.block-header-title { font-size:1rem; font-weight:700; }
+
+.block-header-details { border-color: var(--primary-green); }
+.block-header-details .block-header-icon { background:#dff2f1; color: var(--primary-green); }
+.block-header-details .block-header-title { color: var(--dark-green); }
+:root[data-theme="dark"] .block-header-details .block-header-title { color: var(--accent-teal); }
+
+.block-header-ai { border-color:#6f42c1; }
+.block-header-ai .block-header-icon { background:#ede4f8; color:#6f42c1; }
+.block-header-ai .block-header-title { color:#4d2d99; }
+:root[data-theme="dark"] .block-header-ai .block-header-title { color: #b79bef; }
+
+.block-header-history { border-color:#8ea3ac; }
+.block-header-history .block-header-icon { background:#e9eef0; color:#455a64; }
+.block-header-history .block-header-title { color:#37474f; }
+:root[data-theme="dark"] .block-header-history .block-header-title { color: #a9bcc4; }
 </style>
 {% endblock %}
 
@@ -34,114 +70,158 @@
   <span class="{{ candidate.status|badge_class }}">{{ candidate.status_label }}</span>
 </div>
 
-<div class="row g-3">
-  <div class="col-lg-7">
-    <div class="card app-card p-4 mb-3">
-      <div class="section-eyebrow">Contact</div>
-      <div class="field-grid">
-        <div><div class="field-label">Email</div><div class="field-value">{{ candidate.email }}</div></div>
-        <div><div class="field-label">Phone</div><div class="field-value">{{ candidate.phone|default:"-" }}</div></div>
-        <div><div class="field-label">Location</div><div class="field-value {% if not candidate.current_location %}text-muted{% endif %}">{{ candidate.current_location|default:"-" }}</div></div>
-        <div><div class="field-label">LinkedIn</div><div class="field-value {% if not candidate.linkedin %}text-muted{% endif %}">{% if candidate.linkedin %}<a href="{{ candidate.linkedin }}" target="_blank">{{ candidate.linkedin }}</a>{% else %}-{% endif %}</div></div>
-      </div>
+<div class="profile-sections">
+
+  <div>
+    <div class="block-header block-header-details">
+      <span class="block-header-icon"><i class="bi bi-person-vcard"></i></span>
+      <span class="block-header-title">Candidate Details</span>
     </div>
 
     <div class="card app-card p-4 mb-3">
-      <div class="section-eyebrow">Background</div>
-      <div class="field-grid">
-        <div class="field-full"><div class="field-label">Qualification</div><div class="field-value {% if not candidate.qualification %}text-muted{% endif %}">{{ candidate.qualification|default:"-" }}</div></div>
-        <div><div class="field-label">Experience</div><div class="field-value {% if not candidate.total_experience_years %}text-muted{% endif %}">{% if candidate.total_experience_years %}{{ candidate.total_experience_years }} yrs{% else %}-{% endif %}</div></div>
-        <div><div class="field-label">Key Skills</div><div class="field-value {% if not candidate.skills %}text-muted{% endif %}">{{ candidate.skills|default:"-" }}</div></div>
-      </div>
-    </div>
-
-    <div class="card app-card p-4">
-      <div class="section-eyebrow"><i class="bi bi-stars"></i> AI CV Summary</div>
-      {% if candidate.cv_summary %}
-        <div id="cv-summary-raw" hidden>{{ candidate.cv_summary_markdown }}</div>
-        <div id="cv-summary-md" class="cv-summary-md">
-          <p class="mb-0" style="white-space: pre-line;">{{ candidate.cv_summary }}</p>
+      <div class="row g-4">
+        <div class="col-lg-7">
+          <div class="section-eyebrow">Contact</div>
+          <div class="field-grid">
+            <div><div class="field-label">Email</div><div class="field-value">{{ candidate.email }}</div></div>
+            <div><div class="field-label">Phone</div><div class="field-value">{{ candidate.phone|default:"-" }}</div></div>
+            <div><div class="field-label">Location</div><div class="field-value {% if not candidate.current_location %}text-muted{% endif %}">{{ candidate.current_location|default:"-" }}</div></div>
+            <div><div class="field-label">LinkedIn</div><div class="field-value {% if not candidate.linkedin %}text-muted{% endif %}">{% if candidate.linkedin %}<a href="{{ candidate.linkedin }}" target="_blank">{{ candidate.linkedin }}</a>{% else %}-{% endif %}</div></div>
+          </div>
         </div>
-      {% else %}
-        <p class="text-muted mb-0">No AI summary available.</p>
-      {% endif %}
-    </div>
-  </div>
 
-  <div class="col-lg-5">
+        <div class="col-lg-5" style="border-left:1px solid var(--border-color); padding-left:28px;">
+          <div class="d-flex flex-column gap-3">
+            <div>
+              <div class="field-label">Applied Position</div>
+              <div class="field-value {% if not candidate.role_applied %}text-muted{% endif %}">{{ candidate.role_applied|default:"Not captured" }}</div>
+            </div>
+            <div>
+              <div class="field-label">Vacancy</div>
+              <div class="field-value {% if not candidate.job %}text-muted{% endif %}">{{ candidate.job.title|default:"Unassigned" }}</div>
+            </div>
+            <div>
+              <div class="field-label">Attachments</div>
+              {% if candidate.resume_url or candidate.resume_blob_url %}
+              <div class="field-value"><a href="{% url 'candidate_cv' candidate.pk %}" target="_blank"><i class="bi bi-file-earmark-person"></i> Open CV</a></div>
+              {% else %}
+              <div class="field-value text-muted">No attachments.</div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="card app-card p-4 mb-3">
       <div class="section-eyebrow">Education</div>
       {% for e in candidate.education.all %}
         <div class="mb-2 pb-2 {% if not forloop.last %}border-bottom{% endif %}">
           <strong>{{ e.qualification }}</strong> {% if e.specialization %}({{ e.specialization }}){% endif %}<br>
-          <span class="text-muted pd-meta">{{ e.institution|default:"-" }} &middot; {{ e.year_completed|default:"-" }}</span>
+          <span class="text-muted pd-meta">{{ e.institution|default:"-" }} &middot; {{ e.year_completed|default:"-" }} &middot; {{ e.percentage|default:"-" }}%</span>
         </div>
       {% empty %}<p class="text-muted mb-0">No education records.</p>{% endfor %}
     </div>
 
-    <div class="card app-card p-4 mb-3">
-      <div class="section-eyebrow">Experience</div>
+    <div class="card app-card p-4">
+      <div class="card-head-row">
+        <div class="section-eyebrow mb-0">Experience</div>
+        <div class="text-end">
+          <div class="pd-meta text-muted fw-bold">TOTAL EXPERIENCE</div>
+          <div style="font-size:1.15rem; font-weight:800; color:var(--dark-green);" class="text-accent-green">
+            {% if candidate.total_experience_years %}{{ candidate.total_experience_years }} yrs{% else %}-{% endif %}
+          </div>
+        </div>
+      </div>
       {% for e in candidate.experience_set.all %}
         <div class="mb-2 pb-2 {% if not forloop.last %}border-bottom{% endif %}">
           <strong>{{ e.designation|default:"-" }}</strong> @ {{ e.company_name }}<br>
-          <span class="text-muted pd-meta">{{ e.start_date|default:"-" }} &rarr; {{ e.end_date|default:"Present" }}</span>
+          <span class="text-muted pd-meta">{{ e.start_date|default:"-" }} &rarr; {{ e.end_date|default:"Present" }} &middot; {{ e.skills|default:"" }}</span>
         </div>
       {% empty %}
         {% if candidate.last_role or candidate.last_company %}
-          <div><strong>{{ candidate.last_role|default:"-" }}</strong><br><span class="text-muted pd-meta">{{ candidate.last_company|default:"-" }}</span></div>
+          <div>
+            <strong>{{ candidate.last_role|default:"-" }}</strong><br>
+            <span class="text-muted pd-meta">{{ candidate.last_company|default:"-" }}</span>
+          </div>
         {% else %}<p class="text-muted mb-0">No experience records.</p>{% endif %}
       {% endfor %}
     </div>
-
-    {% if candidate.resume_url or candidate.resume_blob_url %}
-    <div class="card app-card p-4 mb-3">
-      <div class="section-eyebrow">Resume</div>
-      <a href="{% url 'candidate_cv' candidate.pk %}" target="_blank"><i class="bi bi-file-earmark-person"></i> Open CV</a>
-    </div>
-    {% endif %}
-
-    {% if candidate.match_score is not None %}
-    <div class="card app-card p-4">
-      <div class="section-eyebrow"><i class="bi bi-bullseye"></i> Match Score</div>
-      <div class="d-flex align-items-baseline gap-2">
-        <span class="match-score-num match-score-{{ candidate.match_score|score_tier }}">{{ candidate.match_score }}</span>
-        <span class="text-muted">/ 100</span>
-      </div>
-      {% if candidate.match_rationale %}<p class="pd-meta mt-2 mb-0 fst-italic">{{ candidate.match_rationale }}</p>{% endif %}
-    </div>
-    {% endif %}
   </div>
-</div>
 
-{% if not is_admin_view and other_round_feedback %}
-<div class="card app-card p-4 mt-3">
-  <div class="section-eyebrow">Earlier Rounds' Feedback</div>
-  {% for i in other_round_feedback %}
-    <div class="mb-2 pb-2 {% if not forloop.last %}border-bottom{% endif %}">
-      <strong>{{ i.get_round_type_display }}</strong> &middot; {{ i.scheduled_date|date:"d M Y H:i" }}
-      &middot; Interviewer: {% if i.interviewer %}{{ i.interviewer.get_full_name|default:i.interviewer.get_username }}{% else %}Unassigned{% endif %}
-      <div class="text-muted pd-meta">Result: {{ i.get_result_display }}</div>
-      <div class="pd-body mt-1">{{ i.feedback }}</div>
+  <div>
+    <div class="block-header block-header-ai">
+      <span class="block-header-icon"><i class="bi bi-stars"></i></span>
+      <span class="block-header-title">AI-Scan</span>
     </div>
-  {% endfor %}
-</div>
-{% endif %}
-
-<div class="card app-card p-4 mt-3">
-  <div class="section-eyebrow">{% if is_admin_view %}All Interviews With This Candidate{% else %}Your Interviews With This Candidate{% endif %}</div>
-  {% for i in my_interviews %}
-    <div class="d-flex justify-content-between align-items-center mb-2 pb-2 {% if not forloop.last %}border-bottom{% endif %}">
-      <div>
-        <strong>{{ i.get_round_type_display }}</strong> &middot; {{ i.scheduled_date|date:"d M Y H:i" }} &middot; {{ i.get_mode_display }}
-        {% if is_admin_view %}&middot; Interviewer: {% if i.interviewer %}{{ i.interviewer.get_full_name|default:i.interviewer.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}{% endif %}
-        <div class="text-muted pd-meta">Status: {{ i.get_status_display }} &middot; Result: {{ i.get_result_display }}</div>
-        {% if i.feedback %}<div class="pd-body mt-1">{{ i.feedback }}</div>{% endif %}
+    <div class="row g-3">
+      <div class="col-lg-6">
+        <div class="card app-card p-4 h-100">
+          <div class="section-eyebrow"><i class="bi bi-stars"></i> AI CV Summary</div>
+          {% if candidate.cv_summary %}
+            <div id="cv-summary-raw" hidden>{{ candidate.cv_summary_markdown }}</div>
+            <div id="cv-summary-md" class="cv-summary-md">
+              <p class="mb-0" style="white-space: pre-line;">{{ candidate.cv_summary }}</p>
+            </div>
+          {% else %}
+            <p class="text-muted mb-0">No AI summary available.</p>
+          {% endif %}
+        </div>
       </div>
-      {% if i.status in open_statuses %}
-      <a href="{% url 'interview_result' i.pk %}" class="btn btn-sm btn-fill-app flex-shrink-0">Record Result</a>
-      {% endif %}
+
+      <div class="col-lg-6">
+        <div class="card app-card p-4 h-100">
+          <div class="section-eyebrow"><i class="bi bi-bullseye"></i> Match Score</div>
+          {% if candidate.match_score is not None %}
+          <div class="d-flex align-items-baseline gap-2">
+            <span class="match-score-num match-score-{{ candidate.match_score|score_tier }}">{{ candidate.match_score }}</span>
+            <span class="text-muted">/ 100</span>
+          </div>
+          {% if candidate.match_rationale %}<p class="pd-meta mt-2 mb-0 fst-italic">{{ candidate.match_rationale }}</p>{% endif %}
+          {% else %}<p class="text-muted mb-0">Not scored yet.</p>{% endif %}
+        </div>
+      </div>
     </div>
-  {% empty %}<p class="text-muted mb-0">No interviews on record.</p>{% endfor %}
+  </div>
+
+  <div>
+    <div class="block-header block-header-history">
+      <span class="block-header-icon"><i class="bi bi-clock-history"></i></span>
+      <span class="block-header-title">Interviews</span>
+    </div>
+
+    {% if not is_admin_view and other_round_feedback %}
+    <div class="card app-card p-4 mb-3">
+      <div class="section-eyebrow">Earlier Rounds' Feedback</div>
+      {% for i in other_round_feedback %}
+        <div class="mb-2 pb-2 {% if not forloop.last %}border-bottom{% endif %}">
+          <strong>{{ i.get_round_type_display }}</strong> &middot; {{ i.scheduled_date|date:"d M Y H:i" }}
+          &middot; Interviewer: {% if i.interviewer %}{{ i.interviewer.get_full_name|default:i.interviewer.get_username }}{% else %}Unassigned{% endif %}
+          <div class="text-muted pd-meta">Result: {{ i.get_result_display }}</div>
+          <div class="pd-body mt-1">{{ i.feedback }}</div>
+        </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="card app-card p-4">
+      <div class="section-eyebrow">{% if is_admin_view %}All Interviews With This Candidate{% else %}Your Interviews With This Candidate{% endif %}</div>
+      {% for i in my_interviews %}
+        <div class="d-flex justify-content-between align-items-center mb-2 pb-2 {% if not forloop.last %}border-bottom{% endif %}">
+          <div>
+            <strong>{{ i.get_round_type_display }}</strong> &middot; {{ i.scheduled_date|date:"d M Y H:i" }} &middot; {{ i.get_mode_display }}
+            {% if is_admin_view %}&middot; Interviewer: {% if i.interviewer %}{{ i.interviewer.get_full_name|default:i.interviewer.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}{% endif %}
+            <div class="text-muted pd-meta">Status: {{ i.get_status_display }} &middot; Result: {{ i.get_result_display }}</div>
+            {% if i.feedback %}<div class="pd-body mt-1">{{ i.feedback }}</div>{% endif %}
+          </div>
+          {% if i.status in open_statuses %}
+          <a href="{% url 'interview_result' i.pk %}" class="btn btn-sm btn-fill-app flex-shrink-0">Record Result</a>
+          {% endif %}
+        </div>
+      {% empty %}<p class="text-muted mb-0">No interviews on record.</p>{% endfor %}
+    </div>
+  </div>
+
 </div>
 {% endblock %}
 
