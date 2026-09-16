@@ -204,8 +204,6 @@
       <span><strong id="bulkCount">0</strong> selected</span>
       <div class="bulk-actions">
         <button type="button" class="btn btn-sm btn-outline-secondary" id="bulkClear">Clear</button>
-        {# Stage-decision bulk actions (Qualify/Hold/Reject) moved to the
-           Candidate Details page only - the bulk bar keeps just Blacklist/Delete. #}
         <div class="dropdown d-inline-block">
           <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">More</button>
           <ul class="dropdown-menu dropdown-menu-end">
@@ -269,9 +267,6 @@
             </td>
             <td class="text-nowrap text-end">
               <a href="{% url 'candidate_timeline' c.id %}" class="btn btn-sm btn-outline-app">View</a>
-              {# Stage-decision actions (Qualify/Shortlist/Cleared/Hire/Hold/Reject/etc.)
-                 all now happen from the Candidate Details page only - this list keeps
-                 just View/Delete/Blacklist, the record-level actions. #}
               {% if tab in 'open,shortlisted,round1,interview,final_selection' or is_hr_admin or is_recruiter %}
               <div class="dropdown d-inline-block">
                 <button class="btn btn-sm btn-outline-app kebab-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">&#8942;</button>

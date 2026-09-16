@@ -627,8 +627,7 @@ html { scroll-behavior: smooth; }
             <div class="text-end mt-2"><button type="submit" class="btn btn-sm btn-outline-app js-savebtn">Add Log</button></div>
           </form>
           {% else %}
-          {# The interviewer already recorded attendance when submitting their
-             result - logging it again here would just be a duplicate. #}
+          {# Interviewer already logged attendance when submitting their result. #}
           <div class="pd-body text-muted mb-2"><i class="bi bi-info-circle"></i> Already logged by the interviewer.</div>
           {% endif %}
           {% with logs=comm_logs_by_channel|dict_get:stage.comm_channel %}
