@@ -11,8 +11,8 @@ from candidates.models import Candidate
 # How long a slot an interview occupies on the interviewer's calendar, for the
 # double-booking check below. Also the .ics event length in interviews/invites.py,
 # and the length of a slot an interviewer proposes in InterviewSlot below - keep
-# all three in sync since they describe the same one-hour meeting block.
-INTERVIEW_DURATION = timedelta(hours=1)
+# all three in sync since they describe the same meeting block.
+INTERVIEW_DURATION = timedelta(minutes=30)
 
 # How long a candidate's "pick your interview slot" link stays usable, counted
 # from whenever the interviewer (most recently) proposed slots. Also how long
@@ -278,6 +278,19 @@ class InterviewSlot(models.Model):
         if exclude_request_pk:
             qs = qs.exclude(request_id=exclude_request_pk)
         return qs
+
+
+def candidate_round_label(round_type):
+    """How a round is named to the CANDIDATE (the slot-pick email/page) -
+    deliberately different from the internal round_type/"Round 1"/"Round 2"
+    naming HR sees everywhere else. Round 1 (ROUND1) is always Technical
+    Round; every Round 2 sub-type (Technical/Managerial/Final/HR - see
+    candidates.views.ROUND2_TYPES) is shown as HR Round regardless of which
+    one HR actually picked - candidates never see the internal round_type
+    choice at all, only which of the two candidate-facing rounds this is."""
+    if round_type == Interview.RoundType.ROUND1:
+        return 'Technical Round'
+    return 'HR Round'
 
 
 def open_interview_message(interview):

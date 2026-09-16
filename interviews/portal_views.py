@@ -9,6 +9,7 @@ import logging
 
 from django.contrib import messages
 from django.contrib.auth import views as auth_views
+from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -113,9 +114,11 @@ class InterviewerCandidateView(GroupRequiredMixin, DetailView):
     prepare - contact/background/education/experience, the CV, the AI
     summary - with none of the HR-only actions (edit/delete, status changes,
     hiring-stage progression, vacancy/source mapping). Restricted to
-    candidates this interviewer actually has an interview with, not the whole
-    repository by ID - a 404, not just a group check, for anyone else. An
-    Admin can open any candidate that has an interview at all."""
+    candidates this interviewer actually has an interview with, OR is still
+    just a Prospect for (an InterviewRequest allocated to them, before any
+    slot is even scheduled - see the portal home's Prospects tab, which
+    links here) - not the whole repository by ID - a 404, not just a group
+    check, for anyone else. An Admin can open any candidate with either."""
     model = Candidate
     template_name = 'interviews/portal_candidate.html'
     context_object_name = 'candidate'
@@ -123,8 +126,11 @@ class InterviewerCandidateView(GroupRequiredMixin, DetailView):
 
     def get_queryset(self):
         if _is_admin(self.request.user):
-            return Candidate.objects.filter(interviews__isnull=False).distinct()
-        return Candidate.objects.filter(interviews__interviewer=self.request.user).distinct()
+            return Candidate.objects.filter(
+                Q(interviews__isnull=False) | Q(interview_requests__isnull=False)).distinct()
+        user = self.request.user
+        return Candidate.objects.filter(
+            Q(interviews__interviewer=user) | Q(interview_requests__interviewer=user)).distinct()
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)

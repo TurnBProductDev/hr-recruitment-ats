@@ -41,12 +41,23 @@ class InterviewForm(BootstrapFormMixin, forms.ModelForm):
             'scheduled_date': forms.DateTimeInput(attrs={'type': 'datetime-local'}),
         }
 
-    def __init__(self, *args, candidate=None, **kwargs):
+    def __init__(self, *args, candidate=None, resolving_request=None, **kwargs):
         super().__init__(*args, **kwargs)
         # On a reschedule the candidate comes from the interview being edited.
         self.candidate = candidate or (self.instance.candidate if self.instance.candidate_id else None)
+        # Set when this form is reached from a Round 1/2 stage card's
+        # in-progress InterviewRequest (e.g. "Reschedule" -> Manual Slot
+        # Allocate) - that request's own open-ness must not count as a
+        # clash against itself; see clean() below. It gets resolved
+        # (status=SCHEDULED, interview=...) by whoever saves this form -
+        # see InterviewScheduleView.form_valid.
+        self.resolving_request = resolving_request
         if self.candidate and not self.is_bound:
             self.fields['candidate_email'].initial = self.candidate.email
+            if resolving_request and not self.instance.pk:
+                self.fields['round_type'].initial = resolving_request.round_type
+                self.fields['interviewer'].initial = resolving_request.interviewer_id
+                self.fields['mode'].initial = resolving_request.mode
         # Only people in the Interviewer group are assignable, ordered by name.
         User = get_user_model()
         self.fields['interviewer'].queryset = (
@@ -67,7 +78,10 @@ class InterviewForm(BootstrapFormMixin, forms.ModelForm):
             clash = clash.first()
             if clash:
                 raise forms.ValidationError(open_interview_message(clash))
-            request_clash = InterviewRequest.open_for(self.candidate).first()
+            request_clash = InterviewRequest.open_for(self.candidate)
+            if self.resolving_request:
+                request_clash = request_clash.exclude(pk=self.resolving_request.pk)
+            request_clash = request_clash.first()
             if request_clash:
                 raise forms.ValidationError(open_interview_request_message(request_clash))
 
@@ -131,7 +145,10 @@ class InterviewResultForm(BootstrapFormMixin, forms.ModelForm):
 class InterviewAllocationForm(BootstrapFormMixin, forms.ModelForm):
     """Step 1 of the new flow: HR only picks who interviews the candidate -
     no date yet, that comes from the interviewer's own proposed slots (see
-    InterviewSlotProposalForm)."""
+    InterviewSlotProposalForm). Also reused, bound to an existing
+    InterviewRequest via `instance=`, for the Reschedule popup on the Round
+    1/2 stage card - letting HR change the interviewer/mode instead of being
+    stuck re-asking the same one - see InterviewRequestRescheduleView."""
     class Meta:
         model = InterviewRequest
         fields = ['round_type', 'interviewer', 'mode']
@@ -152,7 +169,9 @@ class InterviewAllocationForm(BootstrapFormMixin, forms.ModelForm):
             clash = Interview.open_for(self.candidate).first()
             if clash:
                 raise forms.ValidationError(open_interview_message(clash))
-            request_clash = InterviewRequest.open_for(self.candidate).first()
+            # Editing an existing (already open) request - e.g. Reschedule -
+            # must not treat that same row as a clash against itself.
+            request_clash = InterviewRequest.open_for(self.candidate).exclude(pk=self.instance.pk).first()
             if request_clash:
                 raise forms.ValidationError(open_interview_request_message(request_clash))
         return cleaned
@@ -165,12 +184,21 @@ class InterviewSlotProposalForm(BootstrapFormMixin, forms.Form):
     # A separate date input + time input (rather than one combined
     # datetime-local field) - easier to pick a day on, and the time input
     # can be typed directly instead of fought with a combined stepper.
+    # type="text" (not the native date/time inputs) - portal_propose_slots.html
+    # attaches Flatpickr to the flatpickr-date/flatpickr-time class, so both
+    # get the same nice calendar/time-wheel UI on desktop as on mobile,
+    # instead of the browser's own (inconsistent, clunkier-on-desktop) native
+    # date/time pickers. Flatpickr still submits the same Y-m-d/H:i text this
+    # form already expects, so nothing else here needs to change.
     slot_1 = forms.SplitDateTimeField(label='Slot 1', widget=forms.SplitDateTimeWidget(
-        date_attrs={'type': 'date', 'class': 'form-control'}, time_attrs={'type': 'time', 'class': 'form-control'}))
+        date_attrs={'type': 'text', 'class': 'form-control flatpickr-date'},
+        time_attrs={'type': 'text', 'class': 'form-control flatpickr-time'}))
     slot_2 = forms.SplitDateTimeField(label='Slot 2', required=False, widget=forms.SplitDateTimeWidget(
-        date_attrs={'type': 'date', 'class': 'form-control'}, time_attrs={'type': 'time', 'class': 'form-control'}))
+        date_attrs={'type': 'text', 'class': 'form-control flatpickr-date'},
+        time_attrs={'type': 'text', 'class': 'form-control flatpickr-time'}))
     slot_3 = forms.SplitDateTimeField(label='Slot 3', required=False, widget=forms.SplitDateTimeWidget(
-        date_attrs={'type': 'date', 'class': 'form-control'}, time_attrs={'type': 'time', 'class': 'form-control'}))
+        date_attrs={'type': 'text', 'class': 'form-control flatpickr-date'},
+        time_attrs={'type': 'text', 'class': 'form-control flatpickr-time'}))
 
     def __init__(self, *args, interviewer=None, **kwargs):
         super().__init__(*args, **kwargs)

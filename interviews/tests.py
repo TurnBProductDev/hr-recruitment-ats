@@ -19,7 +19,7 @@ from jobs.models import Job
 
 from . import graph_client, invites, slot_emails
 from .graph_client import GraphError
-from .models import INTERVIEW_DURATION, Interview, InterviewReschedule, InterviewRequest
+from .models import INTERVIEW_DURATION, Interview, InterviewReschedule, InterviewRequest, InterviewSlot
 
 
 @override_settings(
@@ -765,6 +765,49 @@ class InterviewerPortalTests(TestCase):
         response = self.client.get(reverse('candidate_cv', args=[self.other_candidate.pk]))
         self.assertEqual(response.status_code, 404)
 
+    def test_can_view_a_prospect_with_no_interview_yet(self):
+        """A candidate allocated to this interviewer (InterviewRequest) but
+        with no Interview scheduled yet - the Prospects tab's own link -
+        must not 404 just because there's no Interview row."""
+        InterviewRequest.objects.create(
+            candidate=self.other_candidate, round_type=Interview.RoundType.ROUND1,
+            interviewer=self.interviewer)
+        self.client.force_login(self.interviewer)
+        response = self.client.get(reverse('interviewer_candidate', args=[self.other_candidate.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Nikhil Shaji')
+
+    def test_can_open_the_cv_of_a_prospect_with_no_interview_yet(self):
+        self.other_candidate.resume_url = 'https://example.com/cv.pdf'
+        self.other_candidate.save()
+        InterviewRequest.objects.create(
+            candidate=self.other_candidate, round_type=Interview.RoundType.ROUND1,
+            interviewer=self.interviewer)
+        self.client.force_login(self.interviewer)
+        with mock.patch('candidates.views.requests.get') as get:
+            get.return_value = mock.Mock(status_code=200, content=b'%PDF-1.4 fake',
+                                         headers={'Content-Type': 'application/pdf'})
+            get.return_value.raise_for_status = mock.Mock()
+            response = self.client.get(reverse('candidate_cv', args=[self.other_candidate.pk]))
+        self.assertEqual(response.status_code, 200)
+
+    def test_interviewer_cv_is_streamed_not_redirected(self):
+        """An Interviewer must never be sent to the CV's own storage location
+        (e.g. a SharePoint sharing link's document-library page) - the file
+        is fetched and streamed back same-origin instead."""
+        self.candidate.resume_url = 'https://example.com/cv.pdf'
+        self.candidate.save()
+        self.client.force_login(self.interviewer)
+        with mock.patch('candidates.views.requests.get') as get:
+            get.return_value = mock.Mock(status_code=200, content=b'%PDF-1.4 fake',
+                                         headers={'Content-Type': 'application/pdf'})
+            get.return_value.raise_for_status = mock.Mock()
+            response = self.client.get(reverse('candidate_cv', args=[self.candidate.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('Location', response)
+        self.assertEqual(response.content, b'%PDF-1.4 fake')
+        get.assert_called_once_with('https://example.com/cv.pdf', timeout=(10, 30))
+
     def test_a_later_round_interviewer_sees_the_earlier_rounds_feedback(self):
         self.interview.status = Interview.Status.COMPLETED
         self.interview.result = Interview.Result.PASS_
@@ -867,6 +910,83 @@ class ProposeSlotsSplitDateTimeTests(TestCase):
             })
         self.assertEqual(response.status_code, 400)  # redisplayed with the error
         self.assertEqual(self.request_obj.slots.count(), 0)
+
+
+class InterviewRequestRescheduleTests(TestCase):
+    """The Round 1/2 stage card's "Reschedule" button, offered once the
+    candidate has already picked a slot - a popup (mirroring Allocate
+    Interviewer) that lets HR change the interviewer/mode instead of being
+    stuck re-asking the same one, or set a date/time directly ("Manual Slot
+    Allocate") without going through the interviewer at all."""
+
+    def setUp(self):
+        self.hr = get_user_model().objects.create_user('hr1', 'hr1@turnb.com', 'pw')
+        self.hr.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.client.force_login(self.hr)
+        self.interviewer = get_user_model().objects.create_user(
+            'panel', 'panel@turnb.com', 'pw', first_name='Sreejith', last_name='K R')
+        self.interviewer.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
+        self.other_interviewer = get_user_model().objects.create_user(
+            'panel2', 'panel2@turnb.com', 'pw', first_name='Divya', last_name='S')
+        self.other_interviewer.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
+        self.job = Job.objects.create(job_code='J1', title='Program Manager')
+        self.candidate = Candidate.objects.create(
+            full_name='Rose E G', email='rose@example.com', job=self.job)
+        self.request_obj = InterviewRequest.objects.create(
+            candidate=self.candidate, round_type=Interview.RoundType.ROUND1,
+            interviewer=self.interviewer, status=InterviewRequest.Status.AWAITING_HR_APPROVAL)
+        self.slot = self.request_obj.slots.create(
+            start_datetime=timezone.now() + timezone.timedelta(days=1))
+        self.request_obj.candidate_selected_slot = self.slot
+        self.request_obj.candidate_selected_at = timezone.now()
+        self.request_obj.save(update_fields=['candidate_selected_slot', 'candidate_selected_at'])
+
+    def test_get_prefills_the_current_interviewer(self):
+        response = self.client.get(
+            reverse('interview_request_reschedule', args=[self.request_obj.pk]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Manual Slot Allocate')
+
+    def test_changing_the_interviewer_resets_to_awaiting_slots_and_clears_the_pick(self):
+        response = self.client.post(
+            reverse('interview_request_reschedule', args=[self.request_obj.pk]), {
+                'round_type': Interview.RoundType.ROUND1,
+                'interviewer': self.other_interviewer.pk,
+                'mode': Interview.Mode.VIDEO,
+            })
+        self.assertRedirects(response, reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.request_obj.refresh_from_db()
+        self.assertEqual(self.request_obj.interviewer, self.other_interviewer)
+        self.assertEqual(self.request_obj.status, InterviewRequest.Status.AWAITING_SLOTS)
+        self.assertIsNone(self.request_obj.candidate_selected_slot)
+        self.assertIsNone(self.request_obj.candidate_token)
+        self.assertEqual(self.request_obj.slots.count(), 0)
+
+    def test_reschedule_no_longer_holds_the_old_interviewer_slot(self):
+        """Once rescheduled away, the interviewer isn't blocked at that time
+        anymore - see InterviewSlot.held_conflicts_for."""
+        self.client.post(
+            reverse('interview_request_reschedule', args=[self.request_obj.pk]), {
+                'round_type': Interview.RoundType.ROUND1,
+                'interviewer': self.other_interviewer.pk,
+                'mode': Interview.Mode.VIDEO,
+            })
+        clash = InterviewSlot.held_conflicts_for(self.interviewer, self.slot.start_datetime).first()
+        self.assertIsNone(clash)
+
+    def test_manual_slot_allocate_resolves_the_request_directly(self):
+        response = self.client.post(
+            reverse('interview_request_manual_allocate', args=[self.candidate.pk, self.request_obj.pk]), {
+                'round_type': Interview.RoundType.ROUND1, 'interviewer': self.other_interviewer.pk,
+                'scheduled_date': '2026-09-25T11:00', 'mode': Interview.Mode.VIDEO, 'meeting_link': '',
+            })
+        self.assertEqual(self.candidate.interviews.count(), 1)
+        interview = self.candidate.interviews.first()
+        self.assertEqual(interview.interviewer, self.other_interviewer)
+        self.request_obj.refresh_from_db()
+        self.assertEqual(self.request_obj.status, InterviewRequest.Status.SCHEDULED)
+        self.assertEqual(self.request_obj.interview, interview)
 
 
 class InterviewerPortalAdminTests(TestCase):

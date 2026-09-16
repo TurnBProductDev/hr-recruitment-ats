@@ -512,10 +512,11 @@ html { scroll-behavior: smooth; }
                 {% csrf_token %}
                 <button type="submit" class="btn btn-sm btn-fill-app"><i class="bi bi-check2-circle"></i> Approve &amp; Mail Send</button>
               </form>
-              <form method="post" action="{% url 'interview_request_new_slots' stage.interview_request.pk %}">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-sm btn-outline-app">Reschedule</button>
-              </form>
+              <button type="button" class="btn btn-sm btn-outline-app"
+                      data-bs-toggle="modal" data-bs-target="#allocateModal"
+                      data-load-url="{% url 'interview_request_reschedule' stage.interview_request.pk %}" data-modal-title="Reschedule Interview">
+                Reschedule
+              </button>
             </div>
             {% endif %}
           {% else %}
@@ -609,6 +610,7 @@ html { scroll-behavior: smooth; }
         {% if stage.comm_channel %}
         <div class="stage-subsection">
           <div class="stage-subsection-title">Interview Communication Log</div>
+          {% if not stage.attendance_already_logged %}
           <form method="post" action="{% url 'candidate_add_log' candidate.pk %}" class="mb-2 js-autosave">
             {% csrf_token %}
             <input type="hidden" name="channel" value="{{ stage.comm_channel }}">
@@ -624,6 +626,11 @@ html { scroll-behavior: smooth; }
             </div>
             <div class="text-end mt-2"><button type="submit" class="btn btn-sm btn-outline-app js-savebtn">Add Log</button></div>
           </form>
+          {% else %}
+          {# The interviewer already recorded attendance when submitting their
+             result - logging it again here would just be a duplicate. #}
+          <div class="pd-body text-muted mb-2"><i class="bi bi-info-circle"></i> Already logged by the interviewer.</div>
+          {% endif %}
           {% with logs=comm_logs_by_channel|dict_get:stage.comm_channel %}
           {% for l in logs %}
           <div class="pd-body mb-1 pb-1 {% if not forloop.last %}border-bottom{% endif %}">

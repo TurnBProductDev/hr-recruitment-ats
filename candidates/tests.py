@@ -879,24 +879,27 @@ class HoldNamingTests(TestCase):
         self.assertContains(response, '>Hold</a>')  # the tab itself
         self.assertContains(response, 'badge-screening_hold">Round 2 Hold')
 
-    def test_hold_is_offered_on_every_pipeline_tab(self):
+    def test_hold_is_offered_on_every_pipeline_stage(self):
+        """Hold now happens from the Candidate Details page only - not the
+        Repository row, which keeps just View/Delete/Blacklist."""
         hold_url = reverse('candidate_screening_hold', args=[self.candidate.pk])
-        stages = [('open', Candidate.Status.OPEN),
-                  ('shortlisted', Candidate.Status.SHORTLISTED),
-                  ('round1', Candidate.Status.ROUND1),
-                  ('interview', Candidate.Status.INTERVIEW),
-                  ('final_selection', Candidate.Status.FINAL_SELECTION)]
+        stages = [Candidate.Status.OPEN, Candidate.Status.SHORTLISTED, Candidate.Status.ROUND1,
+                  Candidate.Status.INTERVIEW, Candidate.Status.FINAL_SELECTION]
+        for status in stages:
+            with self.subTest(status=status):
+                services.change_status(self.candidate, status)
+                response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+                self.assertContains(response, hold_url)
+
+    def test_hold_is_not_offered_on_repository_tabs(self):
+        hold_url = reverse('candidate_screening_hold', args=[self.candidate.pk])
+        stages = [('open', Candidate.Status.OPEN), ('round1', Candidate.Status.ROUND1),
+                  ('rejected', Candidate.Status.REJECTED)]
         for tab, status in stages:
             with self.subTest(tab=tab):
                 services.change_status(self.candidate, status)
                 response = self.client.get(f"{reverse('candidate_repository')}?tab={tab}&scoped=1")
-                self.assertContains(response, hold_url)
-
-    def test_hold_is_not_offered_on_terminal_tabs(self):
-        hold_url = reverse('candidate_screening_hold', args=[self.candidate.pk])
-        services.change_status(self.candidate, Candidate.Status.REJECTED)
-        response = self.client.get(f"{reverse('candidate_repository')}?tab=rejected")
-        self.assertNotContains(response, hold_url)
+                self.assertNotContains(response, hold_url)
 
     def test_holding_from_the_repository_names_the_stage(self):
         services.change_status(self.candidate, Candidate.Status.ROUND1)
@@ -1012,6 +1015,31 @@ class HoldNamingTests(TestCase):
         interview.refresh_from_db()
         self.assertEqual(interview.status, Interview.Status.SCHEDULED)  # untouched
 
+    def test_undo_keeps_the_history_row_but_flags_it_undone(self):
+        """Ctrl+Z, not erase: the reversed transition stays on the record
+        (is_undone=True) instead of being deleted or a new row appearing."""
+        services.change_status(self.candidate, Candidate.Status.SHORTLISTED)
+        before = self.candidate.history.count()
+        self.client.post(reverse('candidate_revert', args=[self.candidate.pk]))
+        self.assertEqual(self.candidate.history.count(), before)  # no row added or removed
+        row = self.candidate.history.get(old_status=Candidate.Status.OPEN,
+                                         new_status=Candidate.Status.SHORTLISTED)
+        self.assertTrue(row.is_undone)
+
+    def test_undone_decision_no_longer_shows_on_the_stage_card(self):
+        """Once undone, the Hiring block must stop showing the reversed
+        decision as if it still held (it would otherwise keep reporting
+        "Qualified" on the CV Screening stage forever)."""
+        services.change_status(self.candidate, Candidate.Status.SHORTLISTED)
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertContains(response, 'stage-decision-badge stage-tone-advance">Qualified')
+
+        self.client.post(reverse('candidate_revert', args=[self.candidate.pk]))
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertNotContains(response, 'stage-decision-badge stage-tone-advance">Qualified')
+        # ...but it's still visible, marked undone, on the Activity History feed.
+        self.assertContains(response, 'Status: Open → Qualified (Undone)')
+
 
 class SetStatusSettlesTheOpenInterviewTests(TestCase):
     """The generic 'Update status' dropdown (CandidateSetStatusView) used to
@@ -1082,9 +1110,18 @@ class HoldResumeActionTests(TestCase):
         self.candidate.hold_from_status = ''
         self.assertEqual(self.candidate.resume_action['label'], 'Move to Applied')
 
-    def test_the_hold_tab_shows_the_matching_button(self):
+    def test_the_repository_row_no_longer_offers_the_resume_button(self):
+        """Stage-decision actions (including resuming from Hold) now live only
+        on the Candidate Details page - the Repository row keeps just
+        View/Delete/Blacklist."""
         self._hold_at(Candidate.Status.ROUND1)
         response = self.client.get(f"{reverse('candidate_repository')}?tab={HOLD_TAB}&scoped=1")
+        self.assertNotContains(
+            response, reverse('candidate_interview_stage', args=[self.candidate.pk]))
+
+    def test_the_candidate_page_shows_the_matching_resume_button(self):
+        self._hold_at(Candidate.Status.ROUND1)
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
         self.assertContains(response, 'Move to Round 2')
         self.assertContains(
             response, reverse('candidate_interview_stage', args=[self.candidate.pk]))

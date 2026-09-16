@@ -9,6 +9,8 @@ from email_templates.store import render_email
 
 from candidates import logic_app_mail
 
+from .models import candidate_round_label
+
 # Fallback defaults, used only if the matching EmailTemplate row is missing
 # (e.g. before migrations run) - the seeded rows
 # (email_templates/migrations/0002_seed_defaults.py) carry this same text,
@@ -95,7 +97,7 @@ def notify_candidate_select_slot(interview_request, select_url):
     subject, body = render_email(
         'candidate_select_slot', _CANDIDATE_SELECT_SLOT_SUBJECT, _CANDIDATE_SELECT_SLOT_BODY,
         candidate_name=candidate.full_name, role=_role_name(candidate),
-        round_type=interview_request.get_round_type_display(), select_url=select_url)
+        round_type=candidate_round_label(interview_request.round_type), select_url=select_url)
     logic_app_mail.send_email(
         to_email=candidate.email, cc_emails=logic_app_mail.default_cc_list(), subject=subject, body=body)
 

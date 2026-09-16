@@ -2,6 +2,7 @@
 {% block title %}Propose Interview Slots{% endblock %}
 
 {% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css">
 <style>
 .split-datetime-row { display:flex; align-items:flex-end; gap:28px; }
 .split-dt-col { display:flex; flex-direction:column; gap:5px; }
@@ -16,7 +17,7 @@
   <div class="col-lg-7">
     <div class="card app-card p-4">
       <h4 class="mb-1">Propose Slots - {{ interview_request.candidate.full_name }}</h4>
-      <p class="text-muted small mb-3">{{ interview_request.get_round_type_display }} interview. Offer 2 or 3 one-hour times you're available - HR will pick one to confirm.</p>
+      <p class="text-muted small mb-3">{{ interview_request.get_round_type_display }} interview. Offer 2 or 3 thirty-minute times you're available - HR will pick one to confirm.</p>
       <form method="post">
         {% csrf_token %}
         {% for e in form.non_field_errors %}<div class="alert alert-danger py-2">{{ e }}</div>{% endfor %}
@@ -56,4 +57,21 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
+<script>
+// Same calendar/time-wheel widget on every browser (the native <input type=
+// date/time> pickers look inconsistent - a plain popup calendar on desktop
+// Chrome vs. Android's own Material picker) - Flatpickr still submits plain
+// Y-m-d / H:i text underneath, exactly what InterviewSlotProposalForm already
+// parses, so nothing server-side needed to change for this.
+document.querySelectorAll('.flatpickr-date').forEach(function (el) {
+  flatpickr(el, { dateFormat: 'Y-m-d', altInput: true, altFormat: 'D, d M Y', minDate: 'today' });
+});
+document.querySelectorAll('.flatpickr-time').forEach(function (el) {
+  flatpickr(el, { enableTime: true, noCalendar: true, dateFormat: 'H:i', altInput: true, altFormat: 'h:i K', time_24hr: false, minuteIncrement: 15 });
+});
+</script>
 {% endblock %}

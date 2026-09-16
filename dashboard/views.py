@@ -316,10 +316,13 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
         ctx['daily_from'], ctx['daily_to'] = daily_range
         ctx['daily_days'] = (daily_range[1] - daily_range[0]).days + 1
         daily_results = daily_view.compute(daily_range, job_id or None)
-        daily_max = max((c['value'] for c in daily_results), default=0) or 1
+        # Bars are scaled by candidate_count, not the raw action count - that's
+        # the number actually highlighted on each bar now (see dashboard.html);
+        # the action count/breakdown moved to the hover tooltip only.
+        daily_max = max((c['candidate_count'] for c in daily_results), default=0) or 1
         daily_colors = ['#0e6f6b', '#c9d3d1', '#a9b6b3', '#8a9a9a', '#6b7a7a', '#4f5c5c']
         for i, c in enumerate(daily_results):
-            c['bar_pct'] = round(c['value'] / daily_max * 100, 1)
+            c['bar_pct'] = round(c['candidate_count'] / daily_max * 100, 1)
             c['color'] = daily_colors[i % len(daily_colors)]
         ctx['daily_results'] = daily_results
         return ctx

@@ -175,9 +175,23 @@ class Candidate(models.Model):
     @property
     def status_label(self):
         """What the status is called on screen. A hold is named after the stage
-        it was taken at, so the badge reads "Round 2 Hold", not just "Hold"."""
+        it was taken at, so the badge reads "Round 2 Hold", not just "Hold".
+        Round 1/Round 2 additionally say whether an interview is actually
+        booked yet - "Round 1" alone doesn't tell HR whether they still need
+        to act, so it reads "Round 1 - Schedule Pending" until an Interview
+        row for that round is actually Scheduled/Rescheduled."""
         if self.status == self.Status.SCREENING_HOLD:
             return hold_label(self.hold_from_status)
+        if self.status in (self.Status.ROUND1, self.Status.INTERVIEW):
+            from interviews.models import Interview  # local: interviews.models imports Candidate
+            round_types = (
+                (Interview.RoundType.ROUND1,) if self.status == self.Status.ROUND1 else
+                (Interview.RoundType.TECHNICAL, Interview.RoundType.MANAGERIAL,
+                 Interview.RoundType.FINAL, Interview.RoundType.HR))
+            scheduled = self.interviews.filter(
+                round_type__in=round_types, status__in=Interview.OPEN_STATUSES).exists()
+            suffix = 'Scheduled' if scheduled else 'Schedule Pending'
+            return f'{self.get_status_display()} - {suffix}'
         return self.get_status_display()
 
     @property
@@ -299,6 +313,12 @@ class CandidateStatusHistory(models.Model):
     remarks = models.TextField(blank=True, null=True)
     # default (not auto_now_add) so historical dates can be backfilled on import
     changed_at = models.DateTimeField(default=timezone.now, db_index=True)
+    # Set by CandidateRevertLastActionView instead of deleting this row - the
+    # transition still happened and stays visible on the Activity History
+    # feed, but is excluded when reconstructing the Hiring block's stage
+    # decisions/dates (see candidates.views._build_hiring_stages) so an
+    # undone "Cleared"/"Reject"/etc. doesn't keep showing as if it still held.
+    is_undone = models.BooleanField(default=False)
 
     class Meta:
         ordering = ['-changed_at']

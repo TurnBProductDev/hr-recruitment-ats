@@ -59,7 +59,14 @@ class InterviewScheduleView(GroupRequiredMixin, CreateView):
     """Full page for direct navigation/no-JS; the candidate profile page's
     popup instead loads this same view's form as an HTML fragment (flagged by
     the X-Requested-With header) and, on a valid save, gets back the
-    invite-email draft fragment instead of a redirect."""
+    invite-email draft fragment instead of a redirect.
+
+    Also reachable with a `request_pk` (see the Reschedule popup's own
+    "Manual Slot Allocate" escape hatch, `interview_request_manual_allocate`)
+    to resolve that existing, still-open InterviewRequest directly into this
+    new Interview - skipping the interviewer's own slot-proposal round trip
+    entirely - instead of leaving it dangling as a competing "open request"
+    that would otherwise block this exact save."""
     model = Interview
     form_class = InterviewForm
     template_name = 'interviews/interview_form.html'
@@ -67,6 +74,11 @@ class InterviewScheduleView(GroupRequiredMixin, CreateView):
 
     def dispatch(self, request, *args, **kwargs):
         self.candidate = get_object_or_404(Candidate, pk=kwargs['candidate_id'])
+        self.interview_request = None
+        request_pk = kwargs.get('request_pk')
+        if request_pk:
+            self.interview_request = get_object_or_404(
+                InterviewRequest, pk=request_pk, candidate=self.candidate)
         return super().dispatch(request, *args, **kwargs)
 
     def get(self, request, *args, **kwargs):
@@ -93,6 +105,7 @@ class InterviewScheduleView(GroupRequiredMixin, CreateView):
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs['candidate'] = self.candidate
+        kwargs['resolving_request'] = self.interview_request
         return kwargs
 
     def get_context_data(self, **kwargs):
@@ -106,6 +119,10 @@ class InterviewScheduleView(GroupRequiredMixin, CreateView):
         form.instance.candidate = self.candidate
         form.instance.created_by = self.request.user
         response = super().form_valid(form)
+        if self.interview_request:
+            self.interview_request.status = InterviewRequest.Status.SCHEDULED
+            self.interview_request.interview = self.object
+            self.interview_request.save(update_fields=['status', 'interview'])
         _maybe_create_teams_meeting(self.object)
         if _is_ajax(self.request):
             return _invite_draft_response(self.request, self.object, form.cleaned_data.get('candidate_email'))
@@ -230,6 +247,80 @@ class InterviewRequestApproveView(GroupRequiredMixin, View):
             return _invite_draft_response(request, interview, None)
         messages.success(request, f'Interview approved for {request_obj.candidate.full_name}.')
         return redirect('candidate_timeline', pk=request_obj.candidate_id)
+
+
+class InterviewRequestRescheduleView(GroupRequiredMixin, UpdateView):
+    """Reschedule popup on the Round 1/2 stage card, reached once the
+    candidate has already picked a slot - mirrors Allocate Interviewer's own
+    form (round type/interviewer/mode), bound to this SAME InterviewRequest
+    instead of creating a new one, so HR can change interviewer/mode instead
+    of being stuck re-asking the one already allocated. Saving resets this
+    request back to Awaiting Slots (clearing any proposed/picked slots and
+    the candidate's now-stale link) and notifies whichever interviewer ends
+    up assigned to propose fresh slots - exactly like a brand new
+    allocation. The fragment's own "Manual Slot Allocate" escape hatch
+    instead resolves this same request directly via
+    InterviewScheduleView(request_pk=...), skipping this reset entirely."""
+    model = InterviewRequest
+    form_class = InterviewAllocationForm
+    template_name = 'interviews/interview_allocate_form.html'
+    allowed_groups = (HR_ADMIN, RECRUITER)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['candidate'] = self.object.candidate
+        return kwargs
+
+    def get_template_names(self):
+        if _is_ajax(self.request):
+            return ['interviews/_reschedule_request_form.html']
+        return [self.template_name]
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx['candidate'] = self.object.candidate
+        ctx['back_url'] = reverse('candidate_timeline', args=[self.object.candidate_id])
+        ctx['back_label'] = self.object.candidate.full_name
+        return ctx
+
+    def form_valid(self, form):
+        super().form_valid(form)
+        request_obj = self.object
+        request_obj.slots.all().delete()
+        request_obj.status = InterviewRequest.Status.AWAITING_SLOTS
+        request_obj.candidate_token = None
+        request_obj.slots_proposed_at = None
+        request_obj.candidate_selected_slot = None
+        request_obj.candidate_selected_at = None
+        request_obj.save(update_fields=[
+            'status', 'candidate_token', 'slots_proposed_at', 'candidate_selected_slot', 'candidate_selected_at'])
+        interviewer_name = request_obj.interviewer.get_full_name() or request_obj.interviewer.get_username()
+        notifications.notify(
+            request_obj.interviewer, title=f'New interview to schedule - {request_obj.candidate.full_name}',
+            message=f'Propose 2-3 one-hour slots for {request_obj.candidate.full_name} '
+                    f'({request_obj.get_round_type_display()}).',
+            url=reverse('interviewer_propose_slots', args=[request_obj.pk]))
+        try:
+            slot_emails.notify_interviewer_new_request(
+                request_obj, login_url=self.request.build_absolute_uri(reverse('interviewer_login')))
+        except logic_app_mail.EmailSendError as exc:
+            logger.warning('Could not email the reschedule notice for request %s: %s', request_obj.pk, exc)
+        if _is_ajax(self.request):
+            return HttpResponse(format_html(
+                '<div class="alert alert-success mb-0">Interview reset - {} will propose available slots.</div>',
+                interviewer_name))
+        messages.success(self.request, f'Interview reset for {request_obj.candidate.full_name} - '
+                                       f'asked {interviewer_name} to propose slots.')
+        return redirect('candidate_timeline', pk=request_obj.candidate_id)
+
+    def form_invalid(self, form):
+        response = super().form_invalid(form)
+        if _is_ajax(self.request):
+            response.status_code = 400
+        return response
+
+    def get_success_url(self):
+        return reverse('candidate_timeline', args=[self.object.candidate_id])
 
 
 class InterviewRequestNewSlotsView(GroupRequiredMixin, View):

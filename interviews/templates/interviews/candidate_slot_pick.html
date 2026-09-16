@@ -1,4 +1,4 @@
-{% extends "public_base.html" %}
+{% extends "candidate_action_base.html" %}
 {% block title %}{% if state == 'open' %}Pick Your Interview Time{% else %}Interview Scheduling{% endif %}{% endblock %}
 
 {% block extra_css %}
@@ -12,8 +12,20 @@
 .slot-option:hover { border-color: var(--primary-green); }
 .slot-option:has(input:checked) { border-color: var(--primary-green); background:#f0f9f8; }
 .slot-option-time { font-size:1rem; font-weight:600; color:#1a2e35; }
-.slot-option input[type="radio"] {
-  width:20px; height:20px; margin:0; flex-shrink:0; cursor:pointer; accent-color: var(--primary-green);
+/* Custom check-circle: the native radio is kept (for accessibility/click
+   target and form semantics) but visually hidden, replaced by a bordered
+   circle that fills solid green with a check mark once selected. */
+.slot-radio-wrap { position:relative; width:26px; height:26px; flex-shrink:0; }
+.slot-radio-wrap input[type="radio"] {
+  position:absolute; inset:0; width:26px; height:26px; margin:0; opacity:0; cursor:pointer; z-index:2;
+}
+.slot-check-circle {
+  position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  width:26px; height:26px; border:2px solid var(--border-color); border-radius:50%;
+  background:#fff; color:transparent; font-size:.85rem; transition:all .15s ease;
+}
+.slot-radio-wrap input[type="radio"]:checked + .slot-check-circle {
+  border-color: var(--primary-green); background: var(--primary-green); color:#fff;
 }
 .pick-icon { font-size:2.5rem; }
 </style>
@@ -23,7 +35,7 @@
 <div class="card app-card p-4 p-md-5" style="max-width:640px; margin:0 auto;">
   {% if state == 'open' %}
     <h3 class="mb-1">Pick your interview time</h3>
-    <p class="text-muted mb-1">{{ interview_request.candidate.full_name }} &middot; {{ interview_request.get_round_type_display }}</p>
+    <p class="text-muted mb-1">{{ interview_request.candidate.full_name }} &middot; {{ round_label }}</p>
     <p class="text-muted small">All times shown in Indian Standard Time (IST).</p>
 
     <form method="post">
@@ -33,7 +45,10 @@
         {% for radio in form.slot %}
         <label class="slot-option">
           <span class="slot-option-time">{{ radio.choice_label }}</span>
-          {{ radio.tag }}
+          <span class="slot-radio-wrap">
+            {{ radio.tag }}
+            <span class="slot-check-circle"><i class="bi bi-check-lg"></i></span>
+          </span>
         </label>
         {% endfor %}
         {% for e in form.slot.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
@@ -46,7 +61,7 @@
     <h3 class="mt-3">You've already selected a time</h3>
     <p>
       You picked <strong>{{ interview_request.candidate_selected_slot.start_datetime|date:"l, d M Y, h:i A" }} IST</strong>
-      for your {{ interview_request.get_round_type_display }} interview. We'll be in touch shortly to confirm.
+      for your {{ round_label }} interview. We'll be in touch shortly to confirm.
       If you need to change this, please get in touch with us.
     </p>
     <p class="text-muted small mb-0">TurnB Business Services Pvt Ltd</p>
@@ -57,7 +72,7 @@
     <p>
       This interview scheduling link is no longer active - it was valid for 48 hours after being sent.
       Please get in touch with us and we'll share new time options
-      {% if interview_request %}for your {{ interview_request.get_round_type_display }} interview{% endif %}.
+      {% if interview_request %}for your {{ round_label }} interview{% endif %}.
     </p>
     <p class="text-muted small mb-0">TurnB Business Services Pvt Ltd</p>
 

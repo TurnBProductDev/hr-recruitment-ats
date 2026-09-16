@@ -3,6 +3,7 @@ import json
 import logging
 
 import openpyxl
+import requests
 from django.conf import settings
 from django.contrib import messages
 from django.db.models import Count, Exists, F, Max, OuterRef, Q, Subquery
@@ -89,7 +90,7 @@ HIRING_STAGES = [
      ]},
     {'key': 'shortlisted', 'status': STATUS.SHORTLISTED, 'label': 'Tele Screening', 'short_label': 'Tele Screening',
      'comm_channel': CommunicationLog.Channel.PHONE, 'interview_rounds': (), 'actions': [
-         {'url': 'candidate_round1', 'target': STATUS.ROUND1, 'label': 'Shortlist', 'tone': 'advance'},
+         {'url': 'candidate_round1', 'target': STATUS.ROUND1, 'label': 'Shortlisted', 'tone': 'advance'},
          {'url': 'candidate_screening_hold', 'target': STATUS.SCREENING_HOLD, 'label': 'Hold', 'tone': 'hold'},
          {'url': 'candidate_reject', 'target': STATUS.REJECTED, 'label': 'Reject', 'tone': 'reject'},
          {'url': 'candidate_blacklist', 'target': STATUS.BLACKLISTED, 'label': 'Blacklist', 'tone': 'blacklist', 'require_reason': True},
@@ -134,7 +135,10 @@ def _build_hiring_stages(candidate, history):
     and which are still locked ahead. `history` must already be a list/qs
     fully evaluated (it's walked more than once)."""
     labels = dict(Candidate.Status.choices)
-    history = sorted(history, key=lambda h: (h.changed_at, h.id))
+    # Undone transitions stay on the Activity History feed (the caller's own
+    # `history` list is untouched) but must not count here - otherwise a
+    # reverted "Cleared"/etc. would keep showing as this stage's decision.
+    history = sorted((h for h in history if not h.is_undone), key=lambda h: (h.changed_at, h.id))
 
     if candidate.status == STATUS.SCREENING_HOLD:
         lookup_status = candidate.hold_from_status or STATUS.OPEN
@@ -820,9 +824,12 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
         events = []
         for h in ctx['history']:
             was = status_label(h.old_status, hold_source[h.id]) if h.old_status else '—'
+            title = f"Status: {was} → {status_label(h.new_status, h.old_status)}"
+            if h.is_undone:
+                title += ' (Undone)'
             events.append({
-                'when': h.changed_at, 'icon': 'arrow-right-circle',
-                'title': f"Status: {was} → {status_label(h.new_status, h.old_status)}",
+                'when': h.changed_at, 'icon': 'arrow-counterclockwise' if h.is_undone else 'arrow-right-circle',
+                'title': title,
                 'detail': h.remarks, 'who': h.performed_by or h.changed_by})
         for n in ctx['notes']:
             events.append({'when': n.created_at, 'icon': 'sticky',
@@ -853,8 +860,9 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
         ctx['activity'] = events
 
         # Most recent status change, shown above the Update Status form so HR can
-        # see the current state and who set it (history is ordered -changed_at)
-        last = ctx['history'].first()
+        # see the current state and who set it (history is ordered -changed_at).
+        # Skips undone rows - one of those no longer reflects candidate.status.
+        last = next((h for h in ctx['history'] if not h.is_undone), None)
         ctx['last_status'] = last
         ctx['last_status_label'] = status_label(last.new_status, last.old_status) if last else ''
 
@@ -895,6 +903,13 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
             stage['cancelled_interview'] = (
                 latest if latest and latest.status == Interview.Status.CANCELLED else None)
             stage['round_phase'] = 'decision' if stage['done_interview'] else 'schedule'
+            # An Interviewer's own Pass/Fail/Hold submission (InterviewResultView,
+            # "cannot decide pipeline" branch) already auto-logs the interview as
+            # Attended and prefixes the interview's feedback "Recommended: ..." -
+            # HR re-logging attendance manually here would just be a duplicate.
+            done = stage['done_interview']
+            stage['attendance_already_logged'] = bool(
+                done and (done.feedback or '').startswith('Recommended:'))
         ctx['hiring_stages'] = hiring_stages
         ctx['active_stage_index'] = active_stage_index
 
@@ -986,12 +1001,12 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
         # first occurrence of each is shown, same convention as every other
         # checkpoint here (first arrival at a stage, not every visit).
         future_prospect_row = _first_matching_history(
-            ctx['history'], lambda h: h.new_status == STATUS.SCREENING_HOLD
+            ctx['history'], lambda h: not h.is_undone and h.new_status == STATUS.SCREENING_HOLD
             and h.old_status in (STATUS.OPEN, STATUS.SCREENING_HOLD))
         if future_prospect_row:
             _insert_sla_checkpoint(sla_stages, 'Future Prospect', future_prospect_row.changed_at, color='#e0c97e')
         reapplied_row = _first_matching_history(
-            ctx['history'], lambda h: h.new_status == STATUS.OPEN and h.old_status)
+            ctx['history'], lambda h: not h.is_undone and h.new_status == STATUS.OPEN and h.old_status)
         if reapplied_row:
             _insert_sla_checkpoint(sla_stages, 'Applied', reapplied_row.changed_at)
 
@@ -1081,12 +1096,19 @@ class CandidateCvView(GroupRequiredMixin, View):
 
     Also reachable by an Interviewer (outside ANY_STAFF) so they can open a
     CV from their portal ahead of an interview - but only for a candidate
-    they actually have an interview with, not the whole repository by ID."""
+    they're actually (or about to be) interviewing: either a real Interview
+    row, or still just a Prospect they've been allocated to via an
+    InterviewRequest (no round scoping - once assigned to any round for this
+    candidate, CV access isn't taken away once that round is over)."""
     allowed_groups = ALL_GROUPS
 
     def get(self, request, pk):
         candidate = get_object_or_404(Candidate, pk=pk)
-        if is_interviewer_only(request.user) and not candidate.interviews.filter(interviewer=request.user).exists():
+        is_interviewer = is_interviewer_only(request.user)
+        if is_interviewer and not (
+            candidate.interviews.filter(interviewer=request.user).exists()
+            or candidate.interview_requests.filter(interviewer=request.user).exists()
+        ):
             raise Http404('No CV on file.')
         resume_url = (candidate.resume_url or '').strip()
         if resume_url:
@@ -1095,6 +1117,23 @@ class CandidateCvView(GroupRequiredMixin, View):
             target = candidate.resume_blob_url.url
         else:
             raise Http404('No CV on file.')
+
+        if is_interviewer:
+            # Keep the Interviewer entirely on our own domain rather than
+            # sending their browser to the CV's actual storage location - for
+            # a SharePoint-hosted CV that's a sharing link into the wider
+            # Careers document library (breadcrumbs/"back to folder" and
+            # all), which is well outside what this restricted role should
+            # browse. Fetch and stream the bytes instead of redirecting.
+            try:
+                upstream = requests.get(target, timeout=(10, 30))
+                upstream.raise_for_status()
+            except requests.RequestException:
+                raise Http404('Could not load the CV.')
+            content_type = upstream.headers.get('Content-Type') or 'application/pdf'
+            response = HttpResponse(upstream.content, content_type=content_type)
+            response['Content-Disposition'] = 'inline; filename="candidate-cv"'
+            return response
         return redirect(target)
 
 
@@ -1407,8 +1446,11 @@ class CandidateRevertLastActionView(GroupRequiredMixin, View):
         candidate = get_object_or_404(Candidate, pk=pk)
         next_url = request.POST.get('next') or reverse('candidate_timeline', args=[pk])
 
-        # keep the very first 'Applied' entry (old_status is blank) — nothing to undo before it
-        last_status = candidate.history.exclude(old_status='').order_by('-changed_at', '-id').first()
+        # keep the very first 'Applied' entry (old_status is blank) — nothing
+        # to undo before it; already-undone rows are kept for history (see
+        # is_undone on CandidateStatusHistory) but must not be picked again.
+        last_status = (candidate.history.exclude(old_status='').filter(is_undone=False)
+                       .order_by('-changed_at', '-id').first())
         last_interview = candidate.interviews.order_by('-created_at', '-pk').first()
         last_request = candidate.interview_requests.order_by('-created_at', '-pk').first()
         last_cancelled = (candidate.interviews.filter(cancelled_at__isnull=False)
@@ -1438,7 +1480,14 @@ class CandidateRevertLastActionView(GroupRequiredMixin, View):
 
     def _undo_status(self, request, candidate, last):
         prev_status, undone = last.old_status, last.new_status
-        last.delete()  # remove the accidental transition from history
+        # Undo doesn't erase the transition it's reversing from history -
+        # like Ctrl+Z, the action stays on the record (marked is_undone
+        # instead of hard-deleted) so the Activity History feed still shows
+        # it happened; _build_hiring_stages excludes is_undone rows so the
+        # Hiring block's stage cards don't keep showing a decision that no
+        # longer holds. (Database rows an action actually *created* - an
+        # Interview, an InterviewRequest - are still deleted below/in the
+        # other _undo_* methods; only this history log entry is kept.)
         if undone == STATUS.BLACKLISTED:  # unwind blacklist side-effects
             candidate.is_blacklisted = False
             bl = candidate.blacklist_entries.order_by('-blacklisted_at').first()
@@ -1459,6 +1508,8 @@ class CandidateRevertLastActionView(GroupRequiredMixin, View):
         candidate.status = prev_status
         candidate.hold_from_status = services.hold_source_from_history(candidate)
         candidate.save(update_fields=['status', 'hold_from_status', 'is_blacklisted', 'updated_at'])
+        last.is_undone = True
+        last.save(update_fields=['is_undone'])
         messages.success(request, f'Last action undone — {candidate.full_name} is back to "{candidate.status_label}".')
 
     def _undo_interview_created(self, request, candidate, interview):

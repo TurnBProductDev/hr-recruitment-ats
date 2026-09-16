@@ -16,7 +16,7 @@ from candidates import logic_app_mail
 
 from . import slot_emails
 from .forms import CandidateSlotPickForm
-from .models import Interview, InterviewRequest
+from .models import Interview, InterviewRequest, candidate_round_label
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +91,12 @@ class CandidateSlotPickView(View):
 
     def _render(self, request, request_obj, form=None, state=None):
         state = state or self._state(request_obj)
-        ctx = {'interview_request': request_obj, 'state': state}
+        ctx = {
+            'interview_request': request_obj, 'state': state,
+            # Never show the internal round_type/"Round 1"/"Round 2" naming
+            # to the candidate - see candidate_round_label.
+            'round_label': candidate_round_label(request_obj.round_type) if request_obj else '',
+        }
         if state == 'open':
             ctx['form'] = form or CandidateSlotPickForm(request=request_obj)
         return render(request, self.template_name, ctx, status=404 if state == 'invalid' else 200)
