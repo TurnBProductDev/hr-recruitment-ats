@@ -527,13 +527,19 @@ class ReportsView(GroupRequiredMixin, TemplateView):
 
         # ---------- Roles tab: vacancy/job-code counts, not candidate counts ----------
         # "Roles" = Job rows (job codes) - see jobs.models.Job. Scoped by the
-        # same Job Code/Vacancy filter as everything else above; the
-        # Screened From/To date range has no equivalent on a Job, so it only
-        # narrows the candidates-applied chart below (via `base`), not the
-        # KPI cards or the roles-opened chart.
+        # same Job Code/Vacancy filter as everything else above; the From/To
+        # range filters by the job's own opening_date here (there's no
+        # "screening" for a vacancy) - both the 4 KPI cards and the Roles
+        # Opened chart below only count roles actually opened in that window
+        # (the chart's x-axis itself stays a fixed last-12-months, same as
+        # always - a date filter just leaves some of those months at 0).
         job_qs = Job.objects.exclude(title__iexact=GENERAL_APPLICATION)
         if job_id:
             job_qs = job_qs.filter(pk=job_id)
+        if date_from:
+            job_qs = job_qs.filter(opening_date__gte=date_from)
+        if date_to:
+            job_qs = job_qs.filter(opening_date__lte=date_to)
         closed_qs = job_qs.filter(status=Job.Status.CLOSED)
         closed_with_hiring = closed_qs.filter(candidates__status=STATUS.HIRED).distinct().count()
         ctx['roles_total_opened'] = job_qs.count()

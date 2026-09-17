@@ -986,6 +986,18 @@ class RolesTabTests(TestCase):
         response = self._get(view='roles', job=target.pk)
         self.assertEqual(response.context['roles_total_opened'], 1)
 
+    def test_date_filter_scopes_roles_by_their_own_opening_date(self):
+        """The From/To range has no "screening" concept for a vacancy - it
+        filters Jobs by their own opening_date instead."""
+        from datetime import timedelta
+        today = timezone.localdate()
+        in_range = Job.objects.create(title='In Range', opening_date=today)
+        Job.objects.create(title='Out of Range', opening_date=today - timedelta(days=60))
+        response = self._get(view='roles', date_from=(today - timedelta(days=7)).isoformat(),
+                             date_to=today.isoformat())
+        self.assertEqual(response.context['roles_total_opened'], 1)
+        self.assertEqual(response.context['roles_active'], 1)
+
     def test_charts_carry_12_months_of_labels_and_series(self):
         response = self._get(view='roles')
         self.assertEqual(len(response.context['roles_chart_labels']), 12)
