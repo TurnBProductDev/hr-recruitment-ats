@@ -36,6 +36,25 @@ class BootstrapFormMixin:
                 widget.attrs.setdefault('class', 'form-control')
 
 
+def _simplified_round_type_choices(current_value):
+    """Round Type as just Round 1 / Round 2 - the model still supports the
+    older Technical/Managerial/Final/HR Round sub-types (see
+    Interview.RoundType), but offering all 5 side by side as if they were
+    independent rounds read as "a lot of rounds" with no clear meaning.
+    `current_value` (the bound instance's existing round_type, or None for a
+    new one) stays selectable too if it's one of those older sub-types, so
+    editing/resaving an existing interview/request that already has one
+    doesn't fail with a "not a valid choice" error - only new allocations
+    ever see just the two."""
+    choices = [
+        (Interview.RoundType.ROUND1, Interview.RoundType.ROUND1.label),
+        (Interview.RoundType.ROUND2, Interview.RoundType.ROUND2.label),
+    ]
+    if current_value and current_value not in (Interview.RoundType.ROUND1, Interview.RoundType.ROUND2):
+        choices.append((current_value, dict(Interview.RoundType.choices).get(current_value, current_value)))
+    return choices
+
+
 class InterviewForm(BootstrapFormMixin, forms.ModelForm):
     # Not a model field - just where the invite email goes. Kept separate
     # from Candidate.email so editing it here (e.g. a typo, or a personal
@@ -61,6 +80,8 @@ class InterviewForm(BootstrapFormMixin, forms.ModelForm):
         # (status=SCHEDULED, interview=...) by whoever saves this form -
         # see InterviewScheduleView.form_valid.
         self.resolving_request = resolving_request
+        self.fields['round_type'].choices = _simplified_round_type_choices(
+            self.instance.round_type if self.instance.pk else None)
         if self.candidate and not self.is_bound:
             self.fields['candidate_email'].initial = self.candidate.email
             if resolving_request and not self.instance.pk:
@@ -165,6 +186,8 @@ class InterviewAllocationForm(BootstrapFormMixin, forms.ModelForm):
     def __init__(self, *args, candidate=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.candidate = candidate
+        self.fields['round_type'].choices = _simplified_round_type_choices(
+            self.instance.round_type if self.instance.pk else None)
         User = get_user_model()
         self.fields['interviewer'].queryset = (
             User.objects.filter(groups__name=INTERVIEWER).order_by('first_name', 'last_name'))

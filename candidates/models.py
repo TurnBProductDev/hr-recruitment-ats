@@ -186,7 +186,7 @@ class Candidate(models.Model):
             from interviews.models import Interview  # local: interviews.models imports Candidate
             round_types = (
                 (Interview.RoundType.ROUND1,) if self.status == self.Status.ROUND1 else
-                (Interview.RoundType.TECHNICAL, Interview.RoundType.MANAGERIAL,
+                (Interview.RoundType.ROUND2, Interview.RoundType.TECHNICAL, Interview.RoundType.MANAGERIAL,
                  Interview.RoundType.FINAL, Interview.RoundType.HR))
             scheduled = self.interviews.filter(
                 round_type__in=round_types, status__in=Interview.OPEN_STATUSES).exists()

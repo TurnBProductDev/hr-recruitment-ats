@@ -18,6 +18,7 @@ from candidates.permissions import HR_ADMIN, INTERVIEWER, RECRUITER
 from jobs.models import Job
 
 from . import graph_client, invites, slot_emails
+from .forms import InterviewAllocationForm, InterviewForm
 from .graph_client import GraphError
 from .models import INTERVIEW_DURATION, Interview, InterviewReschedule, InterviewRequest, InterviewSlot
 
@@ -140,7 +141,7 @@ class OneOpenInterviewTests(TestCase):
         self.assertEqual(self.candidate.interviews.count(), 1)
 
     def test_a_different_round_is_still_rejected(self):
-        self._schedule(round_type=Interview.RoundType.TECHNICAL)
+        self._schedule(round_type=Interview.RoundType.ROUND2)
         self.assertEqual(self.candidate.interviews.count(), 1)
 
     def test_a_different_role_is_still_rejected(self):
@@ -153,7 +154,7 @@ class OneOpenInterviewTests(TestCase):
         self.interview.status = Interview.Status.COMPLETED
         self.interview.result = Interview.Result.PASS_
         self.interview.save()
-        self._schedule(round_type=Interview.RoundType.TECHNICAL)
+        self._schedule(round_type=Interview.RoundType.ROUND2)
         self.assertEqual(self.candidate.interviews.count(), 2)
 
     def test_a_cancelled_interview_does_not_block(self):
@@ -170,6 +171,70 @@ class OneOpenInterviewTests(TestCase):
             'scheduled_date': '2026-09-01T10:00', 'mode': Interview.Mode.VIDEO,
             'meeting_link': ''})
         self.assertEqual(other.interviews.count(), 1)
+
+
+class RoundTypeChoicesTests(TestCase):
+    """Allocate Interviewer / Manual Slot Allocate only offer Round 1 /
+    Round 2 - the older Technical/Managerial/Final/HR Round sub-types
+    (Interview.RoundType) used to all show up alongside Round 1 as if they
+    were 5 independent rounds, which just read as confusing clutter with no
+    clear meaning. The model keeps them so existing records with one still
+    work; see interviews.forms._simplified_round_type_choices."""
+
+    def setUp(self):
+        self.job = Job.objects.create(job_code='J1', title='Program Manager')
+        self.candidate = Candidate.objects.create(
+            full_name='Rose E G', email='rose@example.com', job=self.job)
+        self.interviewer = get_user_model().objects.create_user(
+            'panel', 'panel@turnb.com', 'pw', first_name='Sreejith', last_name='K R')
+        self.interviewer.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
+
+    def test_new_interview_form_only_offers_round1_and_round2(self):
+        form = InterviewForm(candidate=self.candidate)
+        values = [c[0] for c in form.fields['round_type'].choices]
+        self.assertEqual(values, [Interview.RoundType.ROUND1, Interview.RoundType.ROUND2])
+
+    def test_new_allocation_form_only_offers_round1_and_round2(self):
+        form = InterviewAllocationForm(candidate=self.candidate)
+        values = [c[0] for c in form.fields['round_type'].choices]
+        self.assertEqual(values, [Interview.RoundType.ROUND1, Interview.RoundType.ROUND2])
+
+    def test_editing_an_existing_legacy_subtype_keeps_it_selectable(self):
+        """Resaving an interview that already has one of the older
+        Technical/Managerial/Final/HR Round values (from before this
+        change) must not fail with "not a valid choice" just because the
+        dropdown no longer offers it to everyone by default."""
+        interview = Interview.objects.create(
+            candidate=self.candidate, interviewer=self.interviewer,
+            round_type=Interview.RoundType.TECHNICAL,
+            scheduled_date=timezone.now() + timezone.timedelta(days=1))
+        form = InterviewForm(instance=interview, candidate=self.candidate)
+        values = [c[0] for c in form.fields['round_type'].choices]
+        self.assertIn(Interview.RoundType.TECHNICAL, values)
+        self.assertIn(Interview.RoundType.ROUND2, values)
+
+    def test_round2_counts_as_a_non_r1_round_everywhere_it_used_to(self):
+        """The three hardcoded Round-2 tuples (candidates.views.ROUND2_TYPES,
+        candidates.models.Candidate.status_label, dashboard.daily_view's
+        NON_R1_ROUNDS) all need the new plain ROUND2 value added, or a
+        freshly-allocated "Round 2" interview would silently stop being
+        recognised as Round 2 at all."""
+        from candidates.views import ROUND2_TYPES
+        from dashboard.daily_view import NON_R1_ROUNDS
+        self.assertIn(Interview.RoundType.ROUND2, ROUND2_TYPES)
+        self.assertIn(Interview.RoundType.ROUND2, NON_R1_ROUNDS)
+
+    def test_status_label_recognises_a_plain_round2_interview_as_scheduled(self):
+        from candidates import services
+        from candidates.models import Candidate as CandidateModel
+        services.change_status(self.candidate, CandidateModel.Status.SHORTLISTED)
+        services.change_status(self.candidate, CandidateModel.Status.INTERVIEW)
+        Interview.objects.create(
+            candidate=self.candidate, interviewer=self.interviewer,
+            round_type=Interview.RoundType.ROUND2, status=Interview.Status.SCHEDULED,
+            scheduled_date=timezone.now() + timezone.timedelta(days=1))
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.status_label, 'Round 2 - Scheduled')
 
 
 class InterviewerConflictTests(TestCase):

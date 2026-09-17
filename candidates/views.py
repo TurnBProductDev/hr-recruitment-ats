@@ -74,8 +74,8 @@ ADVANCE_STATUSES = (STATUS.INTERVIEW, STATUS.FINAL_SELECTION, STATUS.HIRED)
 # Which Interview.RoundType values belong to "Round 1" vs "Round 2" of the
 # Hiring block - mirrors dashboard/daily_view.py's NON_R1_ROUNDS split.
 ROUND1_TYPES = (Interview.RoundType.ROUND1,)
-ROUND2_TYPES = (Interview.RoundType.TECHNICAL, Interview.RoundType.MANAGERIAL,
-                Interview.RoundType.FINAL, Interview.RoundType.HR)
+ROUND2_TYPES = (Interview.RoundType.ROUND2, Interview.RoundType.TECHNICAL,
+                Interview.RoundType.MANAGERIAL, Interview.RoundType.FINAL, Interview.RoundType.HR)
 # Which round's interview should be settled (Pass/Fail) when the candidate is
 # currently at that stage and a decision (Cleared/Reject/Blacklist) is made.
 ROUND_INTERVIEW_TYPES = {STATUS.ROUND1: ROUND1_TYPES, STATUS.INTERVIEW: ROUND2_TYPES}

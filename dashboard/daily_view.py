@@ -27,7 +27,7 @@ from interviews.models import Interview, InterviewReschedule
 
 S = Candidate.Status
 TERMINAL = (S.REJECTED, S.BLACKLISTED)
-NON_R1_ROUNDS = (Interview.RoundType.TECHNICAL, Interview.RoundType.MANAGERIAL,
+NON_R1_ROUNDS = (Interview.RoundType.ROUND2, Interview.RoundType.TECHNICAL, Interview.RoundType.MANAGERIAL,
                  Interview.RoundType.FINAL, Interview.RoundType.HR)
 
 COLUMNS = [
