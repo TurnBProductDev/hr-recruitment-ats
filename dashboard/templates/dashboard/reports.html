@@ -301,6 +301,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
 {{ roles_chart_labels|json_script:"roles-chart-labels" }}
 {{ roles_opened_series|json_script:"roles-opened-series" }}
+{{ roles_opened_names|json_script:"roles-opened-names" }}
 {{ candidates_applied_series|json_script:"candidates-applied-series" }}
 <script>
 // Keep the Applications/Roles choice in the URL + filter form, so applying a
@@ -394,6 +395,7 @@ document.querySelectorAll('.rep-toggle:not(.rep-toggle-left)').forEach(function 
   }
   var labels = JSON.parse(document.getElementById('roles-chart-labels').textContent);
   var openedSeries = JSON.parse(document.getElementById('roles-opened-series').textContent);
+  var openedNames = JSON.parse(document.getElementById('roles-opened-names').textContent);
   var appliedSeries = JSON.parse(document.getElementById('candidates-applied-series').textContent);
 
   // Small value label above each point instead of a Y axis - no need for a
@@ -418,7 +420,18 @@ document.querySelectorAll('.rep-toggle:not(.rep-toggle-left)').forEach(function 
     },
   };
 
-  function lineChart(canvas, data, color, label) {
+  function lineChart(canvas, data, color, label, namesPerPoint) {
+    var tooltipPlugin = { callbacks: { label: function (ctx) { return label + ': ' + ctx.parsed.y; } } };
+    if (namesPerPoint) {
+      // Returning an array from a tooltip callback renders one line per
+      // entry (standard Chart.js behaviour) - so this just lists the roles
+      // opened that month underneath the count, or nothing extra when
+      // there weren't any.
+      tooltipPlugin.callbacks.afterLabel = function (ctx) {
+        var names = namesPerPoint[ctx.dataIndex] || [];
+        return names.length ? names : undefined;
+      };
+    }
     new Chart(canvas, {
       type: 'line',
       plugins: [pointValueLabels],
@@ -432,7 +445,7 @@ document.querySelectorAll('.rep-toggle:not(.rep-toggle-left)').forEach(function 
       options: {
         responsive: true, maintainAspectRatio: false,
         layout: { padding: { top: 16 } },
-        plugins: { legend: { display: false } },
+        plugins: { legend: { display: false }, tooltip: tooltipPlugin },
         scales: {
           x: { grid: { display: false }, ticks: { font: { size: 10 } } },
           y: { display: false, beginAtZero: true },
@@ -440,7 +453,7 @@ document.querySelectorAll('.rep-toggle:not(.rep-toggle-left)').forEach(function 
       },
     });
   }
-  lineChart(canvas1, openedSeries, '#0e6f6b', 'Roles Opened');
+  lineChart(canvas1, openedSeries, '#0e6f6b', 'Roles Opened', openedNames);
   lineChart(canvas2, appliedSeries, '#0a58ca', 'Candidates Applied');
 })();
 </script>

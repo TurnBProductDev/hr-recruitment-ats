@@ -462,6 +462,16 @@ def _monthly_counts(dates, months):
     return [buckets.get(ym, 0) for ym in months]
 
 
+def _monthly_names(dated_names, months):
+    """Which names fall into each (year, month) of `months`, as a list of
+    lists in that same order - the Roles Opened chart's tooltip lists the
+    actual roles opened that month, not just a bare count."""
+    buckets = {}
+    for d, name in dated_names:
+        buckets.setdefault((d.year, d.month), []).append(name)
+    return [buckets.get(ym, []) for ym in months]
+
+
 def _months_between(start_date, end_date):
     """(year, month) tuples from start_date's month through end_date's,
     inclusive, oldest first. Swaps the two first if start is after end - a
@@ -604,8 +614,12 @@ class ReportsView(GroupRequiredMixin, TemplateView):
 
         months = _months_for_chart(date_from, date_to)
         ctx['roles_chart_labels'] = [f'{calendar.month_abbr[m]}{str(y)[2:]}' for y, m in months]
-        opened_dates = [od or co.date() for od, co in job_qs.values_list('opening_date', 'created_on')]
-        ctx['roles_opened_series'] = _monthly_counts(opened_dates, months)
+        opened_rows = [(od or co.date(), title or 'Unassigned') for od, co, title in
+                       job_qs.values_list('opening_date', 'created_on', 'title')]
+        ctx['roles_opened_series'] = _monthly_counts((d for d, _ in opened_rows), months)
+        # Which roles, by name, opened in each month - shown in the Roles
+        # Opened chart's tooltip alongside the bare count (see reports.html).
+        ctx['roles_opened_names'] = _monthly_names(opened_rows, months)
 
         # Deliberately a separate queryset from `base`, not a reuse of it -
         # `base` is filtered (and this chart used to be bucketed against it)

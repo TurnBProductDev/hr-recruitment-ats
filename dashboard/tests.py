@@ -1050,6 +1050,18 @@ class RolesTabTests(TestCase):
         response = self._get(view='roles')
         self.assertEqual(response.context['roles_opened_series'][-1], 1)  # last bucket = this month
 
+    def test_roles_opened_names_lists_which_roles_by_month(self):
+        """The chart's tooltip names the actual roles opened that month, not
+        just a bare count - both roles opened this month must show up
+        together in that same month's bucket, and an earlier empty month
+        stays an empty list, not a missing key."""
+        Job.objects.create(title='Fresh Role', status=Job.Status.OPEN)
+        Job.objects.create(title='Another Fresh Role', status=Job.Status.OPEN)
+        response = self._get(view='roles')
+        names = response.context['roles_opened_names']
+        self.assertEqual(sorted(names[-1]), ['Another Fresh Role', 'Fresh Role'])
+        self.assertEqual(names[0], [])
+
     def test_chart_window_narrows_to_match_a_short_date_range(self):
         """A date filter must actually reshape the chart's own month
         window, not just leave a fixed rolling 12 months in place and zero
