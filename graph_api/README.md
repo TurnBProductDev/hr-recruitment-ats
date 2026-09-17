@@ -22,7 +22,7 @@ Needs Application Administrator (or Global Admin) on the TurnB tenant.
 
 1. Azure Portal -> **Azure Active Directory** -> **App registrations** ->
    **New registration**.
-2. Name: e.g. `HireB Interview Scheduling`.
+2. Name: e.g. `TurnB ATS Interview Scheduling`.
 3. Supported account types: **Single tenant** (TurnB only).
 4. No redirect URI needed - this app never signs a user in. It calls
    Graph as itself (client-credentials flow), the same shape as the Logic
@@ -71,14 +71,17 @@ A Teams Admin runs (Teams PowerShell module):
 Connect-MicrosoftTeams
 
 New-CsApplicationAccessPolicy `
-    -Identity HireBSchedulingPolicy `
+    -Identity TurnBATSSchedulingPolicy `
     -AppIds "<GRAPH_CLIENT_ID from step 1>" `
-    -Description "Allow the HireB ATS to create Teams meetings"
+    -Description "Allow TurnB ATS to create Teams meetings"
 
 Grant-CsApplicationAccessPolicy `
-    -PolicyName HireBSchedulingPolicy `
+    -PolicyName TurnBATSSchedulingPolicy `
     -Identity careers@turnb.com
 ```
+
+(If a policy named `HireBSchedulingPolicy` already exists from before this rename, it's
+still working fine as-is — the identity name is cosmetic and doesn't need to be recreated.)
 
 This grants the app permission to organize meetings as `careers@turnb.com`
 specifically - not every mailbox in the tenant.

@@ -23,16 +23,16 @@ logger = logging.getLogger(__name__)
 # missing (e.g. before migrations run) - the seeded row
 # (email_templates/migrations/0002_seed_defaults.py) carries this same text,
 # and is what an admin actually edits at /admin/.
-_DEFAULT_SUBJECT = 'Reset your HireB password'
+_DEFAULT_SUBJECT = 'Reset your TurnB ATS password'
 _DEFAULT_BODY = (
     'Hello {name},\n\n'
-    'We received a request to reset your HireB password. Click the link below to '
+    'We received a request to reset your TurnB ATS password. Click the link below to '
     'choose a new one:\n\n'
     '{reset_url}\n\n'
     "If you didn't request this, you can safely ignore this email - your password "
     "won't be changed.\n\n"
     'Regards,\n'
-    'HireB'
+    'TurnB ATS'
 )
 
 

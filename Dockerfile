@@ -1,4 +1,4 @@
-# HireB - production container for Azure App Service.
+# TurnB ATS - production container for Azure App Service.
 # Bakes in the Microsoft ODBC Driver 18 so mssql-django can reach Azure SQL.
 FROM python:3.12-slim
 

@@ -99,7 +99,7 @@ def _role_name(interview):
 
 def _build_ics(interview, *, organizer_email, attendee_emails, summary, description):
     cal = Calendar()
-    cal.add('prodid', '-//HireB//Interview Invite//EN')
+    cal.add('prodid', '-//TurnB ATS//Interview Invite//EN')
     cal.add('version', '2.0')
     cal.add('method', 'REQUEST')
 

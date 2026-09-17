@@ -72,7 +72,7 @@ EMAILS = [
             'available, so HR can pick one and schedule the interview.\n\n'
             '{login_url_line}'
             'Regards,\n'
-            'HireB'
+            'TurnB ATS'
         ),
     ),
     dict(
@@ -90,7 +90,7 @@ EMAILS = [
             '{slot_lines}\n\n'
             "Please pick one from the candidate's profile to confirm the interview.\n\n"
             'Regards,\n'
-            'HireB'
+            'TurnB ATS'
         ),
     ),
     dict(
@@ -107,22 +107,22 @@ EMAILS = [
             "don't work for HR. Please propose a fresh set of 2-3 one-hour slots.{note_line}\n\n"
             '{login_url_line}'
             'Regards,\n'
-            'HireB'
+            'TurnB ATS'
         ),
     ),
     dict(
         key='password_reset', label='Password Reset',
         description='Sent when someone requests a password reset. Placeholders: {name}, {reset_url}.',
-        subject='Reset your HireB password',
+        subject='Reset your TurnB ATS password',
         body=(
             'Hello {name},\n\n'
-            'We received a request to reset your HireB password. Click the link below to '
+            'We received a request to reset your TurnB ATS password. Click the link below to '
             'choose a new one:\n\n'
             '{reset_url}\n\n'
             "If you didn't request this, you can safely ignore this email - your password "
             "won't be changed.\n\n"
             'Regards,\n'
-            'HireB'
+            'TurnB ATS'
         ),
     ),
 ]

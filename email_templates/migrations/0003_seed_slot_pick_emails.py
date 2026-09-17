@@ -44,7 +44,7 @@ EMAILS = [
             'profile.\n\n'
             '{profile_url}\n\n'
             'Regards,\n'
-            'HireB'
+            'TurnB ATS'
         ),
     ),
 ]

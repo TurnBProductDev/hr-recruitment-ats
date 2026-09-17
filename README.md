@@ -1,4 +1,4 @@
-# HireB
+# TurnB ATS
 
 Django + Bootstrap 5 Applicant Tracking System.
 

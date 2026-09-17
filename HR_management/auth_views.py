@@ -134,7 +134,7 @@ class AzureCallbackView(View):
         if matches.count() != 1:
             messages.error(
                 request,
-                f'No HireB account found for {email}. Ask an admin to add you as a User first.')
+                f'No TurnB ATS account found for {email}. Ask an admin to add you as a User first.')
             return redirect(login_url_name)
         user = matches.first()
 

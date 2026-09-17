@@ -1,6 +1,6 @@
 @echo off
 REM ================================================================
-REM  HireB - local launcher
+REM  TurnB ATS - local launcher
 REM  Double-click this file to start the website on your PC.
 REM ================================================================
 cd /d "%~dp0"
@@ -23,7 +23,7 @@ REM --- Apply any pending database changes ---
 
 echo.
 echo ================================================================
-echo   HireB is starting...
+echo   TurnB ATS is starting...
 echo   Open in your browser:  http://localhost:8000/
 echo   (Choose HR / Admin login)
 echo.

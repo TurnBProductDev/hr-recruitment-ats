@@ -23,7 +23,7 @@ _NEW_REQUEST_BODY = (
     'available, so HR can pick one and schedule the interview.\n\n'
     '{login_url_line}'
     'Regards,\n'
-    'HireB'
+    'TurnB ATS'
 )
 _CANDIDATE_SELECT_SLOT_SUBJECT = 'Pick your {round_type} interview time - {role}'
 _CANDIDATE_SELECT_SLOT_BODY = (
@@ -49,7 +49,7 @@ _HR_CANDIDATE_SELECTED_BODY = (
     'profile.\n\n'
     '{profile_url}\n\n'
     'Regards,\n'
-    'HireB'
+    'TurnB ATS'
 )
 _NEW_SLOTS_NEEDED_SUBJECT = 'New slots needed - {candidate_name} ({round_type})'
 _NEW_SLOTS_NEEDED_BODY = (
@@ -58,7 +58,7 @@ _NEW_SLOTS_NEEDED_BODY = (
     "don't work for HR. Please propose a fresh set of 2-3 one-hour slots.{note_line}\n\n"
     '{login_url_line}'
     'Regards,\n'
-    'HireB'
+    'TurnB ATS'
 )
 
 

@@ -1,0 +1,812 @@
+<title>From Inbox to Hire</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+  :root {
+    --paper:        #EDF0F0;
+    --surface:      #F8FAF9;
+    --surface-sunk: #E3E8E7;
+    --ink:          #15201F;
+    --ink-soft:     #4C5C59;
+    --ink-faint:    #74837F;
+    --rule:         #D1DAD8;
+    --rule-strong:  #B4C1BE;
+    --accent:       #0B6B60;
+    --accent-ink:   #08544B;
+    --accent-soft:  #DBEAE6;
+    --friction:     #9C5433;
+    --friction-ink: #7E4327;
+    --friction-soft:#F1E1D7;
+    --gold:         #8C6F1B;
+    --gold-soft:    #F0E7CE;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:        #0F1513;
+      --surface:      #17201E;
+      --surface-sunk: #101917;
+      --ink:          #E7EEEB;
+      --ink-soft:     #A2B4AF;
+      --ink-faint:    #7C8D89;
+      --rule:         #283532;
+      --rule-strong:  #3A4A46;
+      --accent:       #56C8B4;
+      --accent-ink:   #7FDCCB;
+      --accent-soft:  #123029;
+      --friction:     #DC9264;
+      --friction-ink: #E7A97F;
+      --friction-soft:#32231A;
+      --gold:         #D6B45C;
+      --gold-soft:    #2C2616;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper:        #0F1513;
+    --surface:      #17201E;
+    --surface-sunk: #101917;
+    --ink:          #E7EEEB;
+    --ink-soft:     #A2B4AF;
+    --ink-faint:    #7C8D89;
+    --rule:         #283532;
+    --rule-strong:  #3A4A46;
+    --accent:       #56C8B4;
+    --accent-ink:   #7FDCCB;
+    --accent-soft:  #123029;
+    --friction:     #DC9264;
+    --friction-ink: #E7A97F;
+    --friction-soft:#32231A;
+    --gold:         #D6B45C;
+    --gold-soft:    #2C2616;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Source Serif 4", Georgia, "Times New Roman", serif;
+    font-size: 17px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 880px;
+    margin: 0 auto;
+    padding-inline: 24px;
+    padding-block: 0 72px;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: Archivo, "Helvetica Neue", Arial, sans-serif;
+    text-wrap: balance;
+    margin: 0;
+    line-height: 1.18;
+  }
+
+  .mono, .eyebrow, .stage-no, .num, th, .pill, .measured dt, .obs {
+    font-family: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+  }
+
+  .eyebrow {
+    font-size: 11.5px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 500;
+  }
+
+  p { margin: 0 0 1em; }
+  p:last-child { margin-bottom: 0; }
+  .measure { max-width: 66ch; }
+
+  a { color: var(--accent-ink); }
+
+  /* ---------- masthead ---------- */
+
+  .masthead {
+    border-bottom: 2px solid var(--ink);
+    padding-block: 56px 26px;
+    margin-bottom: 40px;
+  }
+  .masthead .eyebrow { display: block; margin-bottom: 18px; }
+  .masthead h1 {
+    font-size: clamp(38px, 7vw, 62px);
+    font-weight: 700;
+    letter-spacing: -.025em;
+  }
+  .masthead h1 .quiet { color: var(--ink-faint); font-weight: 500; }
+  .standfirst {
+    margin-top: 20px;
+    font-size: 20px;
+    line-height: 1.5;
+    color: var(--ink-soft);
+    max-width: 60ch;
+  }
+  .byline {
+    margin-top: 22px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    font-size: 12px;
+    letter-spacing: .05em;
+    color: var(--ink-faint);
+    font-family: "IBM Plex Mono", monospace;
+  }
+
+  /* ---------- headline figures ---------- */
+
+  .figures {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin-bottom: 52px;
+  }
+  .fig {
+    background: var(--surface);
+    padding: 20px 18px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .fig .num {
+    font-size: clamp(26px, 4.4vw, 34px);
+    font-weight: 600;
+    color: var(--gold);
+    letter-spacing: -.02em;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+  .fig .lab {
+    font-size: 13.5px;
+    color: var(--ink-soft);
+    line-height: 1.35;
+  }
+  @media (max-width: 640px) { .figures { grid-template-columns: repeat(2, 1fr); } }
+
+  /* ---------- sections ---------- */
+
+  section { margin-bottom: 60px; }
+
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    border-bottom: 1px solid var(--rule-strong);
+    padding-bottom: 10px;
+    margin-bottom: 26px;
+  }
+  .sec-head h2 {
+    font-size: clamp(22px, 3.4vw, 28px);
+    font-weight: 600;
+    letter-spacing: -.015em;
+  }
+  .sec-head .eyebrow { margin-left: auto; white-space: nowrap; }
+
+  /* ---------- the "before" friction list ---------- */
+
+  .frictions {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 2px;
+  }
+  .frictions li {
+    display: grid;
+    grid-template-columns: 26px 1fr;
+    gap: 14px;
+    padding: 13px 16px 13px 12px;
+    background: var(--surface);
+    border-left: 3px solid var(--friction);
+  }
+  .frictions li::before {
+    content: attr(data-t);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    color: var(--friction);
+    padding-top: 4px;
+    letter-spacing: .02em;
+  }
+  .frictions.steady li { border-left-color: var(--accent); }
+  .frictions.steady li::before { color: var(--accent); }
+  .frictions b {
+    font-family: Archivo, sans-serif;
+    font-weight: 600;
+    font-size: 15.5px;
+    display: block;
+    margin-bottom: 2px;
+  }
+  .frictions span { font-size: 15.5px; color: var(--ink-soft); }
+
+  /* ---------- pipeline stages ---------- */
+
+  .stage {
+    display: grid;
+    grid-template-columns: 58px 1fr;
+    gap: 0 20px;
+    padding-bottom: 34px;
+    margin-bottom: 34px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .stage:last-child { border-bottom: 0; margin-bottom: 0; }
+
+  .rail { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .stage-no {
+    width: 38px; height: 38px;
+    display: grid; place-items: center;
+    border: 1.5px solid var(--ink);
+    border-radius: 50%;
+    font-size: 14px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .rail .thread { flex: 1; width: 1.5px; background: var(--rule-strong); min-height: 20px; }
+
+  .stage h3 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .stage .statuses {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11.5px;
+    color: var(--ink-faint);
+    letter-spacing: .03em;
+    margin-bottom: 16px;
+  }
+
+  .ba {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+  @media (max-width: 680px) { .ba { grid-template-columns: 1fr; } }
+
+  .ba > div { padding: 14px 16px; font-size: 15.5px; line-height: 1.55; }
+  .ba .before {
+    background: var(--friction-soft);
+    color: var(--friction-ink);
+    border-top: 2px solid var(--friction);
+  }
+  .ba .after {
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+    border-top: 2px solid var(--accent);
+  }
+  .ba h4 {
+    font-size: 10.5px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    font-family: "IBM Plex Mono", monospace;
+    font-weight: 600;
+    margin-bottom: 7px;
+    opacity: .85;
+  }
+
+  .obs {
+    font-size: 13px;
+    color: var(--ink-soft);
+    border-left: 2px solid var(--gold);
+    padding: 3px 0 3px 12px;
+    line-height: 1.5;
+  }
+  .obs b { color: var(--gold); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* ---------- tables ---------- */
+
+  .tablewrap { overflow-x: auto; border: 1px solid var(--rule); }
+  table { border-collapse: collapse; width: 100%; min-width: 580px; font-size: 14.5px; }
+  th {
+    text-align: left;
+    font-size: 10.5px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--ink-faint);
+    padding: 12px 14px;
+    background: var(--surface-sunk);
+    border-bottom: 1px solid var(--rule-strong);
+    white-space: nowrap;
+  }
+  td {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+    background: var(--surface);
+    line-height: 1.48;
+  }
+  tr:last-child td { border-bottom: 0; }
+  td.who { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; white-space: nowrap; }
+  td.n, th.n {
+    font-family: "IBM Plex Mono", monospace;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    white-space: nowrap;
+  }
+  td.n.big { font-size: 15.5px; font-weight: 600; color: var(--accent); }
+
+  .pill {
+    display: inline-block;
+    font-size: 10.5px;
+    letter-spacing: .06em;
+    padding: 2px 7px;
+    border-radius: 2px;
+  }
+  .pill.none { background: var(--accent-soft); color: var(--accent-ink); }
+  .pill.some { background: var(--friction-soft); color: var(--friction-ink); }
+  .pill.idle { background: var(--gold-soft); color: var(--gold); }
+
+  /* ---------- measured volumes ---------- */
+
+  .measured {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--gold);
+    padding: 18px 20px;
+    margin-bottom: 26px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 7px 18px;
+    font-size: 14.5px;
+    align-items: baseline;
+  }
+  .measured .note {
+    grid-column: 1 / -1;
+    color: var(--ink-soft);
+    font-size: 14.5px;
+    margin-bottom: 8px;
+    line-height: 1.5;
+  }
+  .measured dt { font-size: 12.5px; color: var(--ink-faint); white-space: nowrap; }
+  .measured dd {
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 13px;
+  }
+  .measured .rate {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    color: var(--accent);
+    white-space: nowrap;
+    text-align: right;
+  }
+  @media (max-width: 560px) {
+    .measured { grid-template-columns: 1fr auto; }
+    .measured dt { grid-column: 1 / -1; margin-top: 6px; }
+  }
+
+  /* ---------- bar chart ---------- */
+
+  .chart { display: grid; gap: 14px; margin-bottom: 8px; }
+  .row-lab {
+    font-family: Archivo, sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 5px;
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: baseline;
+  }
+  .row-lab .delta {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    color: var(--ink-faint);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .bar {
+    display: grid;
+    grid-template-columns: 1fr 58px;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 3px;
+  }
+  .track { height: 13px; background: var(--surface-sunk); }
+  .fill { height: 100%; }
+  .fill.b { background: var(--friction); }
+  .fill.a { background: var(--accent); }
+  .bar .v {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11.5px;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    color: var(--ink-soft);
+  }
+  .legend {
+    display: flex;
+    gap: 20px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    margin-bottom: 22px;
+    flex-wrap: wrap;
+  }
+  .legend i { display: inline-block; width: 22px; height: 9px; margin-right: 7px; }
+  .legend .b { background: var(--friction); }
+  .legend .a { background: var(--accent); }
+
+  .total {
+    margin-top: 28px;
+    border-top: 2px solid var(--ink);
+    padding-top: 18px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+  }
+  .total .num {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: clamp(24px, 4vw, 32px);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -.02em;
+    display: block;
+    line-height: 1.1;
+  }
+  .total .t-before .num { color: var(--friction); }
+  .total .t-after  .num { color: var(--accent); }
+  .total .t-saved  .num { color: var(--gold); }
+  .total .lab { font-size: 13px; color: var(--ink-soft); display: block; margin-top: 5px; }
+  @media (max-width: 560px) { .total { grid-template-columns: 1fr; gap: 14px; } }
+
+  /* ---------- human list ---------- */
+
+  .human { display: grid; gap: 12px; }
+  .human div {
+    border-left: 2px solid var(--rule-strong);
+    padding: 2px 0 2px 16px;
+    font-size: 15.5px;
+  }
+  .human b { font-family: Archivo, sans-serif; font-weight: 600; }
+  .human span { color: var(--ink-soft); }
+
+  /* ---------- footer ---------- */
+
+  footer {
+    border-top: 1px solid var(--rule);
+    padding-top: 22px;
+    font-size: 13.5px;
+    color: var(--ink-faint);
+    line-height: 1.55;
+  }
+  footer code {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12.5px;
+    background: var(--surface-sunk);
+    padding: 1px 5px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="page">
+
+  <header class="masthead">
+    <span class="eyebrow">TurnB ATS &middot; TurnB Business Services &middot; Recruitment Operations</span>
+    <h1>From Inbox<br><span class="quiet">to Hire</span></h1>
+    <p class="standfirst">
+      What the recruitment desk used to do by hand, what the application does instead, and what the
+      first eighty-one days of live running actually show.
+    </p>
+    <div class="byline">
+      <span>MEASURED 25 JUN &ndash; 14 SEP 2026</span>
+      <span>499 CANDIDATES</span>
+      <span>924 AUDITED ACTIONS</span>
+      <span>7 VACANCIES</span>
+    </div>
+  </header>
+
+  <div class="figures">
+    <div class="fig">
+      <span class="num">499</span>
+      <span class="lab">candidates handled in the first 81 days of live running &mdash; none of them typed in by hand</span>
+    </div>
+    <div class="fig">
+      <span class="num">86%</span>
+      <span class="lab">of CVs read and filled in by the system: 431 of 499 arrived with a written profile already on the record</span>
+    </div>
+    <div class="fig">
+      <span class="num">173</span>
+      <span class="lab">repeat applications caught automatically &mdash; one address had applied twelve times</span>
+    </div>
+    <div class="fig">
+      <span class="num">~76h</span>
+      <span class="lab">of manual admin removed per month, on the volumes the system actually recorded</span>
+    </div>
+  </div>
+
+  <section>
+    <div class="sec-head">
+      <h2>The old working day</h2>
+      <span class="eyebrow">Before</span>
+    </div>
+    <p class="measure">
+      Recruitment ran on a shared careers mailbox and a single master spreadsheet. Everything that
+      moved a candidate forward &mdash; reading the CV, deciding on it, booking the interview, telling
+      anyone about it &mdash; passed through a person retyping something that already existed somewhere
+      else. These were the eight recurring frictions.
+    </p>
+    <ul class="frictions">
+      <li data-t="01"><b>Opening the inbox and typing it all in again</b><span>Every CV that landed in the careers mailbox was opened, read, and its name, phone, email, qualification and experience keyed into the spreadsheet by hand. The attachment was then filed somewhere separate.</span></li>
+      <li data-t="02"><b>No way to know who had applied before</b><span>A repeat applicant, or someone previously rejected for cause, looked identical to a first-time applicant. Catching it depended on somebody remembering a name.</span></li>
+      <li data-t="03"><b>Screening by reading, with nothing written down</b><span>Every CV was read against the JD from scratch. The reasoning behind a shortlist decision lived in the recruiter's head, so it could not be reviewed, compared between roles, or defended later.</span></li>
+      <li data-t="04"><b>A spreadsheet with no memory</b><span>Status was a cell that got overwritten. Who moved a candidate, when, and why was simply gone &mdash; and two people editing the file at once meant one of them lost their work.</span></li>
+      <li data-t="05"><b>Email ping-pong to book one interview</b><span>Ask the interviewer for availability, wait, offer times to the candidate, wait, create the calendar invite, paste in a meeting link, then repeat the whole loop when one side moved.</span></li>
+      <li data-t="06"><b>Interviewers with no window into the process</b><span>CVs were forwarded as email attachments, feedback came back as prose in a reply, and it was HR's job to transcribe the verdict into the sheet.</span></li>
+      <li data-t="07"><b>Writing the same emails over and over</b><span>Invites, reschedules and rejections were retyped or copy-pasted from an older mail, with the wording drifting a little further from the approved version every time.</span></li>
+      <li data-t="08"><b>Month-end reporting rebuilt by hand</b><span>Funnel conversion, time to hire and source effectiveness meant filtering, pivoting and re-counting the spreadsheet &mdash; a day's work, out of date the moment it was circulated.</span></li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>What replaced it, stage by stage</h2>
+      <span class="eyebrow">The pipeline</span>
+    </div>
+    <p class="measure" style="margin-bottom:28px">
+      The numbering is the candidate's actual route through the system. Each stage is a real status
+      the application records and reports on, and each carries what the database shows for the first
+      81 days of live running.
+    </p>
+
+    <div class="stage">
+      <div class="rail"><span class="stage-no">1</span><span class="thread"></span></div>
+      <div>
+        <h3>Applications arrive</h3>
+        <div class="statuses">STATUS &rarr; OPEN &nbsp;&middot;&nbsp; SOURCES: LINKEDIN, CAREERS PORTAL, AGENCIES, REFERRALS</div>
+        <div class="ba">
+          <div class="before"><h4>Before</h4>Open each mail, read the attachment, type the applicant into the spreadsheet, save the CV to a folder, hope the file name matches the row.</div>
+          <div class="after"><h4>Now</h4>A CV mailed to the careers address is read by the system and written straight into the candidate database &mdash; name, contact, education, skills and a written profile summary &mdash; with the file archived and linked on the record. Nobody opens the mailbox to make that happen.</div>
+        </div>
+        <p class="obs"><b>499</b> candidates in 81 days &mdash; 167 in July, 256 in August. <b>100%</b> have their CV on file; <b>86%</b> arrived with an AI-written profile already attached. LinkedIn supplied 297, the careers portal 193.</p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="rail"><span class="stage-no">2</span><span class="thread"></span></div>
+      <div>
+        <h3>Filing, de-duplication and blacklist check</h3>
+        <div class="statuses">EMAIL REGISTRY &nbsp;&middot;&nbsp; BLACKLIST &nbsp;&middot;&nbsp; GENERAL APPLICATIONS &nbsp;&middot;&nbsp; FUTURE PROSPECTS</div>
+        <div class="ba">
+          <div class="before"><h4>Before</h4>Duplicate and repeat applicants went unnoticed unless someone recognised the name. Speculative CVs with no matching vacancy piled up unsorted.</div>
+          <div class="after"><h4>Now</h4>Every applicant email is checked against the registry as the record is created &mdash; a reapply is flagged automatically, a blacklisted address is blocked. A CV matching no open vacancy is filed under General Applications against the role the candidate actually asked for, so the pool stays searchable instead of just accumulating.</div>
+        </div>
+        <p class="obs"><b>173</b> candidates flagged as repeat applicants. <b>191</b> email addresses have applied more than once; the busiest applied <b>12</b> times. <b>96</b> speculative CVs are filed and searchable under General Applications rather than sitting in an inbox.</p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="rail"><span class="stage-no">3</span><span class="thread"></span></div>
+      <div>
+        <h3>CV screening</h3>
+        <div class="statuses">STATUS &rarr; QUALIFIED / REJECTED / HOLD &nbsp;&middot;&nbsp; MATCH SCORE 0&ndash;100</div>
+        <div class="ba">
+          <div class="before"><h4>Before</h4>Read every CV against the JD, form a view, move a cell. No score, no written reason, no consistency between two recruiters or between Monday and Friday.</div>
+          <div class="after"><h4>Now</h4><b>Score Candidates</b> runs a whole vacancy's applicants against its job description and returns one score per candidate with a written rationale &mdash; judging whether the person could actually do the job, not how many keywords their CV contains. HR reads the score and the reasoning, then decides. The scoring criteria and the wording given to the AI are both editable by an administrator, without a code change.</div>
+        </div>
+        <p class="obs"><b>274</b> candidates scored against a JD, and the spread is doing real work: <b>82</b> scored under 40, only <b>20</b> scored above 75. Median time from application to a qualified decision is <b>4 days</b>.</p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="rail"><span class="stage-no">4</span><span class="thread"></span></div>
+      <div>
+        <h3>Tele screening</h3>
+        <div class="statuses">COMMUNICATION LOG &nbsp;&middot;&nbsp; OUTCOME RECORDED PER CALL</div>
+        <div class="ba">
+          <div class="before"><h4>Before</h4>Each recruiter invented their own call questions from the CV in front of them, and the call outcome was a note in a cell &mdash; if it was recorded at all.</div>
+          <div class="after"><h4>Now</h4>Every call and its outcome is logged on the candidate's timeline and feeds the dashboard's call-stage counts directly. Ten screening questions can be generated from the candidate's own CV and saved to the record, so they stay available to whoever interviews them later.</div>
+        </div>
+        <p class="obs"><b>79</b> calls logged against candidate records, plus <b>148</b> notes on timelines &mdash; a written history where previously there was none. Generated question sets have been used on only <b>4</b> candidates so far; see the adoption gap below.</p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="rail"><span class="stage-no">5</span><span class="thread"></span></div>
+      <div>
+        <h3>Interview rounds</h3>
+        <div class="statuses">STATUS &rarr; ROUND 1 &nbsp;&rarr;&nbsp; ROUND 2 &nbsp;&middot;&nbsp; TECHNICAL / MANAGERIAL / HR / FINAL</div>
+        <div class="ba">
+          <div class="before"><h4>Before</h4>Emails back and forth to find a slot, a calendar invite made by hand, a CV forwarded as an attachment, and feedback typed up from a reply.</div>
+          <div class="after"><h4>Now</h4>Interviews are scheduled against the candidate's record and the invitation goes out as a real calendar meeting the candidate can accept. Reschedules and cancellations are tracked rather than lost in a mail thread, and the interviewer enters feedback, score and the pass/fail decision directly in their own portal &mdash; no transcription by HR.</div>
+        </div>
+        <p class="obs"><b>22</b> interviews across <b>6</b> interviewers, with <b>8</b> reschedules handled on the record. <b>14</b> of the 17 user accounts are interviewers. Results so far: 3 pass, 8 fail, 11 still awaiting a verdict.</p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="rail"><span class="stage-no">6</span></div>
+      <div>
+        <h3>Decision and close-out</h3>
+        <div class="statuses">STATUS &rarr; FINAL SELECTION &nbsp;&rarr;&nbsp; HIRED &nbsp;&middot;&nbsp; REJECTED &nbsp;&middot;&nbsp; BLACKLISTED</div>
+        <div class="ba">
+          <div class="before"><h4>Before</h4>Rejection mails were retyped one at a time, wording drifting with each copy, and candidates under a filled vacancy were closed off individually or forgotten entirely.</div>
+          <div class="after"><h4>Now</h4>The rejection mail arrives pre-written in the approved wording, addressed and copied to the right people, for HR to review and send. Candidates can be closed in bulk, one action rejects everyone still open under a filled vacancy, and a mis-click can be reverted from the candidate's own timeline.</div>
+        </div>
+        <p class="obs"><b>160</b> rejections issued in consistent, approved wording. Median time from application to a rejection decision is <b>13 days</b> &mdash; candidates get an answer instead of silence. One candidate has reached Final Selection; no hire has been recorded in the system yet.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>Running across every stage</h2>
+      <span class="eyebrow">Always on</span>
+    </div>
+    <p class="measure" style="margin-bottom:24px">
+      Four things now happen continuously, which previously either happened at month-end or did not
+      happen at all.
+    </p>
+    <ul class="frictions steady">
+      <li data-t="&#9679;"><b>A permanent audit trail &mdash; 924 entries and counting</b><span>Every status change is stored with who made it, when, and any remark, and it drives the Stage Dates tracker showing exactly how long each candidate sat at each step. 499 of those entries are record creations; the other 425 are decisions someone made and the system remembered. Nothing is overwritten.</span></li>
+      <li data-t="&#9679;"><b>Reporting that is already built</b><span>Applicants &rarr; Qualified &rarr; Shortlisted &rarr; Round 1 cleared &rarr; Round 2 cleared &rarr; Hired, with conversion at each step, broken down by role and source, filtered by date. Today that reads: 116 ever qualified, 39 reached Round 1, 11 reached Round 2. The Daily View shows what the desk covered on any given day, and every bar drills through to the records behind it.</span></li>
+      <li data-t="&#9679;"><b>Access by role, not by forwarding</b><span>17 accounts across HR Admin, Recruiter, Interviewer and Hiring Manager, each seeing only what their role allows, signing in with their existing Microsoft work account. The 14 interviewers get their own portal instead of an inbox full of forwarded CVs.</span></li>
+      <li data-t="&#9679;"><b>Exports where they are still needed</b><span>Any candidate list &mdash; filtered however it is on screen &mdash; downloads to Excel in one click. The spreadsheet is now an output for whoever wants one, not the system of record.</span></li>
+    </ul>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>Built, not yet switched on</h2>
+      <span class="eyebrow">Adoption gap</span>
+    </div>
+    <p class="measure" style="margin-bottom:22px">
+      Five capabilities are finished and working but barely used in production. They are listed here
+      because the honest version of this document is more useful than the flattering one &mdash; and
+      because each is a decision someone can take this month, not a development cost.
+    </p>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>Capability</th><th class="n">Used</th><th>Why it matters</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Interviewer proposes their own slots</td>
+            <td class="n"><span class="pill idle">0 times</span></td>
+            <td>The availability email loop is still being run by hand. This is the single biggest remaining manual cost per interview.</td>
+          </tr>
+          <tr>
+            <td>Automatic Teams link on the invite</td>
+            <td class="n"><span class="pill idle">0 of 22</span></td>
+            <td>Needs the Microsoft Graph credentials set in the live environment. Until then, meeting links are pasted in by hand.</td>
+          </tr>
+          <tr>
+            <td>AI tele-screening questions</td>
+            <td class="n"><span class="pill idle">4 of 499</span></td>
+            <td>Built and working &mdash; recruiters simply aren't opening it. A prompt in the call workflow would fix this.</td>
+          </tr>
+          <tr>
+            <td>Bulk Upload CV</td>
+            <td class="n"><span class="pill idle">12 CVs</span></td>
+            <td>Agency batches are still arriving one at a time by mail. 16 of 17 uploads that were tried parsed successfully.</td>
+          </tr>
+          <tr>
+            <td>Structured employment history</td>
+            <td class="n"><span class="pill idle">30 of 499</span></td>
+            <td>Education is captured for 486 candidates but employment history for only 30, so experience-based search is thin. This one needs an extraction fix, not a decision.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>How much manual work this removes</h2>
+      <span class="eyebrow">Effort model</span>
+    </div>
+
+    <div class="measured">
+      <p class="note">
+        <b>The volumes below are measured, not assumed</b> &mdash; counted from the system over the 81 days
+        from 25 June to 14 September 2026, and converted to a monthly rate. The per-task manual
+        times they are multiplied by are still considered estimates of how long each job took by
+        hand; those are the numbers to challenge.
+      </p>
+      <dt>APPLICATIONS RECEIVED</dt><dd>499 in 81 days</dd><span class="rate">188 / month</span>
+      <dt>SCREENING &amp; STAGE DECISIONS</dt><dd>425 recorded</dd><span class="rate">160 / month</span>
+      <dt>REJECTIONS SENT</dt><dd>160 issued</dd><span class="rate">60 / month</span>
+      <dt>CALLS LOGGED</dt><dd>79 logged</dd><span class="rate">30 / month</span>
+      <dt>INTERVIEWS SCHEDULED</dt><dd>22 booked</dd><span class="rate">8 / month</span>
+      <dt>VACANCIES OPENED</dt><dd>7 created</dd><span class="rate">3 / month</span>
+    </div>
+
+    <div class="legend">
+      <span><i class="b"></i>Before &mdash; minutes per month</span>
+      <span><i class="a"></i>Now &mdash; minutes per month</span>
+      <span>Scale: full width = 2,000 min</span>
+    </div>
+
+    <div class="chart" id="chart"></div>
+
+    <div class="total">
+      <div class="t-before"><span class="num">86 h</span><span class="lab">Manual admin per month, before</span></div>
+      <div class="t-after"><span class="num">9.5 h</span><span class="lab">Manual admin per month, now</span></div>
+      <div class="t-saved"><span class="num">76 h</span><span class="lab">Given back &mdash; 89%, or about 9&frac12; working days a month</span></div>
+    </div>
+
+    <p class="measure" style="margin-top:26px">
+      Two activities account for two-thirds of the saving. Logging applications and checking for
+      repeat applicants was pure transcription &mdash; at 188 applications a month it consumed over
+      thirty hours, and it is now essentially gone. Screening has not disappeared but has changed
+      shape: from reading 188 CVs cold to reviewing a score and a written rationale, then deciding.
+      Interview scheduling saves the least so far, simply because only eight interviews a month are
+      being booked &mdash; and because the feature that would automate most of it has not been
+      switched on.
+    </p>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>What the system deliberately leaves to people</h2>
+      <span class="eyebrow">Boundaries</span>
+    </div>
+    <p class="measure" style="margin-bottom:22px">
+      Automation stops at judgement. Every point below is a design decision, not a missing feature
+      &mdash; the system prepares the work and a person makes the call. The audit trail shows this is
+      real: a named person is recorded against all 924 recorded actions.
+    </p>
+    <div class="human">
+      <div><b>No candidate is rejected by a score.</b> <span>The score and its rationale are an input to a screening decision. Status only changes when someone changes it.</span></div>
+      <div><b>No email sends itself to a candidate.</b> <span>Invitations and rejections arrive as drafts in approved wording; the recruiter reads, edits if needed, and sends. Recipients and CC are fixed by policy rather than typed each time.</span></div>
+      <div><b>Interview verdicts are the interviewer's.</b> <span>Feedback, score and pass/fail are entered by the person who ran the round.</span></div>
+      <div><b>Offers, negotiation and the hire decision stay off-system.</b> <span>The application records the outcome; it does not make it.</span></div>
+      <div><b>The wording is yours to change.</b> <span>Email templates and the instructions given to the AI are both editable by an administrator, so tone and criteria stay under HR's control rather than a developer's.</span></div>
+    </div>
+  </section>
+
+  <footer>
+    <p>
+      <b>TurnB ATS</b> &mdash; applicant tracking for TurnB Business Services Pvt. Ltd. Django and Bootstrap 5,
+      running on Azure App Service against Azure SQL, with CV and JD reading, match scoring and screening
+      questions on Azure OpenAI, mail and document filing through Azure Logic Apps, interview calendars
+      through Microsoft Graph, and staff sign-in through Microsoft Entra ID.
+    </p>
+    <p style="margin-top:12px">
+      <b>How to read these numbers.</b> Every count on this page was queried from the live database on
+      15 September 2026 and covers 25 June to 14 September 2026 &mdash; 81 days, of which July and August
+      are the only complete months. Monthly rates are the period total divided by 2.66 months. The
+      <i>volumes</i> in the effort model are measured; the <i>per-task manual times</i> are estimates and
+      are the part worth arguing with. No hire has yet been recorded in the system, so this document
+      makes no claim about time to hire, cost per hire, or quality of hire.
+    </p>
+  </footer>
+</div>
+
+<script>
+  /* Minutes per month. Volumes measured from the live database (see the
+     measured-volumes panel); per-task manual times are estimates. */
+  const ROWS = [
+    ['CV screening against the JD',              1880, 376],
+    ['Logging applicants into the repository',   1504,  15],
+    ['Duplicate and repeat-applicant checks',     376,   0],
+    ['Rejection emails',                          360,  90],
+    ['Tele-screening preparation',                300,  15],
+    ['Status tracking and chasing updates',       240,  20],
+    ['Monthly reporting pack',                    240,   5],
+    ['Interview scheduling and invitations',      200,  40],
+    ['Vacancy set-up from a JD',                   45,   9]
+  ];
+  const SCALE = 2000;
+  const fmt = n => n.toLocaleString('en-IN');
+
+  document.getElementById('chart').innerHTML = ROWS.map(([label, before, after]) => {
+    const saved = before - after;
+    const pct = before ? Math.round(saved / before * 100) : 0;
+    const w = v => Math.max(v > 0 ? 0.6 : 0, v / SCALE * 100).toFixed(2);
+    return `<div class="crow">
+      <div class="row-lab"><span>${label}</span><span class="delta">&minus;${fmt(saved)} min &middot; ${pct}%</span></div>
+      <div class="bar"><div class="track"><div class="fill b" style="width:${w(before)}%"></div></div><span class="v">${fmt(before)}</span></div>
+      <div class="bar"><div class="track"><div class="fill a" style="width:${w(after)}%"></div></div><span class="v">${fmt(after)}</span></div>
+    </div>`;
+  }).join('');
+</script>
