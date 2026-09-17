@@ -1,0 +1,12 @@
+{% spaceless %}
+<div class="split-datetime-row">
+  <div class="split-dt-col split-dt-date">
+    <span class="split-dt-label">Date</span>
+    {% with widget=widget.subwidgets.0 %}{% include widget.template_name %}{% endwith %}
+  </div>
+  <div class="split-dt-col split-dt-time">
+    <span class="split-dt-label">Time</span>
+    {% with widget=widget.subwidgets.1 %}{% include widget.template_name %}{% endwith %}
+  </div>
+</div>
+{% endspaceless %}

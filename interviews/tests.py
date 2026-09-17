@@ -911,6 +911,28 @@ class ProposeSlotsSplitDateTimeTests(TestCase):
         self.assertEqual(response.status_code, 400)  # redisplayed with the error
         self.assertEqual(self.request_obj.slots.count(), 0)
 
+    def test_the_date_and_time_inputs_render_as_two_separate_fields(self):
+        """Regression guard: BoundField.subwidgets (the `.0`/`.1` template
+        lookup) doesn't actually decompose a MultiWidget - MultiWidget never
+        overrides Widget.subwidgets(), so it silently yields the whole
+        SplitDateTimeWidget as one item. portal_propose_slots.html used to
+        rely on that and got both inputs concatenated into the Date column
+        (Time empty), neither carrying its flatpickr class - Flatpickr had
+        nothing to attach to, so no calendar/time picker ever opened for the
+        interviewer. Fixed via SplitDateTimeSlotWidget's own template
+        (interviews/widgets/split_datetime_slot.html) - this checks the
+        actual rendered HTML, which none of the POST-only tests above would
+        ever catch."""
+        response = self.client.get(reverse('interviewer_propose_slots', args=[self.request_obj.pk]))
+        content = response.content.decode()
+        self.assertEqual(content.count('name="slot_1_0"'), 1)
+        self.assertEqual(content.count('name="slot_1_1"'), 1)
+        self.assertIn('flatpickr-date', content)
+        self.assertIn('flatpickr-time', content)
+        # Each is its own separate <input>, not both landing in one tag.
+        self.assertRegex(content, r'<input[^>]*name="slot_1_0"[^>]*class="form-control flatpickr-date"')
+        self.assertRegex(content, r'<input[^>]*name="slot_1_1"[^>]*class="form-control flatpickr-time"')
+
 
 class InterviewRequestRescheduleTests(TestCase):
     """The Round 1/2 stage card's "Reschedule" button, offered once the

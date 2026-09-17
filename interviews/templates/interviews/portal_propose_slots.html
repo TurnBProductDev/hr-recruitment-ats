@@ -24,28 +24,19 @@
 
         <div class="mb-4">
           <label class="form-label">Slot 1</label>
-          <div class="split-datetime-row">
-            <div class="split-dt-col split-dt-date"><span class="split-dt-label">Date</span>{{ form.slot_1.subwidgets.0 }}</div>
-            <div class="split-dt-col split-dt-time"><span class="split-dt-label">Time</span>{{ form.slot_1.subwidgets.1 }}</div>
-          </div>
+          {{ form.slot_1 }}
           {% for e in form.slot_1.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
         </div>
 
         <div class="mb-4">
           <label class="form-label">Slot 2</label>
-          <div class="split-datetime-row">
-            <div class="split-dt-col split-dt-date"><span class="split-dt-label">Date</span>{{ form.slot_2.subwidgets.0 }}</div>
-            <div class="split-dt-col split-dt-time"><span class="split-dt-label">Time</span>{{ form.slot_2.subwidgets.1 }}</div>
-          </div>
+          {{ form.slot_2 }}
           {% for e in form.slot_2.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
         </div>
 
         <div class="mb-4">
           <label class="form-label">Slot 3 <span class="text-muted small">(optional)</span></label>
-          <div class="split-datetime-row">
-            <div class="split-dt-col split-dt-date"><span class="split-dt-label">Date</span>{{ form.slot_3.subwidgets.0 }}</div>
-            <div class="split-dt-col split-dt-time"><span class="split-dt-label">Time</span>{{ form.slot_3.subwidgets.1 }}</div>
-          </div>
+          {{ form.slot_3 }}
           {% for e in form.slot_3.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
         </div>
 

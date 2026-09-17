@@ -19,7 +19,16 @@ class BootstrapFormMixin:
     def _add_bootstrap_classes(self):
         for field in self.fields.values():
             widget = field.widget
-            if isinstance(widget, forms.CheckboxInput):
+            if isinstance(widget, forms.MultiWidget):
+                # A class set here lands on the *parent* widget's own attrs,
+                # which MultiWidget.get_context() then merges into every
+                # sub-widget's attrs, last-value-wins - silently overwriting
+                # each sub-widget's own more specific class (e.g.
+                # InterviewSlotProposalForm's flatpickr-date/flatpickr-time)
+                # with a bare "form-control". Each sub-widget already carries
+                # its own class via its own attrs, so nothing to add here.
+                continue
+            elif isinstance(widget, forms.CheckboxInput):
                 widget.attrs.setdefault('class', 'form-check-input')
             elif isinstance(widget, (forms.Select, forms.SelectMultiple)):
                 widget.attrs.setdefault('class', 'form-select')
@@ -177,6 +186,22 @@ class InterviewAllocationForm(BootstrapFormMixin, forms.ModelForm):
         return cleaned
 
 
+class SplitDateTimeSlotWidget(forms.SplitDateTimeWidget):
+    """SplitDateTimeWidget's own default template (multiwidget.html) just
+    concatenates both sub-inputs with no separation - this one lays them out
+    as labelled Date/Time columns instead (see the template).
+
+    Rendering `{{ form.slot_1 }}` directly (not `.subwidgets.0`/`.1`) is
+    required here: MultiWidget never overrides Widget.subwidgets() (that's a
+    different mechanism from the `widget.subwidgets` context list its own
+    template loops over), so BoundField.subwidgets - the `.0`/`.1` template
+    lookup - yields the whole multiwidget as a single item instead of one
+    per sub-widget. portal_propose_slots.html used to rely on that and
+    silently got both inputs concatenated into "Date" and nothing in "Time",
+    with neither carrying its flatpickr-date/flatpickr-time class."""
+    template_name = 'interviews/widgets/split_datetime_slot.html'
+
+
 class InterviewSlotProposalForm(BootstrapFormMixin, forms.Form):
     """Step 2: the interviewer proposes 2-3 one-hour slots for an
     InterviewRequest. Not a ModelForm - it fans out into several InterviewSlot
@@ -190,13 +215,13 @@ class InterviewSlotProposalForm(BootstrapFormMixin, forms.Form):
     # instead of the browser's own (inconsistent, clunkier-on-desktop) native
     # date/time pickers. Flatpickr still submits the same Y-m-d/H:i text this
     # form already expects, so nothing else here needs to change.
-    slot_1 = forms.SplitDateTimeField(label='Slot 1', widget=forms.SplitDateTimeWidget(
+    slot_1 = forms.SplitDateTimeField(label='Slot 1', widget=SplitDateTimeSlotWidget(
         date_attrs={'type': 'text', 'class': 'form-control flatpickr-date'},
         time_attrs={'type': 'text', 'class': 'form-control flatpickr-time'}))
-    slot_2 = forms.SplitDateTimeField(label='Slot 2', required=False, widget=forms.SplitDateTimeWidget(
+    slot_2 = forms.SplitDateTimeField(label='Slot 2', required=False, widget=SplitDateTimeSlotWidget(
         date_attrs={'type': 'text', 'class': 'form-control flatpickr-date'},
         time_attrs={'type': 'text', 'class': 'form-control flatpickr-time'}))
-    slot_3 = forms.SplitDateTimeField(label='Slot 3', required=False, widget=forms.SplitDateTimeWidget(
+    slot_3 = forms.SplitDateTimeField(label='Slot 3', required=False, widget=SplitDateTimeSlotWidget(
         date_attrs={'type': 'text', 'class': 'form-control flatpickr-date'},
         time_attrs={'type': 'text', 'class': 'form-control flatpickr-time'}))
 
