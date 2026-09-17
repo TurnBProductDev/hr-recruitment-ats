@@ -1009,6 +1009,19 @@ class RolesTabTests(TestCase):
         response = self._get(view='roles')
         self.assertEqual(response.context['roles_opened_series'][-1], 1)  # last bucket = this month
 
+    def test_chart_window_narrows_to_match_a_short_date_range(self):
+        """A date filter must actually reshape the chart's own month
+        window, not just leave a fixed rolling 12 months in place and zero
+        out whatever falls outside it - that's what made picking a range
+        look like it did nothing to these two charts."""
+        response = self._get(view='roles', date_from='2026-01-01', date_to='2026-03-15')
+        self.assertEqual(response.context['roles_chart_labels'], ['Jan26', 'Feb26', 'Mar26'])
+
+    def test_chart_window_caps_a_very_wide_range_to_36_months(self):
+        response = self._get(view='roles', date_from='2015-01-01', date_to='2026-09-17')
+        self.assertEqual(len(response.context['roles_chart_labels']), 36)
+        self.assertEqual(response.context['roles_chart_labels'][-1], 'Sep26')
+
     def test_view_defaults_to_applications_and_switches_to_roles(self):
         self.assertEqual(self._get().context['view'], 'applications')
         self.assertEqual(self._get(view='roles').context['view'], 'roles')

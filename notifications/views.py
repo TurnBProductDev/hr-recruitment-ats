@@ -8,13 +8,14 @@ from .models import Notification
 
 
 class NotificationListView(LoginRequiredMixin, ListView):
+    """Just the last 7, always - a running feed of what's recent, not an
+    archive to page back through."""
     model = Notification
     template_name = 'notifications/list.html'
     context_object_name = 'notifications'
-    paginate_by = 30
 
     def get_queryset(self):
-        return self.request.user.notifications.all()
+        return self.request.user.notifications.all()[:7]
 
 
 class NotificationMarkReadView(LoginRequiredMixin, View):

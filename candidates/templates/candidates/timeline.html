@@ -573,15 +573,13 @@ html { scroll-behavior: smooth; }
         {% endcomment %}
         <div class="stage-subsection">
           <div class="stage-subsection-title">Phone Communication Log</div>
-          {% with logs=comm_logs_by_channel|dict_get:stage.comm_channel %}
-          {% for l in logs %}
+          {% for l in stage.comm_logs %}
           <div class="pd-body mb-1 pb-1 {% if not forloop.last %}border-bottom{% endif %}">
             {% if l.outcome %}<strong>{{ l.get_outcome_display }}</strong>{% endif %}
             {% if l.message %} &middot; {{ l.message }}{% endif %}
             <div class="text-muted pd-meta">{{ l.logged_by|default:"Unknown" }} &middot; {{ l.logged_at|date:"d M Y H:i" }}</div>
           </div>
           {% endfor %}
-          {% endwith %}
 
           <form method="post" class="js-stage-form mt-2">
             {% csrf_token %}
@@ -630,15 +628,13 @@ html { scroll-behavior: smooth; }
           {# Interviewer already logged attendance when submitting their result. #}
           <div class="pd-body text-muted mb-2"><i class="bi bi-info-circle"></i> Already logged by the interviewer.</div>
           {% endif %}
-          {% with logs=comm_logs_by_channel|dict_get:stage.comm_channel %}
-          {% for l in logs %}
+          {% for l in stage.comm_logs %}
           <div class="pd-body mb-1 pb-1 {% if not forloop.last %}border-bottom{% endif %}">
             {% if l.outcome %}<strong>{{ l.get_outcome_display }}</strong>{% endif %}
             {% if l.message %} &middot; {{ l.message }}{% endif %}
             <div class="text-muted pd-meta">{{ l.logged_by|default:"Unknown" }} &middot; {{ l.logged_at|date:"d M Y H:i" }}</div>
           </div>
           {% endfor %}
-          {% endwith %}
         </div>
         {% endif %}
 

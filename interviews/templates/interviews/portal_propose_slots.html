@@ -4,11 +4,21 @@
 {% block extra_css %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css">
 <style>
-.split-datetime-row { display:flex; align-items:flex-end; gap:28px; }
-.split-dt-col { display:flex; flex-direction:column; gap:5px; }
-.split-dt-col.split-dt-date { flex:1 1 60%; }
-.split-dt-col.split-dt-time { flex:1 1 40%; }
+.split-datetime-row { display:flex; align-items:flex-start; gap:28px; }
+.split-dt-col { display:flex; flex-direction:column; gap:5px; min-width:0; }
+/* Time only ever needs to fit "12:00 PM" - a proportional 40% of the row
+   stretched it far wider than its content, reading as an odd, oversized
+   pill next to the naturally-sized Date box. A fixed width fixes that
+   without depending on the row's own overall width. */
+.split-dt-col.split-dt-date { flex:1 1 auto; }
+.split-dt-col.split-dt-time { flex:0 0 140px; }
 .split-dt-label { font-size:.7rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); }
+/* Flatpickr's altInput copies the original input's classes, so both boxes
+   already share the same Bootstrap .form-control sizing - pinned to the
+   same explicit box-sizing/width here too, so neither the date-calendar
+   nor the time-only picker variant can drift out of alignment with the
+   other regardless of which one Flatpickr happens to attach differently. */
+.split-dt-col input.form-control { width:100%; box-sizing:border-box; }
 </style>
 {% endblock %}
 

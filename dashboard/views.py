@@ -1,5 +1,6 @@
 import calendar
 from collections import Counter
+from datetime import datetime
 
 from django.db.models import Count, Max, OuterRef, Q, Subquery, Sum
 from django.db.models.functions import Coalesce
@@ -461,6 +462,40 @@ def _monthly_counts(dates, months):
     return [buckets.get(ym, 0) for ym in months]
 
 
+def _months_between(start_date, end_date):
+    """(year, month) tuples from start_date's month through end_date's,
+    inclusive, oldest first. Swaps the two first if start is after end - a
+    From/To pair can be typed in either order."""
+    if start_date > end_date:
+        start_date, end_date = end_date, start_date
+    months = []
+    y, m = start_date.year, start_date.month
+    while (y, m) <= (end_date.year, end_date.month):
+        months.append((y, m))
+        m += 1
+        if m == 13:
+            y, m = y + 1, 1
+    return months
+
+
+def _months_for_chart(date_from, date_to):
+    """The Roles tab charts' month window. Spans the selected From/To range
+    when either is set, so picking a range actually reshapes what's
+    plotted instead of leaving a fixed rolling-12-months window in place
+    and just zeroing out whatever falls outside it - the window itself
+    never moving is what made the date filter look like it did nothing to
+    these two charts. Falls back to the rolling last-12-months when
+    neither is set (the original, still-default behaviour), and caps a
+    very wide range to its most recent 36 months so a multi-year pick
+    doesn't render an unreadable hundred-point line."""
+    if not date_from and not date_to:
+        return _last_12_months()
+    today = timezone.localdate()
+    start = datetime.strptime(date_from, '%Y-%m-%d').date() if date_from else today.replace(year=today.year - 1)
+    end = datetime.strptime(date_to, '%Y-%m-%d').date() if date_to else today
+    return _months_between(start, end)[-36:]
+
+
 class ReportsView(GroupRequiredMixin, TemplateView):
     template_name = 'dashboard/reports.html'
     allowed_groups = ANY_STAFF
@@ -530,9 +565,10 @@ class ReportsView(GroupRequiredMixin, TemplateView):
         # same Job Code/Vacancy filter as everything else above; the From/To
         # range filters by the job's own opening_date here (there's no
         # "screening" for a vacancy) - both the 4 KPI cards and the Roles
-        # Opened chart below only count roles actually opened in that window
-        # (the chart's x-axis itself stays a fixed last-12-months, same as
-        # always - a date filter just leaves some of those months at 0).
+        # Opened chart below only count roles actually opened in that
+        # window. The charts' own month window (see _months_for_chart)
+        # shifts to span whatever From/To is picked too, rather than always
+        # plotting a fixed rolling 12 months regardless of the filter.
         job_qs = Job.objects.exclude(title__iexact=GENERAL_APPLICATION)
         if job_id:
             job_qs = job_qs.filter(pk=job_id)
@@ -548,7 +584,7 @@ class ReportsView(GroupRequiredMixin, TemplateView):
         ctx['roles_closed_without_hiring'] = closed_qs.count() - closed_with_hiring
         ctx['roles_total_hired'] = job_qs.filter(candidates__status=STATUS.HIRED).distinct().count()
 
-        months = _last_12_months()
+        months = _months_for_chart(date_from, date_to)
         ctx['roles_chart_labels'] = [f'{calendar.month_abbr[m]}{str(y)[2:]}' for y, m in months]
         opened_dates = [od or co.date() for od, co in job_qs.values_list('opening_date', 'created_on')]
         ctx['roles_opened_series'] = _monthly_counts(opened_dates, months)

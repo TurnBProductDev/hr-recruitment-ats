@@ -104,13 +104,21 @@
     </div>
     <div>
       <label class="form-label small text-muted mb-0">From</label>
-      <input type="date" name="date_from" value="{{ date_from }}" class="form-control form-control-sm" onchange="this.form.submit()">
+      <input type="date" name="date_from" value="{{ date_from }}" class="form-control form-control-sm">
     </div>
     <div>
       <label class="form-label small text-muted mb-0">To</label>
-      <input type="date" name="date_to" value="{{ date_to }}" class="form-control form-control-sm" onchange="this.form.submit()">
+      <input type="date" name="date_to" value="{{ date_to }}" class="form-control form-control-sm">
     </div>
-    <noscript><button class="btn btn-sm btn-primary-app">Go</button></noscript>
+    {% comment %}
+      No onchange-submit on the two date fields (unlike the dropdowns above) -
+      picking a day in the native date picker fires `change` immediately, so
+      auto-submitting on the first one reloaded the page before there was
+      ever a chance to also set the second, silently applying a half-set
+      range. An explicit button instead - needed either way once
+      auto-submit's gone, so this replaces the old JS-only noscript one.
+    {% endcomment %}
+    <button type="submit" class="btn btn-sm btn-primary-app">Search</button>
   </form>
 </div>
 

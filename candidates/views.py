@@ -1018,15 +1018,25 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
         comm_logs_by_channel = {}
         for log in ctx['communication_logs']:
             comm_logs_by_channel.setdefault(log.channel, []).append(log)
-        ctx['comm_logs_by_channel'] = comm_logs_by_channel
 
-        # Latest call outcome (e.g. "Unable to connect"), shown as a badge in
-        # the stage card's header while the stage is still active - a done
-        # stage already shows its final decision badge instead. communication_logs
-        # is ordered -logged_at (CommunicationLog.Meta), so [0] is the latest.
+        # Round 1 and Round 2 share the same channel (CommunicationLog.
+        # Channel.INTERVIEW) - without scoping by stage too, Round 2's card
+        # would inherit Round 1's own (older) "Attended" log as its own
+        # latest call, and keep showing it as if it were current even once
+        # a brand new Round 2 interview cycle is underway (reschedule, a
+        # freshly proposed/selected slot, ...). Scoped to logs recorded
+        # since actually entering that stage - same idea as
+        # decision_after()'s own time-scoping above.
         for stage in hiring_stages:
             logs = comm_logs_by_channel.get(stage['comm_channel']) if stage['comm_channel'] else None
-            stage['latest_call'] = logs[0] if logs and not stage['is_done'] and not stage['is_locked'] else None
+            if logs and stage['entered']:
+                logs = [l for l in logs if l.logged_at >= stage['entered'].changed_at]
+            stage['comm_logs'] = logs or []
+            # Latest call outcome (e.g. "Unable to connect"), shown as a badge
+            # in the stage card's header while the stage is still active - a
+            # done stage already shows its final decision badge instead.
+            # communication_logs is ordered -logged_at, so [0] is the latest.
+            stage['latest_call'] = stage['comm_logs'][0] if stage['comm_logs'] and not stage['is_done'] and not stage['is_locked'] else None
 
         return ctx
 

@@ -1800,6 +1800,44 @@ class TeleScreeningMergedRemarksTests(TestCase):
         self.assertNotContains(response, 'class="call-status-badge"')
 
 
+class RoundCallBadgeScopingTests(TestCase):
+    """Round 1 and Round 2 share CommunicationLog.Channel.INTERVIEW - the
+    "latest call" badge shown in a stage's header must not leak an older
+    round's own log into a later round's card. Real reported bug: Round 2
+    kept showing "Attended" carried over from Round 1's own log, even
+    before Round 2 had any interview of its own yet."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('hr11', 'hr11@example.com', 'pw')
+        self.user.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.client.force_login(self.user)
+        self.candidate = Candidate.objects.create(full_name='Rose E G', email='rose@example.com')
+        services.record_creation(self.candidate)
+        services.change_status(self.candidate, Candidate.Status.SHORTLISTED)
+        services.change_status(self.candidate, Candidate.Status.ROUND1)
+
+    def test_round2_does_not_inherit_round1s_attended_badge(self):
+        Interview.objects.create(
+            candidate=self.candidate, round_type=Interview.RoundType.ROUND1,
+            status=Interview.Status.COMPLETED, result=Interview.Result.PASS_,
+            scheduled_date=timezone.now())
+        CommunicationLog.objects.create(
+            candidate=self.candidate, channel=CommunicationLog.Channel.INTERVIEW,
+            outcome=CommunicationLog.Outcome.ATTENDED, logged_by=self.user)
+        services.change_status(self.candidate, Candidate.Status.INTERVIEW)  # advance to Round 2
+
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertNotContains(response, 'class="call-status-badge"')
+
+    def test_round2_shows_its_own_attended_badge_once_logged(self):
+        services.change_status(self.candidate, Candidate.Status.INTERVIEW)  # now at Round 2
+        CommunicationLog.objects.create(
+            candidate=self.candidate, channel=CommunicationLog.Channel.INTERVIEW,
+            outcome=CommunicationLog.Outcome.ATTENDED, logged_by=self.user)
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertContains(response, 'class="call-status-badge"')
+
+
 class RejectionEmailPopupTests(TestCase):
     """Round 1/Round 2/Final Decision's Reject button opens an editable
     "thank you for interviewing" email draft (CandidateRejectionDraftView)
