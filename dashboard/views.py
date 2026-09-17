@@ -1,3 +1,6 @@
+import calendar
+from collections import Counter
+
 from django.db.models import Count, Max, OuterRef, Q, Subquery, Sum
 from django.db.models.functions import Coalesce
 from django.http import Http404
@@ -434,12 +437,37 @@ def _report_metrics(qs):
     }
 
 
+def _last_12_months():
+    """(year, month) tuples for the rolling 12-month window ending this
+    month, oldest first - the fixed window every Roles-tab chart plots
+    against, so a role/candidate with no activity that month still gets an
+    explicit 0 instead of a gap."""
+    today = timezone.localdate()
+    months = []
+    y, m = today.year, today.month
+    for _ in range(12):
+        months.append((y, m))
+        m -= 1
+        if m == 0:
+            y, m = y - 1, 12
+    return list(reversed(months))
+
+
+def _monthly_counts(dates, months):
+    """How many of `dates` (a plain iterable of date/datetime, blanks
+    already filtered out by the caller) fall in each (year, month) of
+    `months`, in that same order."""
+    buckets = Counter((d.year, d.month) for d in dates)
+    return [buckets.get(ym, 0) for ym in months]
+
+
 class ReportsView(GroupRequiredMixin, TemplateView):
     template_name = 'dashboard/reports.html'
     allowed_groups = ANY_STAFF
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
+        ctx['view'] = self.request.GET.get('view', 'applications')
         job_id = self.request.GET.get('job') or ''
         # General Application isn't a real vacancy and Future Prospects isn't
         # an active application - excluded from every Reports number, same
@@ -464,6 +492,20 @@ class ReportsView(GroupRequiredMixin, TemplateView):
 
         ctx.update(_report_metrics(base))
 
+        # Every Job (job code) under a title, individually - the Role row's
+        # own "+" expands to these (see reports.html/_reports_row.html).
+        # Scoped by job_id like everything else here, so picking one specific
+        # vacancy up top still only ever shows that one job code under it.
+        individual_jobs = Job.objects.exclude(title__iexact=GENERAL_APPLICATION)
+        if job_id:
+            individual_jobs = individual_jobs.filter(pk=job_id)
+
+        def job_codes_for(title):
+            if not title:  # "Unassigned" - no Job row to break out
+                return []
+            return [{'job_code': j.job_code, **_report_metrics(base.filter(job_id=j.id))}
+                    for j in individual_jobs.filter(title=title).order_by('job_code')]
+
         # order_by() clears Candidate's default ordering (Meta.ordering =
         # ['-created_at']) before distinct() - otherwise Django folds
         # created_at into the SELECT DISTINCT (to satisfy that ordering),
@@ -471,7 +513,8 @@ class ReportsView(GroupRequiredMixin, TemplateView):
         # comes back once per candidate instead of once per role.
         by_job_titles = (base.order_by().values_list('job__title', flat=True).distinct())
         ctx['by_job'] = sorted(
-            ({'name': title or 'Unassigned', **_report_metrics(base.filter(job__title=title))}
+            ({'name': title or 'Unassigned', 'job_codes': job_codes_for(title),
+              **_report_metrics(base.filter(job__title=title))}
              for title in by_job_titles),
             key=lambda r: -r['applicants'])
 
@@ -481,4 +524,28 @@ class ReportsView(GroupRequiredMixin, TemplateView):
             ({'name': source, **_report_metrics(base.filter(source=source))}
              for source in by_source_names),
             key=lambda r: -r['applicants'])
+
+        # ---------- Roles tab: vacancy/job-code counts, not candidate counts ----------
+        # "Roles" = Job rows (job codes) - see jobs.models.Job. Scoped by the
+        # same Job Code/Vacancy filter as everything else above; the
+        # Screened From/To date range has no equivalent on a Job, so it only
+        # narrows the candidates-applied chart below (via `base`), not the
+        # KPI cards or the roles-opened chart.
+        job_qs = Job.objects.exclude(title__iexact=GENERAL_APPLICATION)
+        if job_id:
+            job_qs = job_qs.filter(pk=job_id)
+        closed_qs = job_qs.filter(status=Job.Status.CLOSED)
+        closed_with_hiring = closed_qs.filter(candidates__status=STATUS.HIRED).distinct().count()
+        ctx['roles_total_opened'] = job_qs.count()
+        ctx['roles_active'] = job_qs.filter(status=Job.Status.OPEN, is_archived=False).count()
+        ctx['roles_closed_with_hiring'] = closed_with_hiring
+        ctx['roles_closed_without_hiring'] = closed_qs.count() - closed_with_hiring
+        ctx['roles_total_hired'] = job_qs.filter(candidates__status=STATUS.HIRED).distinct().count()
+
+        months = _last_12_months()
+        ctx['roles_chart_labels'] = [f'{calendar.month_abbr[m]} {y}' for y, m in months]
+        opened_dates = [od or co.date() for od, co in job_qs.values_list('opening_date', 'created_on')]
+        ctx['roles_opened_series'] = _monthly_counts(opened_dates, months)
+        applied_dates = [d.date() for d in base.values_list('created_at', flat=True)]
+        ctx['candidates_applied_series'] = _monthly_counts(applied_dates, months)
         return ctx

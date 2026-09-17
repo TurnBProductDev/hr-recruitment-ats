@@ -10,9 +10,20 @@
   a genuine 0% can render as "0:N" instead of a nonsensical "1:0") while
   the visible text itself is rounded to a whole percent - reports.html's JS
   rewrites that text on toggle.
+
+  By Job/Role rows only (r.job_codes present - Source Level rows have no
+  such key) additionally get a left "+" that expands to that role's
+  individual job codes, each with its own KPIs - a separate expand block
+  from the existing right "+" (%-of-Applicants), so either can be open
+  independently of the other.
 {% endcomment %}
 <div class="rep-rowwrap">
   <div class="rep-row">
+    {% if r.job_codes %}
+    <button type="button" class="rep-toggle rep-toggle-left" aria-expanded="false" aria-label="Show job codes for {{ r.name }}">+</button>
+    {% else %}
+    <span></span>
+    {% endif %}
     <span class="name">{{ r.name }}</span>
     <span class="col"><span class="rep-num">{{ r.applicants }}</span></span>
     <span class="col"><span class="rep-num">{{ r.qualified }}</span> <span class="rep-pct">({% if r.qualified_pct is not None %}<span class="rep-pctval" data-pct="{{ r.qualified_pct }}" data-denom="{{ r.applicants }}">{{ r.qualified_pct|floatformat:0 }}%</span>{% else %}&ndash;{% endif %})</span></span>
@@ -22,7 +33,23 @@
     <span class="col hired"><span class="rep-num">{{ r.hired }}</span> <span class="rep-pct">({% if r.hired_pct is not None %}<span class="rep-pctval" data-pct="{{ r.hired_pct }}" data-denom="{{ r.r2_cleared }}">{{ r.hired_pct|floatformat:0 }}%</span>{% else %}&ndash;{% endif %})</span></span>
     <button type="button" class="rep-toggle" aria-expanded="false" aria-label="Show % of Applicants for {{ r.name }}">+</button>
   </div>
-  <div class="rep-row-expand">
+  {% if r.job_codes %}
+  <div class="rep-row-expand rep-jobcodes-expand">
+    {% for jc in r.job_codes %}
+    <span></span>
+    <span class="name">{{ jc.job_code }}</span>
+    <span class="col"><span class="rep-num">{{ jc.applicants }}</span></span>
+    <span class="col"><span class="rep-num">{{ jc.qualified }}</span></span>
+    <span class="col"><span class="rep-num">{{ jc.shortlisted }}</span></span>
+    <span class="col"><span class="rep-num">{{ jc.r1_cleared }}</span></span>
+    <span class="col"><span class="rep-num">{{ jc.r2_cleared }}</span></span>
+    <span class="col hired"><span class="rep-num">{{ jc.hired }}</span></span>
+    <span></span>
+    {% endfor %}
+  </div>
+  {% endif %}
+  <div class="rep-row-expand rep-pct-expand">
+    <span></span>
     <span class="name">% of Applicants</span>
     <span class="col">&ndash;</span>
     <span class="col">{% if r.qualified_pct_total is not None %}<span class="rep-pctval" data-pct="{{ r.qualified_pct_total }}" data-denom="{{ r.applicants }}">{{ r.qualified_pct_total|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span>

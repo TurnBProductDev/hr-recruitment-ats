@@ -902,6 +902,105 @@ class ReportsViewTests(TestCase):
         self.assertIn('rep-toggle', content)
         self.assertIn('% of Applicants', content)
 
+    def test_applicants_kpi_is_labelled_screened_applicants(self):
+        response = self._get()
+        self.assertContains(response, 'Screened Applicants')
+
+    def test_by_job_row_carries_its_own_job_codes(self):
+        """Program Manager (setUp's self.job) is a single Job/job code, so
+        its Role row's job_codes breakdown is exactly that one code, with
+        the same totals as the row itself."""
+        response = self._get()
+        row = next(r for r in response.context['by_job'] if r['name'] == 'Program Manager')
+        self.assertEqual(len(row['job_codes']), 1)
+        jc = row['job_codes'][0]
+        self.assertEqual(jc['job_code'], self.job.job_code)
+        self.assertEqual(jc['applicants'], row['applicants'])
+        self.assertEqual(jc['hired'], row['hired'])
+
+    def test_two_job_codes_under_the_same_title_are_both_listed(self):
+        other_job = Job.objects.create(title='Program Manager')
+        Candidate.objects.create(job=other_job, full_name='Other', email='other-pm@example.com',
+                                 status=Candidate.Status.SHORTLISTED)
+        response = self._get()
+        rows = [r for r in response.context['by_job'] if r['name'] == 'Program Manager']
+        self.assertEqual(len(rows), 1)  # still one Role row...
+        codes = sorted(jc['job_code'] for jc in rows[0]['job_codes'])
+        self.assertEqual(codes, sorted([self.job.job_code, other_job.job_code]))  # ...covering both codes
+
+    def test_unassigned_role_has_no_job_codes_to_expand(self):
+        Candidate.objects.create(full_name='No Job', email='nojob@example.com',
+                                 status=Candidate.Status.SHORTLISTED)
+        response = self._get()
+        row = next(r for r in response.context['by_job'] if r['name'] == 'Unassigned')
+        self.assertEqual(row['job_codes'], [])
+
+
+class RolesTabTests(TestCase):
+    """The Reports page's Roles tab - vacancy/job-code counts (not candidate
+    counts, see jobs.models.Job) plus the two month-level trend charts."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser('hr7', 'hr7@example.com', 'pw')
+        self.client.force_login(self.user)
+
+    def _get(self, **params):
+        return self.client.get(reverse('hr_reports'), params)
+
+    def test_kpi_counts(self):
+        Job.objects.create(title='Open Role A', status=Job.Status.OPEN)
+        Job.objects.create(title='Open Role B', status=Job.Status.OPEN)
+        closed_no_hire = Job.objects.create(title='Closed No Hire', status=Job.Status.CLOSED)
+        closed_with_hire = Job.objects.create(title='Closed With Hire', status=Job.Status.CLOSED)
+        Candidate.objects.create(job=closed_with_hire, full_name='Hired One',
+                                 email='hired1@example.com', status=Candidate.Status.HIRED)
+        Job.objects.create(title='General Application')  # excluded, like everywhere else
+
+        response = self._get(view='roles')
+        self.assertEqual(response.context['roles_total_opened'], 4)  # excludes General Application
+        self.assertEqual(response.context['roles_active'], 2)
+        self.assertEqual(response.context['roles_closed_with_hiring'], 1)
+        self.assertEqual(response.context['roles_closed_without_hiring'], 1)
+        self.assertEqual(response.context['roles_total_hired'], 1)
+
+    def test_a_role_still_open_but_already_hired_counts_as_total_hired_not_closed_with_hiring(self):
+        """Total Roles Hired counts any role that's hired someone, open or
+        closed - Roles Closed With Hiring only counts once it's also
+        actually closed (e.g. more openings still to fill)."""
+        still_open = Job.objects.create(title='Still Hiring', status=Job.Status.OPEN, openings=3)
+        Candidate.objects.create(job=still_open, full_name='First Hire',
+                                 email='firsthire@example.com', status=Candidate.Status.HIRED)
+        response = self._get(view='roles')
+        self.assertEqual(response.context['roles_total_hired'], 1)
+        self.assertEqual(response.context['roles_closed_with_hiring'], 0)
+
+    def test_archived_roles_still_count_toward_total_opened(self):
+        Job.objects.create(title='Archived Role', is_archived=True)
+        response = self._get(view='roles')
+        self.assertEqual(response.context['roles_total_opened'], 1)
+        self.assertEqual(response.context['roles_active'], 0)  # archived isn't Active
+
+    def test_job_filter_scopes_the_roles_kpis_to_just_that_job(self):
+        target = Job.objects.create(title='Target Role', status=Job.Status.OPEN)
+        Job.objects.create(title='Other Role', status=Job.Status.OPEN)
+        response = self._get(view='roles', job=target.pk)
+        self.assertEqual(response.context['roles_total_opened'], 1)
+
+    def test_charts_carry_12_months_of_labels_and_series(self):
+        response = self._get(view='roles')
+        self.assertEqual(len(response.context['roles_chart_labels']), 12)
+        self.assertEqual(len(response.context['roles_opened_series']), 12)
+        self.assertEqual(len(response.context['candidates_applied_series']), 12)
+
+    def test_a_role_opened_this_month_shows_up_in_the_current_months_bucket(self):
+        Job.objects.create(title='Fresh Role', status=Job.Status.OPEN)
+        response = self._get(view='roles')
+        self.assertEqual(response.context['roles_opened_series'][-1], 1)  # last bucket = this month
+
+    def test_view_defaults_to_applications_and_switches_to_roles(self):
+        self.assertEqual(self._get().context['view'], 'applications')
+        self.assertEqual(self._get(view='roles').context['view'], 'roles')
+
 
 class ReportsRatioPrecisionTests(TestCase):
     """A percentage rounded to a whole number would round anything under

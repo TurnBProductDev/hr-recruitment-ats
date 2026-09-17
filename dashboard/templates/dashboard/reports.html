@@ -9,16 +9,23 @@
 .rep-kpi .val { font-size: 1.9rem; font-weight: 700; color: var(--text-primary); }
 .rep-kpi .val.accent { color: var(--accent-teal); }
 
+.rep-kpi-subval { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: baseline; }
+.rep-kpi-subval + .rep-kpi-subval { margin-top: 6px; padding-top: 0; border-top: none; }
+.rep-kpi-subval .lbl { font-size: .66rem; }
+.rep-kpi-subval .val { font-size: 1rem; font-weight: 700; color: var(--text-primary); }
+
 .rep-panel { background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 12px; padding: 22px 24px 18px; height: 100%; }
 .rep-panel h5 { margin: 0 0 14px; }
 
 /* Grid, not flex: a fixed track per column keeps every row's numbers lined
    up under the header no matter how long a Role/Source name is, and keeps
    the header and data rows using the exact same layout (see dashboard.html's
-   .sm-thead/.sm-row for the same reasoning). */
+   .sm-thead/.sm-row for the same reasoning). A leading 26px column holds the
+   By Job/Role table's own "expand to job codes" toggle - unused (blank) on
+   the Source Level table, kept only so both tables' columns still line up. */
 .rep-thead, .rep-row, .rep-row-expand {
   display: grid; align-items: center; gap: 10px;
-  grid-template-columns: minmax(0, 1.6fr) repeat(6, minmax(0, 1fr)) 26px;
+  grid-template-columns: 26px minmax(0, 1.6fr) repeat(6, minmax(0, 1fr)) 26px;
 }
 .rep-thead { padding: 0 0 10px; border-bottom: 1px solid var(--border-color); font-size: .64rem; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--text-muted); }
 .rep-thead .col { text-align: center; }
@@ -36,27 +43,47 @@
   justify-content: center; font-size: .8rem; color: var(--text-muted); cursor: pointer;
 }
 .rep-toggle:hover { border-color: #b9c8c8; color: var(--text-primary); }
+.rep-toggle-left { justify-self: start; }
 
 .rep-row-expand { display: none; margin-top: 8px; }
 .rep-row-expand.show { display: grid; }
 .rep-row-expand .name { font-size: .66rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .3px; }
 .rep-row-expand .col { text-align: center; font-size: .74rem; font-weight: 600; color: var(--accent-teal); }
+.rep-jobcodes-expand { row-gap: 10px; }
+.rep-jobcodes-expand .name { font-size: .74rem; font-weight: 600; color: var(--text-primary); text-transform: none; letter-spacing: 0; }
+.rep-jobcodes-expand .col { font-size: .76rem; color: var(--text-primary); }
+.rep-jobcodes-expand .col.hired { color: var(--accent-teal); }
 
 @media (max-width: 900px) {
   .rep-panel { overflow-x: auto; }
-  .rep-thead, .rep-row, .rep-row-expand { min-width: 640px; }
+  .rep-thead, .rep-row, .rep-row-expand { min-width: 660px; }
 }
+
+/* ---- Reports tabs: same segmented-pill control as the Dashboard's own tabs ---- */
+#repTabs { display: inline-flex; gap: 2px; background: var(--bg-hover); border: none; border-radius: 999px; padding: 4px; margin-bottom: 22px !important; }
+#repTabs .nav-item { display: flex; }
+#repTabs .nav-link { border: none; border-radius: 999px; padding: 8px 20px; font-weight: 600; font-size: .85rem; color: var(--text-muted); background: transparent; transition: background .12s ease, color .12s ease; }
+#repTabs .nav-link:hover { color: var(--text-primary); }
+#repTabs .nav-link.active { background: var(--bg-surface); color: var(--primary-green); box-shadow: 0 1px 3px rgba(16,24,40,.08); }
+@media (max-width: 500px) {
+  #repTabs { display: flex; }
+  #repTabs .nav-item { flex: 1; }
+  #repTabs .nav-link { width: 100%; text-align: center; padding: 8px 10px; }
+}
+
+.rep-chart-wrap { position: relative; height: 260px; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="d-flex flex-wrap justify-content-between align-items-end mb-4 gap-2">
+<div class="d-flex flex-wrap justify-content-between align-items-end mb-3 gap-2">
   <h3 class="mb-0">Reports</h3>
-  <div class="form-check form-switch mb-1">
+  <div class="form-check form-switch mb-1" id="repRatioWrap">
     <input type="checkbox" class="form-check-input" role="switch" id="repRatioSwitch">
     <label class="form-check-label small text-muted" for="repRatioSwitch">Show as ratio (1 : N)</label>
   </div>
   <form method="get" class="d-flex align-items-end flex-wrap gap-3">
+    <input type="hidden" name="view" value="{{ view }}">
     <div>
       <label class="form-label small text-muted mb-0">Job Code</label>
       <select class="form-select form-select-sm" onchange="this.form.job.value=this.value; this.form.submit();" style="min-width: 130px;">
@@ -87,103 +114,188 @@
   </form>
 </div>
 
-<div class="row g-3 mb-4">
-  <div class="col-lg-2 col-md-4 col-6">
-    <div class="rep-kpi">
-      <div class="lbl">Applicants</div>
-      <div class="val-row"><span class="val">{{ applicants }}</span></div>
-    </div>
-  </div>
-  <div class="col-lg-2 col-md-4 col-6">
-    <div class="rep-kpi">
-      <div class="lbl">Qualified</div>
-      <div class="val-row">
-        <span class="val">{{ qualified }}</span>
-        <span class="rep-pct">{% if qualified_pct_total is not None %}<span class="rep-pctval" data-pct="{{ qualified_pct_total }}" data-denom="{{ applicants }}">{{ qualified_pct_total|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span>
-      </div>
-    </div>
-  </div>
-  <div class="col-lg-2 col-md-4 col-6">
-    <div class="rep-kpi">
-      <div class="lbl">Shortlisted</div>
-      <div class="val-row">
-        <span class="val">{{ shortlisted }}</span>
-        <span class="rep-pct">{% if shortlisted_pct_total is not None %}<span class="rep-pctval" data-pct="{{ shortlisted_pct_total }}" data-denom="{{ applicants }}">{{ shortlisted_pct_total|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span>
-      </div>
-    </div>
-  </div>
-  <div class="col-lg-2 col-md-4 col-6">
-    <div class="rep-kpi">
-      <div class="lbl">Round 1 Cleared</div>
-      <div class="val-row">
-        <span class="val">{{ r1_cleared }}</span>
-        <span class="rep-pct">{% if r1_cleared_pct_total is not None %}<span class="rep-pctval" data-pct="{{ r1_cleared_pct_total }}" data-denom="{{ applicants }}">{{ r1_cleared_pct_total|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span>
-      </div>
-    </div>
-  </div>
-  <div class="col-lg-2 col-md-4 col-6">
-    <div class="rep-kpi">
-      <div class="lbl">Round 2 Cleared</div>
-      <div class="val-row">
-        <span class="val">{{ r2_cleared }}</span>
-        <span class="rep-pct">{% if r2_cleared_pct_total is not None %}<span class="rep-pctval" data-pct="{{ r2_cleared_pct_total }}" data-denom="{{ applicants }}">{{ r2_cleared_pct_total|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span>
-      </div>
-    </div>
-  </div>
-  <div class="col-lg-2 col-md-4 col-6">
-    <div class="rep-kpi">
-      <div class="lbl">Hired</div>
-      <div class="val-row">
-        <span class="val accent">{{ hired }}</span>
-        <span class="rep-pct">{% if hired_pct_total is not None %}<span class="rep-pctval" data-pct="{{ hired_pct_total }}" data-denom="{{ applicants }}">{{ hired_pct_total|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span>
-      </div>
-    </div>
-  </div>
-</div>
+<ul class="nav nav-tabs mb-3" id="repTabs">
+  <li class="nav-item"><button class="nav-link {% if view != 'roles' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#applicationsPane">Applications</button></li>
+  <li class="nav-item"><button class="nav-link {% if view == 'roles' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#rolesPane">Roles</button></li>
+</ul>
 
-<div class="rep-panel mb-3">
-  <h5>By Job / Role</h5>
-  <div class="rep-thead">
-    <span class="name">Role</span>
-    <span class="col">Applicants</span>
-    <span class="col">Qualified</span>
-    <span class="col">Shortlisted</span>
-    <span class="col">Round 1 Cleared</span>
-    <span class="col">Round 2 Cleared</span>
-    <span class="col">Hired</span>
-    <span></span>
-  </div>
-  {% for r in by_job %}
-  {% include "dashboard/_reports_row.html" %}
-  {% empty %}<div class="text-muted text-center py-3">No data.</div>{% endfor %}
-</div>
+<div class="tab-content">
+  <div class="tab-pane fade {% if view != 'roles' %}show active{% endif %}" id="applicationsPane">
 
-<div class="rep-panel">
-  <h5>Source Level</h5>
-  <div class="rep-thead">
-    <span class="name">Source</span>
-    <span class="col">Applicants</span>
-    <span class="col">Qualified</span>
-    <span class="col">Shortlisted</span>
-    <span class="col">Round 1 Cleared</span>
-    <span class="col">Round 2 Cleared</span>
-    <span class="col">Hired</span>
-    <span></span>
+    <div class="row g-3 mb-4">
+      <div class="col-lg-2 col-md-4 col-6">
+        <div class="rep-kpi">
+          <div class="lbl">Screened Applicants</div>
+          <div class="val-row"><span class="val">{{ applicants }}</span></div>
+        </div>
+      </div>
+      <div class="col-lg-2 col-md-4 col-6">
+        <div class="rep-kpi">
+          <div class="lbl">Qualified</div>
+          <div class="val-row">
+            <span class="val">{{ qualified }}</span>
+            <span class="rep-pct">{% if qualified_pct_total is not None %}<span class="rep-pctval" data-pct="{{ qualified_pct_total }}" data-denom="{{ applicants }}">{{ qualified_pct_total|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-2 col-md-4 col-6">
+        <div class="rep-kpi">
+          <div class="lbl">Shortlisted</div>
+          <div class="val-row">
+            <span class="val">{{ shortlisted }}</span>
+            <span class="rep-pct">{% if shortlisted_pct_total is not None %}<span class="rep-pctval" data-pct="{{ shortlisted_pct_total }}" data-denom="{{ applicants }}">{{ shortlisted_pct_total|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-2 col-md-4 col-6">
+        <div class="rep-kpi">
+          <div class="lbl">Round 1 Cleared</div>
+          <div class="val-row">
+            <span class="val">{{ r1_cleared }}</span>
+            <span class="rep-pct">{% if r1_cleared_pct_total is not None %}<span class="rep-pctval" data-pct="{{ r1_cleared_pct_total }}" data-denom="{{ applicants }}">{{ r1_cleared_pct_total|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-2 col-md-4 col-6">
+        <div class="rep-kpi">
+          <div class="lbl">Round 2 Cleared</div>
+          <div class="val-row">
+            <span class="val">{{ r2_cleared }}</span>
+            <span class="rep-pct">{% if r2_cleared_pct_total is not None %}<span class="rep-pctval" data-pct="{{ r2_cleared_pct_total }}" data-denom="{{ applicants }}">{{ r2_cleared_pct_total|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-2 col-md-4 col-6">
+        <div class="rep-kpi">
+          <div class="lbl">Hired</div>
+          <div class="val-row">
+            <span class="val accent">{{ hired }}</span>
+            <span class="rep-pct">{% if hired_pct_total is not None %}<span class="rep-pctval" data-pct="{{ hired_pct_total }}" data-denom="{{ applicants }}">{{ hired_pct_total|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="rep-panel mb-3">
+      <h5>By Job / Role</h5>
+      <div class="rep-thead">
+        <span></span>
+        <span class="name">Role</span>
+        <span class="col">Screened Applicants</span>
+        <span class="col">Qualified</span>
+        <span class="col">Shortlisted</span>
+        <span class="col">Round 1 Cleared</span>
+        <span class="col">Round 2 Cleared</span>
+        <span class="col">Hired</span>
+        <span></span>
+      </div>
+      {% for r in by_job %}
+      {% include "dashboard/_reports_row.html" %}
+      {% empty %}<div class="text-muted text-center py-3">No data.</div>{% endfor %}
+    </div>
+
+    <div class="rep-panel">
+      <h5>Source Level</h5>
+      <div class="rep-thead">
+        <span></span>
+        <span class="name">Source</span>
+        <span class="col">Screened Applicants</span>
+        <span class="col">Qualified</span>
+        <span class="col">Shortlisted</span>
+        <span class="col">Round 1 Cleared</span>
+        <span class="col">Round 2 Cleared</span>
+        <span class="col">Hired</span>
+        <span></span>
+      </div>
+      {% for r in by_source %}
+      {% include "dashboard/_reports_row.html" %}
+      {% empty %}<div class="text-muted text-center py-3">No data.</div>{% endfor %}
+    </div>
   </div>
-  {% for r in by_source %}
-  {% include "dashboard/_reports_row.html" %}
-  {% empty %}<div class="text-muted text-center py-3">No data.</div>{% endfor %}
+
+  <div class="tab-pane fade {% if view == 'roles' %}show active{% endif %}" id="rolesPane">
+    <div class="row g-3 mb-3">
+      <div class="col-lg-3 col-md-6 col-6">
+        <div class="rep-kpi">
+          <div class="lbl">Total Roles Opened</div>
+          <div class="val-row"><span class="val">{{ roles_total_opened }}</span></div>
+        </div>
+      </div>
+      <div class="col-lg-3 col-md-6 col-6">
+        <div class="rep-kpi">
+          <div class="lbl">Active Roles</div>
+          <div class="val-row"><span class="val">{{ roles_active }}</span></div>
+        </div>
+      </div>
+      <div class="col-lg-3 col-md-6 col-6">
+        <div class="rep-kpi">
+          <div class="lbl">Roles Closed</div>
+          <div class="rep-kpi-subval"><span class="lbl">With Hiring</span><span class="val">{{ roles_closed_with_hiring }}</span></div>
+          <div class="rep-kpi-subval"><span class="lbl">Without Hiring</span><span class="val">{{ roles_closed_without_hiring }}</span></div>
+        </div>
+      </div>
+      <div class="col-lg-3 col-md-6 col-6">
+        <div class="rep-kpi">
+          <div class="lbl">Total Roles Hired</div>
+          <div class="val-row"><span class="val accent">{{ roles_total_hired }}</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3">
+      <div class="col-lg-6">
+        <div class="rep-panel">
+          <h5>Roles Opened (last 12 months)</h5>
+          <div class="rep-chart-wrap"><canvas id="rolesOpenedChart"></canvas></div>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="rep-panel">
+          <h5>Candidates Applied (last 12 months)</h5>
+          <div class="rep-chart-wrap"><canvas id="candidatesAppliedChart"></canvas></div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+{{ roles_chart_labels|json_script:"roles-chart-labels" }}
+{{ roles_opened_series|json_script:"roles-opened-series" }}
+{{ candidates_applied_series|json_script:"candidates-applied-series" }}
 <script>
-// Each row's + toggles a second line showing the same 5 stages' % against
-// Applicants overall, instead of against the stage right before it.
-document.querySelectorAll('.rep-toggle').forEach(function (btn) {
+// Keep the Applications/Roles choice in the URL + filter form, so applying a
+// filter stays on the current tab and the browser back button returns to it.
+var REP_TAB_VIEWS = {'#applicationsPane': 'applications', '#rolesPane': 'roles'};
+document.querySelectorAll('#repTabs button[data-bs-toggle="tab"]').forEach(function (btn) {
+  btn.addEventListener('shown.bs.tab', function (e) {
+    var v = REP_TAB_VIEWS[e.target.getAttribute('data-bs-target')] || 'applications';
+    var vi = document.querySelector('input[name="view"]');
+    if (vi) { vi.value = v; }
+    var url = new URL(window.location);
+    url.searchParams.set('view', v);
+    window.history.replaceState(null, '', url);
+    document.getElementById('repRatioWrap').hidden = (v === 'roles');
+  });
+});
+document.getElementById('repRatioWrap').hidden = {% if view == 'roles' %}true{% else %}false{% endif %};
+
+// Each By Job/Role row's left "+" expands to that role's individual job
+// codes; the right "+" (existing) expands the %-of-Applicants breakdown -
+// two separate expand blocks per row, so each toggle only opens its own.
+document.querySelectorAll('.rep-toggle-left').forEach(function (btn) {
   btn.addEventListener('click', function () {
-    var wrap = btn.closest('.rep-rowwrap');
-    var expand = wrap.querySelector('.rep-row-expand');
+    var expand = btn.closest('.rep-rowwrap').querySelector('.rep-jobcodes-expand');
+    var showing = expand.classList.toggle('show');
+    btn.textContent = showing ? '−' : '+';
+    btn.setAttribute('aria-expanded', showing ? 'true' : 'false');
+  });
+});
+document.querySelectorAll('.rep-toggle:not(.rep-toggle-left)').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var expand = btn.closest('.rep-rowwrap').querySelector('.rep-pct-expand');
     var showing = expand.classList.toggle('show');
     btn.textContent = showing ? '−' : '+';
     btn.setAttribute('aria-expanded', showing ? 'true' : 'false');
@@ -217,6 +329,37 @@ document.querySelectorAll('.rep-toggle').forEach(function (btn) {
 
   switchEl.addEventListener('change', render);
   render();
+})();
+
+// Roles tab: two line charts, drawn once - they're just hidden (not removed)
+// when the Applications tab is active, so no re-init needed on tab switch.
+(function () {
+  var canvas1 = document.getElementById('rolesOpenedChart');
+  var canvas2 = document.getElementById('candidatesAppliedChart');
+  if (!canvas1 || !canvas2 || typeof Chart === 'undefined') return;
+  var labels = JSON.parse(document.getElementById('roles-chart-labels').textContent);
+  var openedSeries = JSON.parse(document.getElementById('roles-opened-series').textContent);
+  var appliedSeries = JSON.parse(document.getElementById('candidates-applied-series').textContent);
+
+  function lineChart(canvas, data, color, label) {
+    new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: label, data: data, borderColor: color, backgroundColor: color,
+          tension: .3, pointRadius: 3, fill: false,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+      },
+    });
+  }
+  lineChart(canvas1, openedSeries, '#0e6f6b', 'Roles Opened');
+  lineChart(canvas2, appliedSeries, '#0a58ca', 'Candidates Applied');
 })();
 </script>
 {% endblock %}
