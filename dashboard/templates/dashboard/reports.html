@@ -261,7 +261,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.1/chart.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
 {{ roles_chart_labels|json_script:"roles-chart-labels" }}
 {{ roles_opened_series|json_script:"roles-opened-series" }}
 {{ candidates_applied_series|json_script:"candidates-applied-series" }}
@@ -336,7 +336,20 @@ document.querySelectorAll('.rep-toggle:not(.rep-toggle-left)').forEach(function 
 (function () {
   var canvas1 = document.getElementById('rolesOpenedChart');
   var canvas2 = document.getElementById('candidatesAppliedChart');
-  if (!canvas1 || !canvas2 || typeof Chart === 'undefined') return;
+  if (!canvas1 || !canvas2) return;
+  if (typeof Chart === 'undefined') {
+    // The CDN script failed to load (network/firewall blocking it) - a
+    // silent blank card here is what actually shipped once already (see
+    // git history), so this at least says why instead of looking broken
+    // with no clue.
+    [canvas1, canvas2].forEach(function (c) {
+      c.replaceWith(Object.assign(document.createElement('p'), {
+        className: 'text-muted small mb-0',
+        textContent: 'Chart failed to load - the charting library could not be fetched.',
+      }));
+    });
+    return;
+  }
   var labels = JSON.parse(document.getElementById('roles-chart-labels').textContent);
   var openedSeries = JSON.parse(document.getElementById('roles-opened-series').textContent);
   var appliedSeries = JSON.parse(document.getElementById('candidates-applied-series').textContent);
