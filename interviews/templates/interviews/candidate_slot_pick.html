@@ -58,7 +58,7 @@
 
   {% elif state == 'already_selected' %}
     <i class="bi bi-check-circle-fill pick-icon" style="color:var(--primary-green);"></i>
-    <h3 class="mt-3">You've already selected a time</h3>
+    <h3 class="mt-3">Time Selected</h3>
     <p>
       You picked <strong>{{ interview_request.candidate_selected_slot.start_datetime|date:"l, d M Y, h:i A" }} IST</strong>
       for your {{ round_label }} interview. We'll be in touch shortly to confirm.
