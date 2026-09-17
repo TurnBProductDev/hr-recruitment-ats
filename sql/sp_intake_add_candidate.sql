@@ -183,9 +183,12 @@ BEGIN
         INSERT INTO dbo.candidates_emailregistry (email, application_count, last_applied_at, first_candidate_id)
         VALUES (@email_norm, 1, @now, @cid);
 
+    -- is_undone has no database-level default either (same as match_state
+    -- above - Django's default=False on the model is app-side only) - list
+    -- it explicitly or this NOT NULL column fails the insert.
     INSERT INTO dbo.candidates_candidatestatushistory
-        (old_status, new_status, remarks, changed_at, candidate_id, performed_by)
-    VALUES ('', @status, 'Applied via careers intake (Logic App)', @created, @cid, 'Careers Intake');
+        (old_status, new_status, remarks, changed_at, candidate_id, performed_by, is_undone)
+    VALUES ('', @status, 'Applied via careers intake (Logic App)', @created, @cid, 'Careers Intake', 0);
 
     -- Structured Education records: every entry in @education_json when
     -- supplied (mirrors @experience_json's OPENJSON pattern - year_completed/
