@@ -569,7 +569,13 @@ class ReportsView(GroupRequiredMixin, TemplateView):
         # window. The charts' own month window (see _months_for_chart)
         # shifts to span whatever From/To is picked too, rather than always
         # plotting a fixed rolling 12 months regardless of the filter.
-        job_qs = Job.objects.exclude(title__iexact=GENERAL_APPLICATION)
+        #
+        # General Application is excluded everywhere else on this page (it
+        # isn't a real vacancy), but here it's opt-in via its own switch -
+        # scoped to this tab only, not the Applications tab's own `base`.
+        include_general = self.request.GET.get('include_general') == '1'
+        ctx['include_general'] = include_general
+        job_qs = Job.objects.all() if include_general else Job.objects.exclude(title__iexact=GENERAL_APPLICATION)
         if job_id:
             job_qs = job_qs.filter(pk=job_id)
         if date_from:
@@ -577,12 +583,24 @@ class ReportsView(GroupRequiredMixin, TemplateView):
         if date_to:
             job_qs = job_qs.filter(opening_date__lte=date_to)
         closed_qs = job_qs.filter(status=Job.Status.CLOSED)
+        active_jobs_qs = job_qs.filter(status=Job.Status.OPEN, is_archived=False)
         closed_with_hiring = closed_qs.filter(candidates__status=STATUS.HIRED).distinct().count()
         ctx['roles_total_opened'] = job_qs.count()
-        ctx['roles_active'] = job_qs.filter(status=Job.Status.OPEN, is_archived=False).count()
+        ctx['roles_active'] = active_jobs_qs.count()
         ctx['roles_closed_with_hiring'] = closed_with_hiring
         ctx['roles_closed_without_hiring'] = closed_qs.count() - closed_with_hiring
         ctx['roles_total_hired'] = job_qs.filter(candidates__status=STATUS.HIRED).distinct().count()
+
+        # Candidate-level sub-metrics shown in each KPI card's own corner -
+        # same job_qs scoping (Job Code/Vacancy/date/General Application),
+        # but a candidate count instead of a role count, so each card also
+        # says how many people that many roles actually represent.
+        candidates_in_scope = Candidate.objects.exclude(INITIAL_HOLD)
+        if not include_general:
+            candidates_in_scope = candidates_in_scope.exclude(job__title__iexact=GENERAL_APPLICATION)
+        ctx['roles_total_applicants'] = candidates_in_scope.filter(job__in=job_qs).count()
+        ctx['roles_active_applicants'] = candidates_in_scope.filter(job__in=active_jobs_qs).count()
+        ctx['roles_hired_candidates'] = candidates_in_scope.filter(job__in=job_qs, status=STATUS.HIRED).count()
 
         months = _months_for_chart(date_from, date_to)
         ctx['roles_chart_labels'] = [f'{calendar.month_abbr[m]}{str(y)[2:]}' for y, m in months]
@@ -596,7 +614,7 @@ class ReportsView(GroupRequiredMixin, TemplateView):
         # applied inside it (or the reverse) - confusing on a chart titled
         # "Candidates Applied". This filters and buckets by created_at
         # (applied date) consistently instead, so the two always agree.
-        applied_qs = Candidate.objects.exclude(job__title__iexact=GENERAL_APPLICATION).exclude(INITIAL_HOLD)
+        applied_qs = candidates_in_scope
         if job_id:
             applied_qs = applied_qs.filter(job_id=job_id)
         if date_from:

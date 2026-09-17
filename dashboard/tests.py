@@ -935,6 +935,18 @@ class ReportsViewTests(TestCase):
         row = next(r for r in response.context['by_job'] if r['name'] == 'Unassigned')
         self.assertEqual(row['job_codes'], [])
 
+    def test_job_code_rows_render_both_pct_and_vstotal_variants(self):
+        """Job-code rows show their %/ratio alongside the (de-emphasised)
+        raw count - both a vs-previous-stage figure (shown by default) and
+        a vs-Applicants-overall one (switched in by the row's own right "+",
+        see reports.html's JS/CSS), not just the bare number."""
+        response = self._get()
+        content = response.content.decode()
+        self.assertIn('rep-num-sub', content)
+        self.assertIn('jc-pct-default', content)
+        self.assertIn('jc-pct-vstotal', content)
+        self.assertIn('rep-pct-prominent', content)
+
 
 class RolesTabTests(TestCase):
     """The Reports page's Roles tab - vacancy/job-code counts (not candidate
@@ -962,6 +974,35 @@ class RolesTabTests(TestCase):
         self.assertEqual(response.context['roles_closed_with_hiring'], 1)
         self.assertEqual(response.context['roles_closed_without_hiring'], 1)
         self.assertEqual(response.context['roles_total_hired'], 1)
+
+    def test_kpi_card_corner_candidate_counts(self):
+        active = Job.objects.create(title='Active Role', status=Job.Status.OPEN)
+        closed = Job.objects.create(title='Closed Role', status=Job.Status.CLOSED)
+        Candidate.objects.create(job=active, full_name='In Active Role', email='inactive1@example.com')
+        Candidate.objects.create(job=closed, full_name='Hired Elsewhere', email='hiredelse@example.com',
+                                 status=Candidate.Status.HIRED)
+
+        response = self._get(view='roles')
+        # Total Roles Opened corner: every candidate across every counted role.
+        self.assertEqual(response.context['roles_total_applicants'], 2)
+        # Active Roles corner: only the one candidate actually in an active role.
+        self.assertEqual(response.context['roles_active_applicants'], 1)
+        # Total Roles Hired corner: candidate-level, not role-level.
+        self.assertEqual(response.context['roles_hired_candidates'], 1)
+
+    def test_general_application_excluded_by_default_and_opt_in_via_switch(self):
+        general = Job.objects.create(title='General Application')
+        Candidate.objects.create(job=general, full_name='Walk In', email='walkin@example.com')
+
+        default_response = self._get(view='roles')
+        self.assertFalse(default_response.context['include_general'])
+        self.assertEqual(default_response.context['roles_total_opened'], 0)
+        self.assertEqual(default_response.context['roles_total_applicants'], 0)
+
+        included_response = self._get(view='roles', include_general='1')
+        self.assertTrue(included_response.context['include_general'])
+        self.assertEqual(included_response.context['roles_total_opened'], 1)
+        self.assertEqual(included_response.context['roles_total_applicants'], 1)
 
     def test_a_role_still_open_but_already_hired_counts_as_total_hired_not_closed_with_hiring(self):
         """Total Roles Hired counts any role that's hired someone, open or

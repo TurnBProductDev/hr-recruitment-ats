@@ -16,6 +16,16 @@
   individual job codes, each with its own KPIs - a separate expand block
   from the existing right "+" (%-of-Applicants), so either can be open
   independently of the other.
+
+  Each job code's own raw count is de-emphasised (small/muted, .rep-num-sub)
+  in favour of its %/ratio (.rep-pct-prominent) - the opposite weighting
+  from the role row above it, which is already the bold headline number
+  there. Each column carries both a vs-previous-stage % (.jc-pct-default,
+  shown by default - CSS hides its sibling) and a vs-Applicants-overall %
+  (.jc-pct-vstotal) - reports.html's JS toggles which one is visible in
+  lockstep with the role row's own right "+" (the %-of-Applicants toggle),
+  so opening that also switches the job-code figures to the same "of
+  Applicants overall" framing instead of needing a third toggle.
 {% endcomment %}
 <div class="rep-rowwrap">
   <div class="rep-row">
@@ -38,12 +48,32 @@
     {% for jc in r.job_codes %}
     <span></span>
     <span class="name">{{ jc.job_code }}</span>
-    <span class="col"><span class="rep-num">{{ jc.applicants }}</span></span>
-    <span class="col"><span class="rep-num">{{ jc.qualified }}</span></span>
-    <span class="col"><span class="rep-num">{{ jc.shortlisted }}</span></span>
-    <span class="col"><span class="rep-num">{{ jc.r1_cleared }}</span></span>
-    <span class="col"><span class="rep-num">{{ jc.r2_cleared }}</span></span>
-    <span class="col hired"><span class="rep-num">{{ jc.hired }}</span></span>
+    <span class="col"><span class="rep-num-sub">{{ jc.applicants }}</span></span>
+    <span class="col">
+      <span class="rep-num-sub">{{ jc.qualified }}</span>
+      <span class="rep-pct-prominent jc-pct-default">{% if jc.qualified_pct is not None %}<span class="rep-pctval" data-pct="{{ jc.qualified_pct }}" data-denom="{{ jc.applicants }}">{{ jc.qualified_pct|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span>
+      <span class="rep-pct-prominent jc-pct-vstotal">{% if jc.qualified_pct_total is not None %}<span class="rep-pctval" data-pct="{{ jc.qualified_pct_total }}" data-denom="{{ jc.applicants }}">{{ jc.qualified_pct_total|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span>
+    </span>
+    <span class="col">
+      <span class="rep-num-sub">{{ jc.shortlisted }}</span>
+      <span class="rep-pct-prominent jc-pct-default">{% if jc.shortlisted_pct is not None %}<span class="rep-pctval" data-pct="{{ jc.shortlisted_pct }}" data-denom="{{ jc.qualified }}">{{ jc.shortlisted_pct|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span>
+      <span class="rep-pct-prominent jc-pct-vstotal">{% if jc.shortlisted_pct_total is not None %}<span class="rep-pctval" data-pct="{{ jc.shortlisted_pct_total }}" data-denom="{{ jc.applicants }}">{{ jc.shortlisted_pct_total|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span>
+    </span>
+    <span class="col">
+      <span class="rep-num-sub">{{ jc.r1_cleared }}</span>
+      <span class="rep-pct-prominent jc-pct-default">{% if jc.r1_cleared_pct is not None %}<span class="rep-pctval" data-pct="{{ jc.r1_cleared_pct }}" data-denom="{{ jc.shortlisted }}">{{ jc.r1_cleared_pct|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span>
+      <span class="rep-pct-prominent jc-pct-vstotal">{% if jc.r1_cleared_pct_total is not None %}<span class="rep-pctval" data-pct="{{ jc.r1_cleared_pct_total }}" data-denom="{{ jc.applicants }}">{{ jc.r1_cleared_pct_total|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span>
+    </span>
+    <span class="col">
+      <span class="rep-num-sub">{{ jc.r2_cleared }}</span>
+      <span class="rep-pct-prominent jc-pct-default">{% if jc.r2_cleared_pct is not None %}<span class="rep-pctval" data-pct="{{ jc.r2_cleared_pct }}" data-denom="{{ jc.r1_cleared }}">{{ jc.r2_cleared_pct|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span>
+      <span class="rep-pct-prominent jc-pct-vstotal">{% if jc.r2_cleared_pct_total is not None %}<span class="rep-pctval" data-pct="{{ jc.r2_cleared_pct_total }}" data-denom="{{ jc.applicants }}">{{ jc.r2_cleared_pct_total|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span>
+    </span>
+    <span class="col hired">
+      <span class="rep-num-sub">{{ jc.hired }}</span>
+      <span class="rep-pct-prominent jc-pct-default">{% if jc.hired_pct is not None %}<span class="rep-pctval" data-pct="{{ jc.hired_pct }}" data-denom="{{ jc.r2_cleared }}">{{ jc.hired_pct|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span>
+      <span class="rep-pct-prominent jc-pct-vstotal">{% if jc.hired_pct_total is not None %}<span class="rep-pctval" data-pct="{{ jc.hired_pct_total }}" data-denom="{{ jc.applicants }}">{{ jc.hired_pct_total|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span>
+    </span>
     <span></span>
     {% endfor %}
   </div>

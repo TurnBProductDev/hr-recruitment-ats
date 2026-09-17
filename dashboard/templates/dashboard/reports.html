@@ -52,7 +52,19 @@
 .rep-jobcodes-expand { row-gap: 10px; }
 .rep-jobcodes-expand .name { font-size: .74rem; font-weight: 600; color: var(--text-primary); text-transform: none; letter-spacing: 0; }
 .rep-jobcodes-expand .col { font-size: .76rem; color: var(--text-primary); }
-.rep-jobcodes-expand .col.hired { color: var(--accent-teal); }
+/* De-emphasise the raw count in favour of the %/ratio - the opposite
+   weighting from the role row above (there, the plain number is the bold
+   headline and the % is the small muted suffix). */
+.rep-num-sub { font-weight: 400; color: var(--text-muted); font-size: .72rem; }
+.rep-pct-prominent { font-weight: 700; color: var(--accent-teal); font-size: .82rem; margin-left: 4px; }
+.rep-jobcodes-expand .col.hired .rep-num-sub { color: var(--text-muted); }
+/* Toggled by the same right "+" as .rep-pct-expand (see reports.html's JS) -
+   opening it also switches the job-code figures from "vs the stage right
+   before it" to "vs Applicants overall", matching what that toggle already
+   means one row up. */
+.rep-jobcodes-expand .jc-pct-vstotal { display: none; }
+.rep-rowwrap.show-vstotal .rep-jobcodes-expand .jc-pct-default { display: none; }
+.rep-rowwrap.show-vstotal .rep-jobcodes-expand .jc-pct-vstotal { display: inline; }
 
 @media (max-width: 900px) {
   .rep-panel { overflow-x: auto; }
@@ -82,7 +94,7 @@
     <input type="checkbox" class="form-check-input" role="switch" id="repRatioSwitch">
     <label class="form-check-label small text-muted" for="repRatioSwitch">Show as ratio (1 : N)</label>
   </div>
-  <form method="get" class="d-flex align-items-end flex-wrap gap-3">
+  <form method="get" id="reportsFilterForm" class="d-flex align-items-end flex-wrap gap-3">
     <input type="hidden" name="view" value="{{ view }}">
     <div>
       <label class="form-label small text-muted mb-0">Job Code</label>
@@ -227,12 +239,14 @@
         <div class="rep-kpi">
           <div class="lbl">Total Roles Opened</div>
           <div class="val-row"><span class="val">{{ roles_total_opened }}</span></div>
+          <div class="rep-kpi-subval"><span class="lbl">Candidates Applied</span><span class="val">{{ roles_total_applicants }}</span></div>
         </div>
       </div>
       <div class="col-lg-3 col-md-6 col-6">
         <div class="rep-kpi">
           <div class="lbl">Active Roles</div>
           <div class="val-row"><span class="val">{{ roles_active }}</span></div>
+          <div class="rep-kpi-subval"><span class="lbl">Candidates In These Roles</span><span class="val">{{ roles_active_applicants }}</span></div>
         </div>
       </div>
       <div class="col-lg-3 col-md-6 col-6">
@@ -246,8 +260,23 @@
         <div class="rep-kpi">
           <div class="lbl">Total Roles Hired</div>
           <div class="val-row"><span class="val accent">{{ roles_total_hired }}</span></div>
+          <div class="rep-kpi-subval"><span class="lbl">Candidates Hired</span><span class="val accent">{{ roles_hired_candidates }}</span></div>
         </div>
       </div>
+    </div>
+
+    <div class="form-check form-switch mb-3">
+      {% comment %}
+        form="reportsFilterForm" - this checkbox lives down here with the
+        Roles content, but still submits as part of the filter form up top
+        (a GET form's own controls don't have to be its literal children,
+        just reference its id), so the existing Job Code/Vacancy/date/view
+        params all carry through unchanged when it's toggled.
+      {% endcomment %}
+      <input type="checkbox" class="form-check-input" role="switch" id="includeGeneralSwitch"
+             name="include_general" value="1" form="reportsFilterForm"
+             {% if include_general %}checked{% endif %} onchange="document.getElementById('reportsFilterForm').submit()">
+      <label class="form-check-label small text-muted" for="includeGeneralSwitch">Include General Application in counts</label>
     </div>
 
     <div class="row g-3">
@@ -303,10 +332,15 @@ document.querySelectorAll('.rep-toggle-left').forEach(function (btn) {
 });
 document.querySelectorAll('.rep-toggle:not(.rep-toggle-left)').forEach(function (btn) {
   btn.addEventListener('click', function () {
-    var expand = btn.closest('.rep-rowwrap').querySelector('.rep-pct-expand');
+    var wrap = btn.closest('.rep-rowwrap');
+    var expand = wrap.querySelector('.rep-pct-expand');
     var showing = expand.classList.toggle('show');
     btn.textContent = showing ? '−' : '+';
     btn.setAttribute('aria-expanded', showing ? 'true' : 'false');
+    // Also switches the job-code figures (if that expand is open too) from
+    // "vs the stage right before it" to "vs Applicants overall", matching
+    // what this same toggle already means for the role row itself.
+    wrap.classList.toggle('show-vstotal', showing);
   });
 });
 
