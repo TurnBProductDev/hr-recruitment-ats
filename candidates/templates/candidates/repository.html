@@ -177,15 +177,6 @@
         </select>
       </div>
       <div>
-        <label class="form-label mb-0 d-block">Status</label>
-        <select name="status" class="form-select form-select-sm" onchange="this.form.submit()" style="min-width:140px;">
-          <option value="">All statuses</option>
-          {% for value, label in status_options %}
-          <option value="{{ value }}" {% if request.GET.status == value %}selected{% endif %}>{{ label }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div>
         <label class="form-label mb-0 d-block">Applied</label>
         <div class="repo-date-group">
           <input type="date" name="date_from" value="{{ request.GET.date_from|default:'' }}" class="form-control form-control-sm" title="Applied from">
@@ -197,6 +188,14 @@
       <a href="{% url 'candidate_repository_export' %}?{{ querystring }}" class="btn btn-sm btn-outline-app repo-export-slot">
         <i class="bi bi-file-earmark-excel"></i> Export to Excel
       </a>
+      {% comment %}
+        No scoped=1 here (unlike everything else on this page) - dropping it
+        too, not just the visible values, is what makes this a true reset
+        back to the same defaults a fresh visit gets (see
+        CandidateRepositoryListView._scope), not just an empty-but-still-
+        "submitted" filter form.
+      {% endcomment %}
+      <a href="?tab={{ tab }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-x-circle"></i> Clear Filters</a>
     </div>
 
     {% if is_hr_admin or is_recruiter %}
@@ -216,11 +215,6 @@
         </div>
       </div>
     </div>
-    <form method="post" action="{% url 'candidate_bulk_delete' %}" id="bulkDeleteForm" class="d-none">
-      {% csrf_token %}
-      <input type="hidden" name="next" value="{{ request.get_full_path }}">
-      <div id="bulkDeleteIds"></div>
-    </form>
     {% endif %}
 
     <div class="table-responsive">
@@ -289,6 +283,21 @@
     </div>
   </div>
 </form>
+
+{% if is_hr_admin or is_recruiter %}
+{% comment %}
+  Was nested inside #repoFilterForm above - invalid HTML (forms can't nest),
+  so the browser silently dropped this form entirely and
+  $('#bulkDeleteForm').trigger('submit') had no actual form to submit, which
+  is why Bulk Delete did nothing. Lives as its own sibling form now, same as
+  #actionForm below.
+{% endcomment %}
+<form method="post" action="{% url 'candidate_bulk_delete' %}" id="bulkDeleteForm" class="d-none">
+  {% csrf_token %}
+  <input type="hidden" name="next" value="{{ request.get_full_path }}">
+  <div id="bulkDeleteIds"></div>
+</form>
+{% endif %}
 
 {# Single reusable action modal: confirmation + remarks + done-by #}
 <div class="modal fade" id="actionModal" tabindex="-1">

@@ -605,6 +605,24 @@ class BulkDeleteTests(TestCase):
         response = self.client.get(reverse('candidate_repository'))
         self.assertNotContains(response, 'row-select')
 
+    def test_bulk_delete_form_is_not_nested_inside_the_filter_form(self):
+        """Regression guard: #bulkDeleteForm used to sit inside
+        #repoFilterForm - forms can't nest in HTML, so the browser silently
+        dropped it and clicking Delete did nothing (the Django test client
+        posting straight to the URL, like every other test in this class,
+        never caught this - only a real browser's HTML parser does).
+        #bulkDeleteForm's own <form ...> tag must come after
+        #repoFilterForm's closing </form>."""
+        response = self.client.get(reverse('candidate_repository'))
+        content = response.content.decode()
+        # The base template (nav's mark-read/logout forms) has its own
+        # </form> tags earlier on the page - anchor to repoFilterForm's own
+        # opening tag first, so "the next </form> after that" is unambiguous.
+        filter_form_start = content.index('id="repoFilterForm"')
+        filter_form_close = content.index('</form>', filter_form_start)
+        bulk_form_open = content.index('id="bulkDeleteForm"')
+        self.assertLess(filter_form_close, bulk_form_open)
+
 
 class GeneralApplicationsTests(TestCase):
     def setUp(self):
@@ -1157,7 +1175,22 @@ class RepositoryStatusFilterTests(TestCase):
         response = self.client.get(reverse('candidate_repository'))
         self.assertNotContains(response, 'Min Exp.')
         self.assertNotContains(response, 'min_experience')
-        self.assertContains(response, 'All statuses')
+
+    def test_status_filter_dropdown_is_gone(self):
+        """The Status filter dropdown was removed from the toolbar - the
+        underlying ?status= filtering it used to drive (still exercised
+        directly below and by the flow/hold-stage tests) is otherwise
+        untouched, so a link built elsewhere with ?status= still works."""
+        response = self.client.get(reverse('candidate_repository'))
+        self.assertNotContains(response, 'All statuses')
+
+    def test_clear_filters_link_drops_every_filter_but_keeps_the_tab(self):
+        """No scoped=1 either - that's what makes it a true reset back to a
+        fresh visit's own defaults (see _scope), not just an empty-looking
+        filter form that's still technically "submitted"."""
+        response = self.client.get(
+            f"{reverse('candidate_repository')}?tab={HOLD_TAB}&q=rose&source=Careers&scoped=1&scope=open")
+        self.assertContains(response, f'href="?tab={HOLD_TAB}"')
 
     def test_hold_tab_filters_by_the_stage_held_at(self):
         self._candidate('Held at round 1', Candidate.Status.ROUND1, held=True)
@@ -1166,13 +1199,6 @@ class RepositoryStatusFilterTests(TestCase):
             f"{reverse('candidate_repository')}?tab={HOLD_TAB}&status={Candidate.Status.ROUND1}&scoped=1")
         self.assertContains(response, 'Held at round 1')
         self.assertNotContains(response, 'Held at screening')
-
-    def test_hold_tab_offers_the_named_holds(self):
-        response = self.client.get(f"{reverse('candidate_repository')}?tab={HOLD_TAB}")
-        self.assertContains(response, 'Round 1 Hold')
-        # Held-before-screening candidates live on Future Prospects now, not
-        # this tab, so their stage is no longer offered here.
-        self.assertNotContains(response, 'Screening Hold')
 
     def test_hold_tab_excludes_candidates_held_before_screening(self):
         self._candidate('Held at round 1', Candidate.Status.ROUND1, held=True)
