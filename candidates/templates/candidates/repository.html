@@ -230,7 +230,7 @@
             {% if is_hr_admin or is_recruiter %}<th class="no-export" style="width:2rem">
               <input type="checkbox" class="form-check-input" id="selectAll" title="Select all on this page">
             </th>{% endif %}
-            <th>Candidate</th><th>Role</th><th>Score</th><th>Exp.</th><th>Applied</th><th>Status</th><th class="text-end">Actions</th>
+            <th>Candidate</th><th>Role</th><th>Score</th><th>Exp.</th><th>Applied</th><th>Status</th><th class="text-end no-export">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -247,7 +247,7 @@
               <div class="repo-meta">{{ c.email }} &middot; {{ c.candidate_code }}</div>
             </td>
             <td>{{ c.job.title|default:"-" }}</td>
-            <td>
+            <td data-order="{{ c.match_score|default_if_none:-1 }}">
               {% if c.match_score is not None %}
                 <div class="score-meter">
                   <div class="score-meter-num"><strong>{{ c.match_score }}</strong><span class="text-muted">/100</span></div>
@@ -256,8 +256,8 @@
                 </div>
               {% else %}<span class="text-muted small">-</span>{% endif %}
             </td>
-            <td>{{ c.total_experience_years|default:"-" }}</td>
-            <td>
+            <td data-order="{{ c.total_experience_years|default_if_none:-1 }}">{{ c.total_experience_years|default:"-" }}</td>
+            <td data-order="{{ c.created_at|date:'U' }}">
               {{ c.created_at|date:"d M Y" }}
               <div class="repo-meta">{{ c.created_at|timesince }} ago</div>
             </td>

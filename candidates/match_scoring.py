@@ -32,6 +32,7 @@ import logging
 import requests
 from django.conf import settings
 from django.core.cache import cache
+from django.utils import timezone
 
 from .models import ScoringCriteria
 from prompts.match_scoring import RESPONSE_JSON_SCHEMA, SYSTEM_PROMPT
@@ -49,8 +50,11 @@ logger = logging.getLogger(__name__)
 # score on its own - no version bump needed here for that. v4 bumped the
 # prompt itself (added the extra-criteria placeholder), which still needs a
 # version bump since the *template*, not just the per-call inputs, changed.
+# v5: added {today} (see prompts/match_scoring.py) and experience date ranges
+# in _candidate_text() - both change what the model sees for the exact same
+# candidate/job pair, so old cached scores need invalidating too.
 CACHE_TIMEOUT = 60 * 60 * 24
-CACHE_PREFIX = 'match_scoring:v4:'
+CACHE_PREFIX = 'match_scoring:v5:'
 
 class ScoreError(Exception):
     """Raised when a candidate could not be scored. Message is shown to HR."""
@@ -83,6 +87,18 @@ def _job_text(job):
     return '\n\n'.join(parts)
 
 
+def _date_range(start, end):
+    """'(Jun 2024 - Present)' style range for a Work Experience line - blank
+    if neither date is known, 'Present' for a still-open end_date, so the
+    model can actually tell a current job from a finished one (it previously
+    got no dates here at all - see the {today} note in prompts/match_scoring.py)."""
+    if not start and not end:
+        return ''
+    start_s = start.strftime('%b %Y') if start else '?'
+    end_s = end.strftime('%b %Y') if end else 'Present'
+    return f' ({start_s} - {end_s})'
+
+
 def _candidate_text(candidate):
     parts = [f'Qualification: {candidate.qualification or "Not stated"}']
     if candidate.last_role or candidate.last_company:
@@ -99,7 +115,8 @@ def _candidate_text(candidate):
 
     experience = list(candidate.experience_set.all())
     if experience:
-        lines = [f'{e.designation or "-"} at {e.company_name} - {e.skills or ""}' for e in experience]
+        lines = [f'{e.designation or "-"} at {e.company_name}{_date_range(e.start_date, e.end_date)} '
+                 f'- {e.skills or ""}' for e in experience]
         parts.append('Work Experience:\n' + '\n'.join(lines))
 
     if candidate.cv_summary:
@@ -116,9 +133,10 @@ def _build_system_prompt(must_have, extra_criteria):
             'Additional scoring criteria set by HR - apply these on top of everything above:\n'
             f'{extra_criteria}\n\n'
         )
+    today = timezone.localdate().strftime('%d %B %Y')
     return render_prompt(
         'match_scoring', SYSTEM_PROMPT,
-        must_have_block=must_have_block, extra_criteria_block=extra_criteria_block)
+        must_have_block=must_have_block, extra_criteria_block=extra_criteria_block, today=today)
 
 
 def build_cache_key(job_text, candidate_text, must_have, extra_criteria):

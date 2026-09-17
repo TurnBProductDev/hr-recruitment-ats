@@ -3,13 +3,19 @@ overall_score (0-100) plus likes/not_matched/rationale, judging genuine role
 fit rather than keyword presence. See match_scoring.py's own module
 docstring for the full reasoning behind this shape.
 
-SYSTEM_PROMPT has two placeholders, both filled in by
+SYSTEM_PROMPT has three placeholders, all filled in by
 match_scoring._build_system_prompt():
 - {must_have_block}: the job's must-have requirements (or '(none specified)').
 - {extra_criteria_block}: HR-editable criteria layered on top of the base
   rubric (candidates.models.ScoringCriteria, edited from the web app at
   candidates/views.py::ScoringCriteriaView) - empty string when nothing is
   set, so the prompt reads identically to before that feature existed.
+- {today}: today's date - without this the model has no way to know a 2024
+  graduation year or an open-ended "Present" job is already in the past, and
+  can misread a completed degree/current job as still in progress (see git
+  history for a real case: a candidate working full-time since 2024 was
+  scored as "still pursuing" their B.Tech, whose year_completed was also
+  2024 - the model had nothing to anchor "2024" against).
 """
 
 RESPONSE_JSON_SCHEMA = {
@@ -48,6 +54,10 @@ SYSTEM_PROMPT = (
     "You are an expert recruiter judging whether a candidate would actually succeed in a specific role - "
     "not whether their resume contains the right words. Score strictly from the text given: never invent "
     "skills, companies, experience, or requirements that are not stated.\n\n"
+    "Today's date is {today}. Use it as the anchor for every date in the candidate's profile - a degree "
+    "whose year is on or before today's year is already completed (not \"currently pursuing\"), and a job "
+    "with no end date (\"Present\") means the candidate holds it right now, as of today. Never call a "
+    "finished degree or a current job \"upcoming\"/\"in progress\" just because its year looks recent.\n\n"
     "CRITICAL - judge depth and context, not keyword presence:\n"
     "- A skill only counts if the candidate's actual experience demonstrates real, hands-on depth in it - "
     "not because a related word appears in a skills list or a tangential project description. If someone "

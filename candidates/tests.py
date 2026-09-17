@@ -28,7 +28,10 @@ from . import (
 )
 from .cv_extraction import CVExtractionError
 from .cv_parser import CVParseError
-from .models import BulkUploadBatch, BulkUploadItem, Candidate, CommunicationLog, EmailRegistry, ScoringCriteria
+from .models import (
+    BulkUploadBatch, BulkUploadItem, Candidate, CandidateExperience, CommunicationLog, EmailRegistry,
+    ScoringCriteria,
+)
 from .permissions import HIRING_MANAGER, HR_ADMIN, INTERVIEWER, RECRUITER
 from .screening_questions import ScreeningQuestionsError
 from .views import HOLD_TAB
@@ -1954,6 +1957,29 @@ class ScoringCriteriaPromptAndCacheTests(TestCase):
     def test_prompt_omits_the_block_entirely_when_blank(self):
         prompt = match_scoring._build_system_prompt([], '')
         self.assertNotIn('Additional scoring criteria set by HR', prompt)
+
+    def test_prompt_carries_todays_date(self):
+        """Without an actual date anchor the model has no way to know a
+        given year/'Present' is in the past or current, not upcoming - see
+        the {today} note in prompts/match_scoring.py."""
+        prompt = match_scoring._build_system_prompt([], '')
+        self.assertIn(timezone.localdate().strftime('%d %B %Y'), prompt)
+
+    def test_candidate_text_includes_experience_date_ranges(self):
+        """A regression guard: work experience dates used to be dropped
+        entirely from the text sent to the scorer, so it had no way to tell
+        a candidate currently employed since 2024 from one who never was."""
+        candidate = Candidate.objects.create(full_name='Dated Candidate', email='dated@example.com')
+        CandidateExperience.objects.create(
+            candidate=candidate, company_name='Zealogics Inc', designation='Software Engineer',
+            start_date=datetime.date(2024, 6, 1), end_date=None)  # still current - "Present"
+        CandidateExperience.objects.create(
+            candidate=candidate, company_name='Old Co', designation='Intern',
+            start_date=datetime.date(2023, 1, 1), end_date=datetime.date(2023, 6, 30))
+
+        text = match_scoring._candidate_text(candidate)
+        self.assertIn('Software Engineer at Zealogics Inc (Jun 2024 - Present)', text)
+        self.assertIn('Intern at Old Co (Jan 2023 - Jun 2023)', text)
 
     def test_cache_key_changes_when_criteria_changes(self):
         key_a = match_scoring.build_cache_key('job', 'candidate', [], '')
