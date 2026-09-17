@@ -2,7 +2,7 @@ import calendar
 from collections import Counter
 from datetime import datetime
 
-from django.db.models import Count, Max, OuterRef, Q, Subquery, Sum
+from django.db.models import Count, DateTimeField, Max, OuterRef, Q, Subquery, Sum
 from django.db.models.functions import Coalesce
 from django.http import Http404
 from django.shortcuts import get_object_or_404
@@ -615,10 +615,17 @@ class ReportsView(GroupRequiredMixin, TemplateView):
         # Every role, individually - same job_qs scoping as the cards/charts
         # above. hired_count is annotated (not a Python-level query per row)
         # since this table can list every role, not just a handful.
+        # Ordered by the same effective date the "Opened" column itself
+        # falls back to (reports.html: opening_date, else created_on) - a
+        # role with no opening_date set used to sort as if it had none at
+        # all (landing at the bottom) while still *displaying* its
+        # created_on date there, which could read as fairly recent.
         ctx['roles_table'] = (
-            job_qs.annotate(hired_count=Count(
-                'candidates', filter=Q(candidates__status=STATUS.HIRED), distinct=True))
-            .order_by('-opening_date', '-created_on'))
+            job_qs.annotate(
+                hired_count=Count('candidates', filter=Q(candidates__status=STATUS.HIRED), distinct=True),
+                effective_opened=Coalesce('opening_date', 'created_on', output_field=DateTimeField()),
+            )
+            .order_by('-effective_opened'))
 
         months = _months_for_chart(date_from, date_to)
         ctx['roles_chart_labels'] = [f'{calendar.month_abbr[m]}{str(y)[2:]}' for y, m in months]

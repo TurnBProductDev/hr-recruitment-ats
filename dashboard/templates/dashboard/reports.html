@@ -320,7 +320,7 @@
             <tr data-open="{% if j.is_open %}1{% else %}0{% endif %}">
               <td>{{ j.title }}</td>
               <td>{{ j.job_code }}</td>
-              <td>{{ j.opening_date|default:j.created_on|date:"d M Y" }}</td>
+              <td>{{ j.effective_opened|date:"d M Y" }}</td>
               <td>{{ j.closing_date|date:"d M Y"|default:"-" }}</td>
               <td><span class="rep-role-status {% if j.is_open %}rep-role-open{% else %}rep-role-closed{% endif %}">{{ j.get_status_display }}</span></td>
               <td>{{ j.openings }}</td>

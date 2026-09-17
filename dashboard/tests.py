@@ -1030,6 +1030,18 @@ class RolesTabTests(TestCase):
         self.assertEqual(row.hired_count, 1)
         self.assertTrue(row.is_open)
 
+    def test_roles_table_orders_by_the_same_effective_date_it_displays(self):
+        """A role with no opening_date set still falls back to created_on
+        for display (effective_opened) - it must sort by that same
+        fallback, not by its (missing) opening_date, or it could show a
+        recent-looking date while actually sorting at the very bottom."""
+        from datetime import timedelta
+        Job.objects.create(title='Older, Dated', opening_date=timezone.localdate() - timedelta(days=60))
+        Job.objects.create(title='Newer, No Opening Date')  # created_on defaults to now
+        response = self._get(view='roles')
+        titles = [r.title for r in response.context['roles_table']]
+        self.assertLess(titles.index('Newer, No Opening Date'), titles.index('Older, Dated'))
+
     def test_roles_table_respects_the_same_job_and_general_application_scoping(self):
         target = Job.objects.create(title='Target Role', job_code='TR01')
         Job.objects.create(title='Other Role', job_code='OR01')
