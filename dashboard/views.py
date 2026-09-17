@@ -612,6 +612,14 @@ class ReportsView(GroupRequiredMixin, TemplateView):
         ctx['roles_active_applicants'] = candidates_in_scope.filter(job__in=active_jobs_qs).count()
         ctx['roles_hired_candidates'] = candidates_in_scope.filter(job__in=job_qs, status=STATUS.HIRED).count()
 
+        # Every role, individually - same job_qs scoping as the cards/charts
+        # above. hired_count is annotated (not a Python-level query per row)
+        # since this table can list every role, not just a handful.
+        ctx['roles_table'] = (
+            job_qs.annotate(hired_count=Count(
+                'candidates', filter=Q(candidates__status=STATUS.HIRED), distinct=True))
+            .order_by('-opening_date', '-created_on'))
+
         months = _months_for_chart(date_from, date_to)
         ctx['roles_chart_labels'] = [f'{calendar.month_abbr[m]}{str(y)[2:]}' for y, m in months]
         opened_rows = [(od or co.date(), title or 'Unassigned') for od, co, title in

@@ -1004,6 +1004,49 @@ class RolesTabTests(TestCase):
         self.assertEqual(included_response.context['roles_total_opened'], 1)
         self.assertEqual(included_response.context['roles_total_applicants'], 1)
 
+    def test_roles_kpi_card_relabelling(self):
+        response = self._get(view='roles')
+        content = response.content.decode()
+        self.assertIn('openRolesOnlySwitch', content)
+        # Roles Closed card's two stacked sub-values, specifically - "Hired"
+        # alone would also match the unrelated Applications-tab KPI card
+        # that's always rendered in the same page (just hidden by CSS).
+        self.assertIn('<span class="lbl">Hired</span><span class="val">', content)
+        self.assertIn('<span class="lbl">Cancelled</span><span class="val">', content)
+        self.assertNotIn('With Hiring', content)
+        self.assertNotIn('Without Hiring', content)
+        self.assertNotIn('Candidates In These Roles', content)
+
+    def test_roles_table_lists_every_role_with_its_own_fields(self):
+        job = Job.objects.create(
+            title='Program Manager', job_code='PM01', status=Job.Status.OPEN,
+            opening_date=timezone.localdate(), openings=2)
+        Candidate.objects.create(job=job, full_name='Hired One', email='hiredone@example.com',
+                                 status=Candidate.Status.HIRED)
+        response = self._get(view='roles')
+        row = next(r for r in response.context['roles_table'] if r.job_code == 'PM01')
+        self.assertEqual(row.title, 'Program Manager')
+        self.assertEqual(row.openings, 2)
+        self.assertEqual(row.hired_count, 1)
+        self.assertTrue(row.is_open)
+
+    def test_roles_table_respects_the_same_job_and_general_application_scoping(self):
+        target = Job.objects.create(title='Target Role', job_code='TR01')
+        Job.objects.create(title='Other Role', job_code='OR01')
+        general = Job.objects.create(title='General Application', job_code='GA01')
+
+        response = self._get(view='roles', job=target.pk)
+        codes = [r.job_code for r in response.context['roles_table']]
+        self.assertEqual(codes, ['TR01'])
+
+        response = self._get(view='roles')
+        codes = [r.job_code for r in response.context['roles_table']]
+        self.assertNotIn('GA01', codes)
+
+        response = self._get(view='roles', include_general='1')
+        codes = [r.job_code for r in response.context['roles_table']]
+        self.assertIn('GA01', codes)
+
     def test_a_role_still_open_but_already_hired_counts_as_total_hired_not_closed_with_hiring(self):
         """Total Roles Hired counts any role that's hired someone, open or
         closed - Roles Closed With Hiring only counts once it's also

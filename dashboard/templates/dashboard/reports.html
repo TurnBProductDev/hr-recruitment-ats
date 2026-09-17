@@ -84,6 +84,11 @@
 }
 
 .rep-chart-wrap { position: relative; height: 260px; }
+
+.rep-role-status { display: inline-block; padding: .25em .7em; border-radius: 12px; font-size: .72rem; font-weight: 600; }
+.rep-role-open { background: #dff2f1; color: var(--dark-green); }
+:root[data-theme="dark"] .rep-role-open { background: rgba(14,111,107,.25); color: var(--accent-teal); }
+.rep-role-closed { background: var(--bg-hover); color: var(--text-muted); }
 </style>
 {% endblock %}
 
@@ -246,14 +251,14 @@
         <div class="rep-kpi">
           <div class="lbl">Active Roles</div>
           <div class="val-row"><span class="val">{{ roles_active }}</span></div>
-          <div class="rep-kpi-subval"><span class="lbl">Candidates In These Roles</span><span class="val">{{ roles_active_applicants }}</span></div>
+          <div class="rep-kpi-subval"><span class="lbl">Candidates Applied</span><span class="val">{{ roles_active_applicants }}</span></div>
         </div>
       </div>
       <div class="col-lg-3 col-md-6 col-6">
         <div class="rep-kpi">
           <div class="lbl">Roles Closed</div>
-          <div class="rep-kpi-subval"><span class="lbl">With Hiring</span><span class="val">{{ roles_closed_with_hiring }}</span></div>
-          <div class="rep-kpi-subval"><span class="lbl">Without Hiring</span><span class="val">{{ roles_closed_without_hiring }}</span></div>
+          <div class="rep-kpi-subval"><span class="lbl">Hired</span><span class="val">{{ roles_closed_with_hiring }}</span></div>
+          <div class="rep-kpi-subval"><span class="lbl">Cancelled</span><span class="val">{{ roles_closed_without_hiring }}</span></div>
         </div>
       </div>
       <div class="col-lg-3 col-md-6 col-6">
@@ -291,6 +296,39 @@
           <h5>Candidates Applied (last 12 months)</h5>
           <div class="rep-chart-wrap"><canvas id="candidatesAppliedChart"></canvas></div>
         </div>
+      </div>
+    </div>
+
+    <div class="rep-panel mt-3">
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <h5 class="mb-0">All Roles</h5>
+        <div class="form-check form-switch mb-0">
+          <input type="checkbox" class="form-check-input" role="switch" id="openRolesOnlySwitch">
+          <label class="form-check-label small text-muted" for="openRolesOnlySwitch">Show open roles only</label>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle w-100" id="rolesTable">
+          <thead>
+            <tr>
+              <th>Role</th><th>Role ID</th><th>Opened</th><th>Closed</th>
+              <th>Status</th><th>Requirement</th><th>Hired</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for j in roles_table %}
+            <tr data-open="{% if j.is_open %}1{% else %}0{% endif %}">
+              <td>{{ j.title }}</td>
+              <td>{{ j.job_code }}</td>
+              <td>{{ j.opening_date|default:j.created_on|date:"d M Y" }}</td>
+              <td>{{ j.closing_date|date:"d M Y"|default:"-" }}</td>
+              <td><span class="rep-role-status {% if j.is_open %}rep-role-open{% else %}rep-role-closed{% endif %}">{{ j.get_status_display }}</span></td>
+              <td>{{ j.openings }}</td>
+              <td>{{ j.hired_count }}</td>
+            </tr>
+            {% empty %}<tr><td colspan="7" class="text-muted text-center py-3">No roles.</td></tr>{% endfor %}
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
@@ -455,6 +493,19 @@ document.querySelectorAll('.rep-toggle:not(.rep-toggle-left)').forEach(function 
   }
   lineChart(canvas1, openedSeries, '#0e6f6b', 'Roles Opened', openedNames);
   lineChart(canvas2, appliedSeries, '#0a58ca', 'Candidates Applied');
+})();
+
+// All Roles table: a plain client-side show/hide, not another server round
+// trip - every row already carries whether it's open, no need to re-fetch
+// the same rows just to filter which are currently visible.
+(function () {
+  var switchEl = document.getElementById('openRolesOnlySwitch');
+  var rows = document.querySelectorAll('#rolesTable tbody tr[data-open]');
+  if (!switchEl || !rows.length) return;
+  switchEl.addEventListener('change', function () {
+    var onlyOpen = switchEl.checked;
+    rows.forEach(function (row) { row.hidden = onlyOpen && row.dataset.open !== '1'; });
+  });
 })();
 </script>
 {% endblock %}
