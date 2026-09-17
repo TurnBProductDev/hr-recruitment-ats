@@ -354,9 +354,32 @@ document.querySelectorAll('.rep-toggle:not(.rep-toggle-left)').forEach(function 
   var openedSeries = JSON.parse(document.getElementById('roles-opened-series').textContent);
   var appliedSeries = JSON.parse(document.getElementById('candidates-applied-series').textContent);
 
+  // Small value label above each point instead of a Y axis - no need for a
+  // separate plugin/CDN for this, Chart.js lets a plain plugin object be
+  // handed straight to a chart's own `plugins` option.
+  var pointValueLabels = {
+    id: 'pointValueLabels',
+    afterDatasetsDraw: function (chart) {
+      var ctx = chart.ctx;
+      chart.data.datasets.forEach(function (dataset, i) {
+        chart.getDatasetMeta(i).data.forEach(function (point, index) {
+          var value = dataset.data[index];
+          ctx.save();
+          ctx.fillStyle = dataset.borderColor;
+          ctx.font = '10px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(value, point.x, point.y - 6);
+          ctx.restore();
+        });
+      });
+    },
+  };
+
   function lineChart(canvas, data, color, label) {
     new Chart(canvas, {
       type: 'line',
+      plugins: [pointValueLabels],
       data: {
         labels: labels,
         datasets: [{
@@ -366,8 +389,12 @@ document.querySelectorAll('.rep-toggle:not(.rep-toggle-left)').forEach(function 
       },
       options: {
         responsive: true, maintainAspectRatio: false,
+        layout: { padding: { top: 16 } },
         plugins: { legend: { display: false } },
-        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+          y: { display: false, beginAtZero: true },
+        },
       },
     });
   }

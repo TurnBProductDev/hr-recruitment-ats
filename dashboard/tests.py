@@ -1013,6 +1013,35 @@ class RolesTabTests(TestCase):
         self.assertEqual(self._get().context['view'], 'applications')
         self.assertEqual(self._get(view='roles').context['view'], 'roles')
 
+    def test_candidates_applied_chart_uses_applied_date_not_screening_date(self):
+        """Filtered and bucketed by created_at (applied), not screening_date
+        - otherwise a candidate screened well after applying could pass the
+        From/To filter (their screening happened inside it) but still land
+        in a month outside the selected range entirely, which is exactly
+        what made this chart look like the date filter did nothing."""
+        from datetime import timedelta
+        job = Job.objects.create(title='Some Role')
+        old_applicant = Candidate.objects.create(full_name='Old Applicant', email='old@example.com', job=job)
+        Candidate.objects.filter(pk=old_applicant.pk).update(
+            created_at=timezone.now() - timedelta(days=200))
+        services.change_status(old_applicant, Candidate.Status.SHORTLISTED)  # "screened" just now
+
+        today = timezone.localdate()
+        response = self._get(view='roles', date_from=(today - timedelta(days=10)).isoformat(),
+                             date_to=today.isoformat())
+        # Screened inside the filter window, but applied ~200 days earlier -
+        # must not be counted anywhere on this chart.
+        self.assertEqual(sum(response.context['candidates_applied_series']), 0)
+
+    def test_candidates_applied_chart_counts_a_recent_applicant_even_if_not_yet_screened(self):
+        """The Applications tab's own KPIs deliberately exclude anyone not
+        yet screened (see _report_metrics) - this chart is titled "Candidates
+        Applied", not "Screened", so it counts them regardless."""
+        job = Job.objects.create(title='Some Role')
+        Candidate.objects.create(full_name='Brand New', email='new@example.com', job=job)
+        response = self._get(view='roles')
+        self.assertEqual(response.context['candidates_applied_series'][-1], 1)
+
 
 class ReportsRatioPrecisionTests(TestCase):
     """A percentage rounded to a whole number would round anything under

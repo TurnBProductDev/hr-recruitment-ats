@@ -549,9 +549,24 @@ class ReportsView(GroupRequiredMixin, TemplateView):
         ctx['roles_total_hired'] = job_qs.filter(candidates__status=STATUS.HIRED).distinct().count()
 
         months = _last_12_months()
-        ctx['roles_chart_labels'] = [f'{calendar.month_abbr[m]} {y}' for y, m in months]
+        ctx['roles_chart_labels'] = [f'{calendar.month_abbr[m]}{str(y)[2:]}' for y, m in months]
         opened_dates = [od or co.date() for od, co in job_qs.values_list('opening_date', 'created_on')]
         ctx['roles_opened_series'] = _monthly_counts(opened_dates, months)
-        applied_dates = [d.date() for d in base.values_list('created_at', flat=True)]
+
+        # Deliberately a separate queryset from `base`, not a reuse of it -
+        # `base` is filtered (and this chart used to be bucketed against it)
+        # by *screening* date, which could put a candidate outside the
+        # selected From/To range entirely off this chart even though they
+        # applied inside it (or the reverse) - confusing on a chart titled
+        # "Candidates Applied". This filters and buckets by created_at
+        # (applied date) consistently instead, so the two always agree.
+        applied_qs = Candidate.objects.exclude(job__title__iexact=GENERAL_APPLICATION).exclude(INITIAL_HOLD)
+        if job_id:
+            applied_qs = applied_qs.filter(job_id=job_id)
+        if date_from:
+            applied_qs = applied_qs.filter(created_at__date__gte=date_from)
+        if date_to:
+            applied_qs = applied_qs.filter(created_at__date__lte=date_to)
+        applied_dates = [d.date() for d in applied_qs.values_list('created_at', flat=True)]
         ctx['candidates_applied_series'] = _monthly_counts(applied_dates, months)
         return ctx
