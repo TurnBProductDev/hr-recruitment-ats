@@ -2,9 +2,15 @@ from django.db import migrations
 
 from prompts.cv_extraction import SYSTEM_PROMPT as NEW_DEFAULT
 
-# The exact text 0002_seed_defaults.py originally seeded (frozen here, not
-# re-imported, since the source constant's wording has since changed) - used
-# only to check whether a row is still untouched before overwriting it.
+# The exact text actually live in production's seeded row (confirmed by
+# reading it directly - see below), NOT what 0002_seed_defaults.py's own
+# source function returns today. Some earlier commit extended SYSTEM_PROMPT
+# (added rule 6b, "education") without a matching data migration, so
+# production's row silently drifted out of sync with the code and has been
+# missing that rule ever since 0002 first seeded it on 2026-09-15. Comparing
+# in Python, not SQL - filtering on text=OLD_DEFAULT crashes SQL Server on
+# this backend for a long enough string ("the data types nvarchar(max) and
+# ntext are incompatible in the equal to operator", ODBC Driver 18).
 OLD_DEFAULT = (
     "You are an expert HR data extraction specialist. Read the candidate's CV (given as text, or as page "
     "images if the text layer was unreadable) and extract structured fields for an ATS.\n\n"
@@ -18,9 +24,6 @@ OLD_DEFAULT = (
     "anywhere in the CV (a Skills section, project descriptions, work experience bullets).\n"
     "6. experience: one entry per job, most recent first, with the skills/tools actually used in that role - "
     "not a repeat of the whole top-level skills list.\n"
-    "6b. education: one entry per degree/qualification listed on the CV (school, diploma, bachelor's, "
-    "master's, etc.), most recent first - list ALL of them, not just the highest. The top-level "
-    "'qualification' field should still mirror the highest/most recent entry here.\n"
     "7. total_experience_years: total professional experience as a decimal number (e.g. 5.5), not per-job.\n"
     "8. role_applied: the job title the candidate is applying for, from a subject line/cover note if given, "
     "else null - do not guess it from their current job title.\n"
@@ -36,14 +39,25 @@ OLD_DEFAULT = (
 
 def update_prompt(apps, schema_editor):
     PromptTemplate = apps.get_model('prompts', 'PromptTemplate')
-    # Only overwrite a row still at the old wording - an admin who already
+    # Compare in Python, not SQL - filtering on text=OLD_DEFAULT crashes SQL
+    # Server on this backend ("the data types nvarchar(max) and ntext are
+    # incompatible in the equal to operator", ODBC Driver 18): a long bound
+    # string parameter apparently gets sent as ntext, which SQL Server
+    # refuses to compare against an nvarchar(max) column with '='. Only
+    # overwrite a row still at the old wording - an admin who already
     # customised this prompt keeps their own text untouched.
-    PromptTemplate.objects.filter(key='cv_extraction', text=OLD_DEFAULT).update(text=NEW_DEFAULT)
+    row = PromptTemplate.objects.filter(key='cv_extraction').first()
+    if row and row.text == OLD_DEFAULT:
+        row.text = NEW_DEFAULT
+        row.save(update_fields=['text'])
 
 
 def revert_prompt(apps, schema_editor):
     PromptTemplate = apps.get_model('prompts', 'PromptTemplate')
-    PromptTemplate.objects.filter(key='cv_extraction', text=NEW_DEFAULT).update(text=OLD_DEFAULT)
+    row = PromptTemplate.objects.filter(key='cv_extraction').first()
+    if row and row.text == NEW_DEFAULT:
+        row.text = OLD_DEFAULT
+        row.save(update_fields=['text'])
 
 
 class Migration(migrations.Migration):

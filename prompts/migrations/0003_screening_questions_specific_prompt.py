@@ -22,14 +22,24 @@ NEW_DEFAULT = _screening_system_prompt('{question_count}')
 
 def update_prompt(apps, schema_editor):
     PromptTemplate = apps.get_model('prompts', 'PromptTemplate')
+    # Compare in Python, not SQL - filtering on text=OLD_DEFAULT can crash SQL
+    # Server on this backend for a long enough string ("the data types
+    # nvarchar(max) and ntext are incompatible in the equal to operator",
+    # ODBC Driver 18 - see migration 0004, which hit this at 1842 chars).
     # Only overwrite a row still at the old wording - an admin who already
     # customised this prompt keeps their own text untouched.
-    PromptTemplate.objects.filter(key='screening_questions', text=OLD_DEFAULT).update(text=NEW_DEFAULT)
+    row = PromptTemplate.objects.filter(key='screening_questions').first()
+    if row and row.text == OLD_DEFAULT:
+        row.text = NEW_DEFAULT
+        row.save(update_fields=['text'])
 
 
 def revert_prompt(apps, schema_editor):
     PromptTemplate = apps.get_model('prompts', 'PromptTemplate')
-    PromptTemplate.objects.filter(key='screening_questions', text=NEW_DEFAULT).update(text=OLD_DEFAULT)
+    row = PromptTemplate.objects.filter(key='screening_questions').first()
+    if row and row.text == NEW_DEFAULT:
+        row.text = OLD_DEFAULT
+        row.save(update_fields=['text'])
 
 
 class Migration(migrations.Migration):
