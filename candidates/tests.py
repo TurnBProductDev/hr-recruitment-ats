@@ -15,6 +15,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -23,14 +24,14 @@ from interviews.models import Interview, InterviewRequest
 from jobs.models import Job
 
 from . import (
-    bulk, cv_extraction, cv_parser, logic_app_mail, match_scoring, rejection_emails,
+    bulk, cv_extraction, cv_parser, job_matching, logic_app_mail, match_scoring, rejection_emails,
     screening_questions, scoring, services, views,
 )
 from .cv_extraction import CVExtractionError
 from .cv_parser import CVParseError
 from .models import (
     BulkUploadBatch, BulkUploadItem, Candidate, CandidateEducation, CandidateExperience, CommunicationLog,
-    EmailRegistry, ScoringCriteria,
+    EmailRegistry, Note, ScoringCriteria,
 )
 from .permissions import HIRING_MANAGER, HR_ADMIN, INTERVIEWER, RECRUITER
 from .screening_questions import ScreeningQuestionsError
@@ -181,6 +182,120 @@ class ExtractProfileMatchedJobTests(TestCase):
                         return_value=self._response(matched_job_title='HRBP')):
             fields = cv_extraction.extract_profile(b'%PDF-1.4', open_job_titles=['HRBP'])
         self.assertEqual(fields['matched_job_title'], 'HRBP')
+
+
+@override_settings(AZURE_OPENAI_ENDPOINT='https://example.openai.azure.com', AZURE_OPENAI_KEY='fake-key')
+class JobMatchingTests(TestCase):
+    """candidates.job_matching.match_job_title - the General Application
+    re-matcher (see rematch_general_applications). Mocked Azure OpenAI,
+    never touches the real API."""
+
+    def _candidate(self, role_applied='HR Role', **extra):
+        candidate = Candidate.objects.create(
+            full_name='Rose E G', email='rose@example.com', role_applied=role_applied, **extra)
+        return candidate
+
+    def _response(self, matched_job_title):
+        body = {'matched_job_title': matched_job_title}
+        response = mock.Mock(status_code=200, text='')
+        response.json.return_value = {'choices': [{'message': {'content': json.dumps(body)}}]}
+        return response
+
+    def test_no_open_titles_short_circuits_without_calling_azure(self):
+        with mock.patch('candidates.job_matching.requests.post') as post:
+            result = job_matching.match_job_title(self._candidate(), [])
+        self.assertIsNone(result)
+        post.assert_not_called()
+
+    def test_returns_the_matched_title(self):
+        with mock.patch('candidates.job_matching.requests.post', return_value=self._response('HRBP')):
+            result = job_matching.match_job_title(self._candidate(), ['HRBP', 'Sales Associate'])
+        self.assertEqual(result, 'HRBP')
+
+    def test_null_match_returns_none(self):
+        with mock.patch('candidates.job_matching.requests.post', return_value=self._response(None)):
+            result = job_matching.match_job_title(self._candidate(), ['HRBP'])
+        self.assertIsNone(result)
+
+    def test_a_title_not_in_the_given_list_is_ignored(self):
+        # Defensive: the strict schema enum should already prevent this, but
+        # never trust an invented title even if it somehow got through.
+        with mock.patch('candidates.job_matching.requests.post',
+                        return_value=self._response('Some Made Up Role')):
+            result = job_matching.match_job_title(self._candidate(), ['HRBP'])
+        self.assertIsNone(result)
+
+    def test_not_configured_raises(self):
+        with override_settings(AZURE_OPENAI_ENDPOINT='', AZURE_OPENAI_KEY=''):
+            with self.assertRaises(job_matching.JobMatchError):
+                job_matching.match_job_title(self._candidate(), ['HRBP'])
+
+    def test_http_error_raises(self):
+        response = mock.Mock(status_code=500, text='boom')
+        with mock.patch('candidates.job_matching.requests.post', return_value=response):
+            with self.assertRaises(job_matching.JobMatchError):
+                job_matching.match_job_title(self._candidate(), ['HRBP'])
+
+
+class RematchGeneralApplicationsCommandTests(TestCase):
+    """The rematch_general_applications management command - scoping,
+    dry-run, and that a real match is applied the same way the manual
+    Change Vacancy action (CandidateChangeJobView) does it."""
+
+    def setUp(self):
+        self.hrbp = Job.objects.create(title='HRBP', status=Job.Status.OPEN)
+        self.general = Job.objects.create(title='General Application', status=Job.Status.CLOSED)
+        self.candidate = Candidate.objects.create(
+            full_name='Vyshnavi K', email='vyshnavi@example.com', job=self.general,
+            role_applied='HRBP Role', match_score=72, match_state=Candidate.MatchState.DONE)
+        # Excluded from scope: blank role_applied, or not in General Application at all.
+        Candidate.objects.create(full_name='No Role', email='norole@example.com', job=self.general)
+        Candidate.objects.create(
+            full_name='Already Mapped', email='mapped@example.com', job=self.hrbp, role_applied='HRBP')
+
+    @override_settings(AZURE_OPENAI_ENDPOINT='', AZURE_OPENAI_KEY='')
+    def test_raises_when_not_configured(self):
+        from django.core.management.base import CommandError
+        with self.assertRaises(CommandError):
+            call_command('rematch_general_applications')
+
+    @override_settings(AZURE_OPENAI_ENDPOINT='https://example.openai.azure.com', AZURE_OPENAI_KEY='fake-key')
+    def test_dry_run_reports_but_does_not_move_the_candidate(self):
+        with mock.patch('candidates.job_matching.match_job_title', return_value='HRBP'):
+            call_command('rematch_general_applications', '--dry-run')
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.job, self.general)
+        self.assertEqual(self.candidate.match_score, 72)
+        self.assertFalse(Note.objects.filter(candidate=self.candidate).exists())
+
+    @override_settings(AZURE_OPENAI_ENDPOINT='https://example.openai.azure.com', AZURE_OPENAI_KEY='fake-key')
+    def test_a_real_match_moves_the_candidate_and_clears_the_stale_score(self):
+        with mock.patch('candidates.job_matching.match_job_title', return_value='HRBP') as match:
+            call_command('rematch_general_applications')
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.job, self.hrbp)
+        self.assertIsNone(self.candidate.match_score)
+        self.assertEqual(self.candidate.match_state, Candidate.MatchState.PENDING)
+        note = Note.objects.get(candidate=self.candidate)
+        self.assertIn('General Application -> HRBP', note.text)
+        # Only the in-scope candidate (General Application + non-blank role_applied) was checked.
+        match.assert_called_once()
+        self.assertEqual(match.call_args.args[0], self.candidate)
+
+    @override_settings(AZURE_OPENAI_ENDPOINT='https://example.openai.azure.com', AZURE_OPENAI_KEY='fake-key')
+    def test_no_match_leaves_the_candidate_untouched(self):
+        with mock.patch('candidates.job_matching.match_job_title', return_value=None):
+            call_command('rematch_general_applications')
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.job, self.general)
+
+    @override_settings(AZURE_OPENAI_ENDPOINT='https://example.openai.azure.com', AZURE_OPENAI_KEY='fake-key')
+    def test_a_failed_match_is_reported_and_does_not_stop_the_batch(self):
+        with mock.patch('candidates.job_matching.match_job_title',
+                        side_effect=job_matching.JobMatchError('boom')):
+            call_command('rematch_general_applications')
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.job, self.general)
 
 
 class MapFieldsTests(TestCase):

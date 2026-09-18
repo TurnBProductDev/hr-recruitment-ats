@@ -33,11 +33,12 @@ class PromptTemplateSeedTests(TestCase):
     shipped as SYSTEM_PROMPT - nothing should change in behaviour until an
     admin actually edits a row."""
 
-    def test_all_five_prompts_are_seeded(self):
+    def test_all_prompts_are_seeded(self):
         keys = set(PromptTemplate.objects.values_list('key', flat=True))
         self.assertEqual(
             keys,
-            {'match_scoring', 'cv_extraction', 'jd_extraction', 'profile_extraction', 'screening_questions'})
+            {'match_scoring', 'cv_extraction', 'jd_extraction', 'profile_extraction', 'screening_questions',
+             'job_matching'})
 
     def test_match_scoring_seed_matches_the_code_default(self):
         row = PromptTemplate.objects.get(key='match_scoring')
