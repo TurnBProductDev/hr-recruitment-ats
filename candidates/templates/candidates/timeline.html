@@ -242,7 +242,16 @@ html { scroll-behavior: smooth; }
               <div class="field-label mb-1">Mapped Source</div>
               <form method="post" action="{% url 'candidate_change_source' candidate.pk %}" class="d-flex gap-2 align-items-center">
                 {% csrf_token %}
-                <input type="text" name="source" value="{{ candidate.source|default:'' }}" class="form-control form-control-sm flex-grow-1" placeholder="e.g. Careers">
+                {% comment %}
+                  list= offers the canonical names as suggestions without
+                  forcing one - the field is still a plain text input, so
+                  anything else can still be typed in directly.
+                {% endcomment %}
+                <input type="text" name="source" value="{{ candidate.source|default:'' }}" list="sourceOptions"
+                       class="form-control form-control-sm flex-grow-1" placeholder="e.g. Careers" autocomplete="off">
+                <datalist id="sourceOptions">
+                  {% for s in source_options %}<option value="{{ s }}">{% endfor %}
+                </datalist>
                 <button type="submit" class="btn btn-sm btn-outline-app">Save</button>
               </form>
             </div>
@@ -703,6 +712,18 @@ html { scroll-behavior: smooth; }
             {% endif %}
           </div>
         </form>
+      </div>
+      {% elif active_stage_index is not None %}
+      {% comment %}
+        Available from any hiring stage, not just Round 1/2's own schedule-
+        phase quick action (see show_move_to_future_modal) - a small,
+        always-there way to shelve this candidate without needing to first
+        put them on Hold.
+      {% endcomment %}
+      <div class="stage-subsection">
+        <div class="stage-action-row justify-content-center final-status-actions">
+          <button type="button" class="stage-action-btn stage-tone-hold" data-bs-toggle="modal" data-bs-target="#moveToFutureModal">Move to Future</button>
+        </div>
       </div>
       {% endif %}
     </div>

@@ -30,6 +30,7 @@ from .forms import (
     ExperienceFormSet,
 )
 from .models import (
+    CANONICAL_SOURCES,
     CAREERS,
     BulkUploadBatch,
     BulkUploadItem,
@@ -870,6 +871,7 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
         ctx['is_hr_admin'] = u.is_superuser or u.groups.filter(name=HR_ADMIN).exists()
         ctx['can_revert'] = ctx['is_hr_admin'] or u.groups.filter(name=RECRUITER).exists()
         ctx['all_jobs'] = Job.objects.all().order_by('title')
+        ctx['source_options'] = CANONICAL_SOURCES
         # same email seen on another record => reapply
         ctx['reapply'] = Candidate.objects.filter(email=candidate.email).exclude(pk=candidate.pk).exists()
 
@@ -915,20 +917,19 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
 
         # Whether the Move to Future modal/trigger should exist on the page
         # at all - either the Final Status section's resume-while-on-Hold
-        # trigger, or the Round 1/Round 2 schedule card's own quick-action
-        # trigger (offered before an interview is even allocated - see
-        # CandidateMoveToFutureView, which puts the candidate on Hold first
-        # in that case). Computed once here, rather than duplicating both
-        # conditions in the template, so the modal's own URL never renders
-        # onto the page when neither trigger actually shows.
+        # trigger, or its own small "Move to Future" button offered any time
+        # the candidate is still actively progressing (any hiring stage, not
+        # just Round 1/2's schedule phase - see CandidateMoveToFutureView,
+        # which puts the candidate on Hold first in that not-yet-on-Hold
+        # case). Held-before-screening candidates (hold_from_status blank/
+        # OPEN) are excluded - they already live on the Future Prospects
+        # page, so a second "Move to Future" button for them is redundant.
+        # Computed once here, rather than duplicating the condition in the
+        # template, so the modal's own URL never renders onto the page for a
+        # terminal (Hired/Rejected/Blacklisted) candidate.
         ctx['show_move_to_future_modal'] = (
             (ctx['is_on_hold'] and candidate.hold_from_status != STATUS.OPEN)
-            or any(
-                stage['is_active'] and stage['interview_rounds'] and stage['round_phase'] == 'schedule'
-                and not stage['interview_request'] and not stage['open_interview']
-                and not stage['cancelled_interview']
-                for stage in hiring_stages
-            )
+            or (not ctx['is_on_hold'] and active_stage_index is not None)
         )
 
         if active_stage_index is None:

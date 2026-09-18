@@ -1364,6 +1364,84 @@ class MoveToFutureProspectsTests(TestCase):
         self.assertNotIn(self.candidate, response.context['candidates'])
 
 
+class MoveToFutureAlwaysAvailableTests(TestCase):
+    """The Final Status box's own small "Move to Future" button - available
+    from any active hiring stage, not just while already on Hold or from
+    Round 1/2's own schedule-phase quick action (see
+    CandidateTimelineView.get_context_data's show_move_to_future_modal)."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('hr12', 'hr12@example.com', 'pw')
+        self.user.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.client.force_login(self.user)
+        self.candidate = Candidate.objects.create(full_name='Rose E G', email='rose@example.com')
+        services.record_creation(self.candidate)
+
+    def _move_to_future_url(self):
+        return reverse('candidate_move_to_future', args=[self.candidate.pk])
+
+    def test_offered_at_cv_screening(self):
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertContains(response, self._move_to_future_url())
+
+    def test_offered_at_tele_screening(self):
+        services.change_status(self.candidate, Candidate.Status.SHORTLISTED)
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertContains(response, self._move_to_future_url())
+
+    def test_offered_at_final_decision(self):
+        services.change_status(self.candidate, Candidate.Status.SHORTLISTED)
+        services.change_status(self.candidate, Candidate.Status.ROUND1)
+        services.change_status(self.candidate, Candidate.Status.INTERVIEW)
+        services.change_status(self.candidate, Candidate.Status.FINAL_SELECTION)
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertContains(response, self._move_to_future_url())
+
+    def test_not_offered_once_hired(self):
+        services.change_status(self.candidate, Candidate.Status.SHORTLISTED)
+        services.change_status(self.candidate, Candidate.Status.ROUND1)
+        services.change_status(self.candidate, Candidate.Status.INTERVIEW)
+        services.change_status(self.candidate, Candidate.Status.FINAL_SELECTION)
+        services.change_status(self.candidate, Candidate.Status.HIRED)
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertNotContains(response, self._move_to_future_url())
+
+    def test_still_offered_while_on_hold_from_a_later_stage(self):
+        """Unchanged existing behaviour - not a regression from adding the
+        new always-available case."""
+        services.change_status(self.candidate, Candidate.Status.ROUND1)
+        services.change_status(self.candidate, Candidate.Status.SCREENING_HOLD)
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertContains(response, self._move_to_future_url())
+
+    def test_not_offered_while_on_initial_hold(self):
+        """Held before ever being screened - already lives on the Future
+        Prospects page, so a second "Move to Future" button is redundant."""
+        services.change_status(self.candidate, Candidate.Status.SCREENING_HOLD)
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertNotContains(response, self._move_to_future_url())
+
+
+class SourceMappingTests(TestCase):
+    """Mapped Source stays a free-text field (any value can still be typed),
+    but now suggests the same canonical names the rest of the app already
+    normalises onto - see candidates.models.CANONICAL_SOURCES."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user('hr13', 'hr13@example.com', 'pw')
+        self.user.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.client.force_login(self.user)
+        self.candidate = Candidate.objects.create(full_name='Rose E G', email='rose@example.com')
+        services.record_creation(self.candidate)
+
+    def test_canonical_sources_are_offered_as_suggestions(self):
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        content = response.content.decode()
+        self.assertIn('list="sourceOptions"', content)
+        for source in ('Careers', 'Linked In', 'Referral', 'Naukri', 'Agency', 'Other'):
+            self.assertIn(f'<option value="{source}">', content)
+
+
 class HiringBlockStageLabelTests(TestCase):
     """The Hiring block's stage headings and decision-button text."""
 
