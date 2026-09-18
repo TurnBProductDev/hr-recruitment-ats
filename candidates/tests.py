@@ -29,8 +29,8 @@ from . import (
 from .cv_extraction import CVExtractionError
 from .cv_parser import CVParseError
 from .models import (
-    BulkUploadBatch, BulkUploadItem, Candidate, CandidateExperience, CommunicationLog, EmailRegistry,
-    ScoringCriteria,
+    BulkUploadBatch, BulkUploadItem, Candidate, CandidateEducation, CandidateExperience, CommunicationLog,
+    EmailRegistry, ScoringCriteria,
 )
 from .permissions import HIRING_MANAGER, HR_ADMIN, INTERVIEWER, RECRUITER
 from .screening_questions import ScreeningQuestionsError
@@ -1763,6 +1763,44 @@ class ScreeningQuestionsGenerationTests(TestCase):
         self.assertEqual(screening_questions.load_questions(None), [])
         self.assertEqual(screening_questions.load_questions(''), [])
         self.assertEqual(screening_questions.load_questions('not json'), [])
+
+    def test_profile_text_uses_full_work_and_education_history_when_present(self):
+        # Two candidates sharing the same flat qualification/last_role/skills
+        # snapshot but different full history - the profile text (and so the
+        # questions built from it) must still differ, since that history is
+        # what makes a question specific instead of generic.
+        candidate = self._candidate()
+        candidate.qualification = 'B.Tech'
+        candidate.last_role = 'Analyst'
+        candidate.last_company = 'Acme'
+        candidate.save()
+        CandidateEducation.objects.create(
+            candidate=candidate, qualification='M.Sc. Data Science',
+            institution='University of Kerala', year_completed=2024, specialization='NLP')
+        CandidateExperience.objects.create(
+            candidate=candidate, company_name='Traitz IT Solutions', designation='Data Scientist',
+            skills='LangChain, Vector Embeddings')
+
+        text = screening_questions._profile_text(candidate)
+
+        self.assertIn('M.Sc. Data Science (NLP) - University of Kerala, 2024', text)
+        self.assertIn('Data Scientist at Traitz IT Solutions', text)
+        self.assertIn('LangChain, Vector Embeddings', text)
+        # The flat single-snapshot fields are superseded once real history exists.
+        self.assertNotIn('Qualification: B.Tech', text)
+        self.assertNotIn('Last role: Analyst', text)
+
+    def test_profile_text_falls_back_to_flat_fields_when_no_history_rows(self):
+        candidate = self._candidate()
+        candidate.qualification = 'B.Tech'
+        candidate.last_role = 'Analyst'
+        candidate.last_company = 'Acme'
+        candidate.save()
+
+        text = screening_questions._profile_text(candidate)
+
+        self.assertIn('Qualification: B.Tech', text)
+        self.assertIn('Last role: Analyst at Acme', text)
 
 
 @override_settings(AZURE_OPENAI_ENDPOINT='https://example.openai.azure.com',

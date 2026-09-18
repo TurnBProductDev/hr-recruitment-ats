@@ -44,14 +44,50 @@ def _endpoint_url():
 
 
 def _profile_text(candidate):
+    """Everything distinctive about this candidate, so the model has enough
+    to write specific questions instead of falling back to generic ones.
+    Pulls the full CandidateExperience/CandidateEducation history (present
+    for CVs read by candidates/cv_extraction.py) rather than just the
+    single most-recent qualification/last_role snapshot on the candidate
+    row - two candidates can share the same self-declared skills line and
+    current role, but their full work history rarely matches, and that's
+    the material that makes a question specific rather than boilerplate."""
     role = candidate.job.title if candidate.job else (candidate.role_applied or 'the role')
     parts = [f'Applying for: {role}']
-    if candidate.qualification:
+
+    education = list(candidate.education.all())
+    if education:
+        lines = []
+        for edu in education:
+            bit = edu.qualification
+            if edu.specialization:
+                bit += f' ({edu.specialization})'
+            if edu.institution:
+                bit += f' - {edu.institution}'
+            if edu.year_completed:
+                bit += f', {edu.year_completed}'
+            lines.append(f'- {bit}')
+        parts.append('Education:\n' + '\n'.join(lines))
+    elif candidate.qualification:
         parts.append(f'Qualification: {candidate.qualification}')
+
     if candidate.skills:
         parts.append(f'Self-declared skills: {candidate.skills}')
-    if candidate.last_role or candidate.last_company:
+
+    experience = list(candidate.experience_set.all())
+    if experience:
+        lines = []
+        for exp in experience:
+            bit = f'{exp.designation or "Role"} at {exp.company_name}'
+            if exp.start_date or exp.end_date:
+                bit += f' ({exp.start_date or "?"} to {exp.end_date or "present"})'
+            if exp.skills:
+                bit += f' - worked with: {exp.skills}'
+            lines.append(f'- {bit}')
+        parts.append('Work history (most recent first):\n' + '\n'.join(lines))
+    elif candidate.last_role or candidate.last_company:
         parts.append(f'Last role: {candidate.last_role or "-"} at {candidate.last_company or "-"}')
+
     if candidate.total_experience_years is not None:
         parts.append(f'Total experience: {candidate.total_experience_years} years')
     if candidate.cv_summary:
