@@ -68,12 +68,17 @@ CREATE OR ALTER PROCEDURE dbo.sp_intake_add_candidate
     -- @education_json is NULL/empty, so the disabled legacy
     -- CV-Automation-Flow (single-string only) keeps working unmodified.
     @education_json          nvarchar(max)  = NULL,
-    -- Resolved by candidates/job_matching.py (called via CVExtractAPIView)
-    -- against @role_applied - catches wording the exact-title match below
-    -- misses (a qualifier like "- UAE" on the vacancy, an extra word like
-    -- "Role", a compound "X and Y" application). Takes priority over the
-    -- exact match when set; NULL (unmatched, or the disabled legacy flow
-    -- which never sends this) falls through to the exact match as before.
+    -- The same CV-reading Azure OpenAI call (candidates/cv_extraction.py)
+    -- is also given the list of currently open vacancies and asked to pick
+    -- the one this application is clearly for, if any - see
+    -- prompts/cv_extraction.py's matched_job_title (rule 11) and
+    -- CVExtractAPIView, which resolves that title to this id. Catches
+    -- wording the exact-title match below misses (a qualifier like "- UAE"
+    -- on the vacancy, an extra word like "Role", a compound "X and Y"
+    -- application) using the model's judgement rather than string tricks.
+    -- Takes priority over the exact match when set; NULL (no confident
+    -- match, or the disabled legacy flow which never sends this) falls
+    -- through to the exact match as before.
     @matched_job_id          bigint         = NULL
 AS
 BEGIN

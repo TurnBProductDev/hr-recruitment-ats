@@ -2,75 +2,93 @@
 or page images for a scanned CV) and extracts every Candidate field plus a
 structured Experience list, in one Azure OpenAI call."""
 
-RESPONSE_JSON_SCHEMA = {
-    'name': 'candidate_cv_profile',
-    'strict': True,
-    'schema': {
-        'type': 'object',
-        'properties': {
-            'name': {'type': ['string', 'null']},
-            'email': {'type': ['string', 'null']},
-            'mobile': {'type': ['string', 'null']},
-            'dob': {'type': ['string', 'null'], 'description': 'YYYY-MM-DD if the CV states a birth date, else null.'},
-            'current_location': {'type': ['string', 'null']},
-            'linkedin': {'type': ['string', 'null']},
-            'portfolio_url': {'type': ['string', 'null']},
-            'qualification': {'type': ['string', 'null'],
-                              'description': "Highest/most recent degree, formatted 'Degree - Institution - Year'."},
-            'last_role': {'type': ['string', 'null']},
-            'last_company': {'type': ['string', 'null']},
-            'total_experience_years': {'type': ['number', 'null']},
-            'skills': {'type': ['string', 'null'], 'description': 'Comma-separated key skills.'},
-            'notice_period': {'type': ['string', 'null']},
-            'expected_salary': {'type': ['string', 'null']},
-            'current_salary': {'type': ['string', 'null']},
-            'role_applied': {'type': ['string', 'null']},
-            'source': {'type': ['string', 'null'],
-                       'description': "Application source inferred from the email context (not the CV) - "
-                                      "'Linked In' if from LinkedIn, 'Referral' if a referral, 'Indeed' if "
-                                      "from Indeed, 'Naukri' if from Naukri, else 'Careers'. Null if there's "
-                                      "no email context to infer it from."},
-            'summary': {'type': ['string', 'null'],
-                        'description': 'A short Markdown summary: overview, technical competencies, experience highlights, education/logistics.'},
-            'experience': {
-                'type': 'array',
-                'items': {
-                    'type': 'object',
-                    'properties': {
-                        'company_name': {'type': 'string'},
-                        'designation': {'type': ['string', 'null']},
-                        'start_date': {'type': ['string', 'null'], 'description': 'YYYY-MM if known.'},
-                        'end_date': {'type': ['string', 'null'], 'description': "YYYY-MM, or null if 'Present'/current."},
-                        'skills': {'type': ['string', 'null'], 'description': 'Comma-separated tools/skills used in this role.'},
+
+def response_json_schema(open_job_titles):
+    """open_job_titles: the currently open, non-archived vacancy titles
+    (careers-mailbox intake only - see candidates.views.CVExtractAPIView) to
+    let the model match role_applied against, as a strict enum so it can
+    only ever return one of these exact titles or null - never an invented
+    one. Empty for Bulk Upload CV, where the vacancy is already picked on
+    the upload screen - the enum then only contains null, so the model
+    always returns that."""
+    return {
+        'name': 'candidate_cv_profile',
+        'strict': True,
+        'schema': {
+            'type': 'object',
+            'properties': {
+                'matched_job_title': {
+                    'type': ['string', 'null'],
+                    'enum': [*open_job_titles, None],
+                    'description': (
+                        'Which of the given open vacancies (if any) this application is clearly for - '
+                        'exact title from the list, or null if none clearly match. See rule 11.'
+                    ),
+                },
+                'name': {'type': ['string', 'null']},
+                'email': {'type': ['string', 'null']},
+                'mobile': {'type': ['string', 'null']},
+                'dob': {'type': ['string', 'null'], 'description': 'YYYY-MM-DD if the CV states a birth date, else null.'},
+                'current_location': {'type': ['string', 'null']},
+                'linkedin': {'type': ['string', 'null']},
+                'portfolio_url': {'type': ['string', 'null']},
+                'qualification': {'type': ['string', 'null'],
+                                  'description': "Highest/most recent degree, formatted 'Degree - Institution - Year'."},
+                'last_role': {'type': ['string', 'null']},
+                'last_company': {'type': ['string', 'null']},
+                'total_experience_years': {'type': ['number', 'null']},
+                'skills': {'type': ['string', 'null'], 'description': 'Comma-separated key skills.'},
+                'notice_period': {'type': ['string', 'null']},
+                'expected_salary': {'type': ['string', 'null']},
+                'current_salary': {'type': ['string', 'null']},
+                'role_applied': {'type': ['string', 'null']},
+                'source': {'type': ['string', 'null'],
+                           'description': "Application source inferred from the email context (not the CV) - "
+                                          "'Linked In' if from LinkedIn, 'Referral' if a referral, 'Indeed' if "
+                                          "from Indeed, 'Naukri' if from Naukri, else 'Careers'. Null if there's "
+                                          "no email context to infer it from."},
+                'summary': {'type': ['string', 'null'],
+                            'description': 'A short Markdown summary: overview, technical competencies, experience highlights, education/logistics.'},
+                'experience': {
+                    'type': 'array',
+                    'items': {
+                        'type': 'object',
+                        'properties': {
+                            'company_name': {'type': 'string'},
+                            'designation': {'type': ['string', 'null']},
+                            'start_date': {'type': ['string', 'null'], 'description': 'YYYY-MM if known.'},
+                            'end_date': {'type': ['string', 'null'], 'description': "YYYY-MM, or null if 'Present'/current."},
+                            'skills': {'type': ['string', 'null'], 'description': 'Comma-separated tools/skills used in this role.'},
+                        },
+                        'required': ['company_name', 'designation', 'start_date', 'end_date', 'skills'],
+                        'additionalProperties': False,
                     },
-                    'required': ['company_name', 'designation', 'start_date', 'end_date', 'skills'],
-                    'additionalProperties': False,
+                },
+                'education': {
+                    'type': 'array',
+                    'description': 'Every degree/qualification listed on the CV, most recent first - not just the highest one.',
+                    'items': {
+                        'type': 'object',
+                        'properties': {
+                            'qualification': {'type': 'string', 'description': "Degree name, e.g. 'MBA', 'B.Tech Computer Science', '12th Grade'."},
+                            'institution': {'type': ['string', 'null']},
+                            'year_completed': {'type': ['integer', 'null']},
+                            'percentage': {'type': ['number', 'null'], 'description': 'Percentage/CGPA as stated, else null.'},
+                            'specialization': {'type': ['string', 'null']},
+                        },
+                        'required': ['qualification', 'institution', 'year_completed', 'percentage', 'specialization'],
+                        'additionalProperties': False,
+                    },
                 },
             },
-            'education': {
-                'type': 'array',
-                'description': 'Every degree/qualification listed on the CV, most recent first - not just the highest one.',
-                'items': {
-                    'type': 'object',
-                    'properties': {
-                        'qualification': {'type': 'string', 'description': "Degree name, e.g. 'MBA', 'B.Tech Computer Science', '12th Grade'."},
-                        'institution': {'type': ['string', 'null']},
-                        'year_completed': {'type': ['integer', 'null']},
-                        'percentage': {'type': ['number', 'null'], 'description': 'Percentage/CGPA as stated, else null.'},
-                        'specialization': {'type': ['string', 'null']},
-                    },
-                    'required': ['qualification', 'institution', 'year_completed', 'percentage', 'specialization'],
-                    'additionalProperties': False,
-                },
-            },
+            'required': ['matched_job_title', 'name', 'email', 'mobile', 'dob', 'current_location', 'linkedin',
+                         'portfolio_url', 'qualification', 'last_role', 'last_company', 'total_experience_years',
+                         'skills', 'notice_period', 'expected_salary', 'current_salary', 'role_applied', 'source',
+                         'summary', 'experience', 'education'],
+            'additionalProperties': False,
         },
-        'required': ['name', 'email', 'mobile', 'dob', 'current_location', 'linkedin', 'portfolio_url',
-                     'qualification', 'last_role', 'last_company', 'total_experience_years', 'skills',
-                     'notice_period', 'expected_salary', 'current_salary', 'role_applied', 'source',
-                     'summary', 'experience', 'education'],
-        'additionalProperties': False,
-    },
-}
+    }
+
 
 SYSTEM_PROMPT = (
     "You are an expert HR data extraction specialist. Read the candidate's CV (given as text, or as page "
@@ -96,6 +114,13 @@ SYSTEM_PROMPT = (
     "'Careers'. Null if there's no email context at all (e.g. a bulk upload with no email involved).\n"
     "10. summary: 4 short Markdown sections - Candidate Overview, Core Technical Competencies (a table), "
     "Professional Experience Highlights (bullets), and Education/Logistics - matching the tone of an "
-    "experienced HR analyst's notes. Base it strictly on the CV text; do not invent achievements.\n\n"
+    "experienced HR analyst's notes. Base it strictly on the CV text; do not invent achievements.\n"
+    "11. matched_job_title: if a list of open vacancies is given below, pick the ONE that this application is "
+    "clearly for - same role by meaning, even if worded differently (e.g. 'HR Role' can mean 'HRBP' if that's "
+    "the only HR-shaped opening given; 'Sales Associate - Analytics & AI' means the 'Sales Associate' opening, "
+    "not a made-up combination). Return null if nothing on the list is clearly the same role, or if no list is "
+    "given at all - a wrong match is worse than leaving this null, so when genuinely unsure, return null rather "
+    "than guessing from superficial keyword overlap (e.g. 'Accountant' is NOT a match for 'Analytics "
+    "Consultant' just because both contain similar letters).\n\n"
     "Return ONLY the JSON object described by the schema. No markdown formatting, no commentary."
 )

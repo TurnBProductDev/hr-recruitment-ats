@@ -21,7 +21,7 @@ from interviews.models import Interview, InterviewReschedule, InterviewRequest
 from jobs.models import Job
 
 from . import (
-    bulk, cv_extraction, cv_parser, cv_storage, job_matching, match_scoring, rejection_emails,
+    bulk, cv_extraction, cv_parser, cv_storage, match_scoring, rejection_emails,
     screening_questions, scoring, services,
 )
 from .forms import (
@@ -1812,12 +1812,19 @@ class BulkUploadRetryView(GroupRequiredMixin, View):
 @method_decorator(csrf_exempt, name='dispatch')
 class CVExtractAPIView(View):
     """POST a CV (+ optional email context) here, get back every field
-    candidates/cv_extraction.py can read from it, as JSON - plus a best-guess
-    matched_job_id (see job_matching.py) for the extracted role_applied text,
-    since sp_intake_add_candidate's own vacancy resolution is exact-title-
-    match only and was missing most real applications. Passed through by the
+    candidates/cv_extraction.py can read from it, as JSON - plus a
+    matched_job_id, the model's own best guess at which currently open
+    vacancy this application is for (see prompts/cv_extraction.py's
+    matched_job_title, rule 11), since sp_intake_add_candidate's own vacancy
+    resolution is exact-title-match only and was missing most real
+    applications (a vacancy title with a qualifier, an applicant's wording
+    with an extra word, two roles named together). Passed through by the
     Logic App into the stored procedure's @matched_job_id parameter, which
-    takes priority over that exact match when set.
+    takes priority over that exact match when set. Resolved to an id here
+    (not left as a title) since the model can only pick from the exact
+    titles it was given, but a title could in principle go stale between
+    that call and this lookup (a vacancy closing/archiving mid-request) -
+    filtering to still-open here catches that edge case too.
 
     Built for CV-Automation-Flow-Final (see logic_apps/README.md) - the
     careers-mailbox intake Logic App's equivalent of what Bulk Upload CV
@@ -1851,17 +1858,23 @@ class CVExtractAPIView(View):
             email_context = (f"Email Subject: {payload.get('email_subject') or ''}\n\n"
                              f"Email Body: {payload.get('email_body') or ''}")
 
+        open_job_titles = list(
+            Job.objects.filter(status=Job.Status.OPEN, is_archived=False).values_list('title', flat=True))
         try:
             fields = cv_extraction.extract_profile(
                 content, role_hint=payload.get('role_hint'), source_hint=payload.get('source_hint'),
-                email_context=email_context)
+                email_context=email_context, open_job_titles=open_job_titles)
         except cv_extraction.CVExtractionError as exc:
             # HTTP 200 with status: error, same convention as the Logic Apps
             # this replaces - the caller reads the body, not the status code.
             return JsonResponse({'status': 'error', 'message': str(exc)})
 
-        matched_job = job_matching.match_job_by_title(fields.get('role_applied'))
-        return JsonResponse({'status': 'ok', 'matched_job_id': matched_job.pk if matched_job else None, **fields})
+        matched_title = fields.pop('matched_job_title', None)
+        matched_job_id = None
+        if matched_title:
+            matched_job_id = Job.objects.filter(
+                title=matched_title, status=Job.Status.OPEN, is_archived=False).values_list('pk', flat=True).first()
+        return JsonResponse({'status': 'ok', 'matched_job_id': matched_job_id, **fields})
 
 
 class ScoreCandidatesView(GroupRequiredMixin, View):

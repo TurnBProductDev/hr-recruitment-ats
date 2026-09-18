@@ -23,7 +23,7 @@ from interviews.models import Interview, InterviewRequest
 from jobs.models import Job
 
 from . import (
-    bulk, cv_extraction, cv_parser, job_matching, logic_app_mail, match_scoring, rejection_emails,
+    bulk, cv_extraction, cv_parser, logic_app_mail, match_scoring, rejection_emails,
     screening_questions, scoring, services, views,
 )
 from .cv_extraction import CVExtractionError
@@ -50,6 +50,7 @@ PARSED = {
 
 # candidates.cv_extraction.extract_profile's return shape - see BulkProcessingTests.
 PROFILE = {
+    'matched_job_title': None,
     'full_name': 'Asha Menon',
     'email': 'asha.menon@example.com',
     'phone': '+91-9876543210',
@@ -140,6 +141,46 @@ class CVExtractionHelperTests(TestCase):
     def test_clean_experience_caps_at_thirty(self):
         raw = [{'company_name': f'Co {i}'} for i in range(40)]
         self.assertEqual(len(cv_extraction._clean_experience(raw)), 30)
+
+
+@override_settings(AZURE_OPENAI_ENDPOINT='https://example.openai.azure.com', AZURE_OPENAI_KEY='fake-key')
+class ExtractProfileMatchedJobTests(TestCase):
+    """candidates.cv_extraction.extract_profile's open_job_titles ->
+    matched_job_title round trip (see CVExtractAPIView, which is what
+    actually supplies open_job_titles - Bulk Upload never does)."""
+
+    def _response(self, matched_job_title=None):
+        body = {'matched_job_title': matched_job_title, 'name': 'Rose E G', 'email': 'rose@example.com',
+                'mobile': None, 'dob': None, 'current_location': None, 'linkedin': None, 'portfolio_url': None,
+                'qualification': None, 'last_role': None, 'last_company': None, 'total_experience_years': None,
+                'skills': None, 'notice_period': None, 'expected_salary': None, 'current_salary': None,
+                'role_applied': 'HR Role', 'source': None, 'summary': None, 'experience': [], 'education': []}
+        response = mock.Mock(status_code=200, text='')
+        response.json.return_value = {'choices': [{'message': {'content': json.dumps(body)}}]}
+        return response
+
+    def test_open_job_titles_become_a_strict_enum_on_the_schema(self):
+        with mock.patch('candidates.cv_extraction.pdf_text.extract_text', return_value='some cv text'), \
+             mock.patch('candidates.cv_extraction.requests.post', return_value=self._response()) as post:
+            cv_extraction.extract_profile(b'%PDF-1.4', open_job_titles=['HRBP', 'Marketing Associate'])
+        schema = post.call_args.kwargs['json']['response_format']['json_schema']
+        self.assertEqual(
+            schema['schema']['properties']['matched_job_title']['enum'],
+            ['HRBP', 'Marketing Associate', None])
+
+    def test_no_open_job_titles_means_the_model_can_only_return_null(self):
+        with mock.patch('candidates.cv_extraction.pdf_text.extract_text', return_value='some cv text'), \
+             mock.patch('candidates.cv_extraction.requests.post', return_value=self._response()) as post:
+            cv_extraction.extract_profile(b'%PDF-1.4')
+        schema = post.call_args.kwargs['json']['response_format']['json_schema']
+        self.assertEqual(schema['schema']['properties']['matched_job_title']['enum'], [None])
+
+    def test_matched_job_title_passes_through_to_the_result(self):
+        with mock.patch('candidates.cv_extraction.pdf_text.extract_text', return_value='some cv text'), \
+             mock.patch('candidates.cv_extraction.requests.post',
+                        return_value=self._response(matched_job_title='HRBP')):
+            fields = cv_extraction.extract_profile(b'%PDF-1.4', open_job_titles=['HRBP'])
+        self.assertEqual(fields['matched_job_title'], 'HRBP')
 
 
 class MapFieldsTests(TestCase):
@@ -454,69 +495,40 @@ class CVExtractAPIViewTests(TestCase):
         self.assertEqual(data['status'], 'error')
         self.assertIn('could not read this cv', data['message'].lower())
 
-    def test_matched_job_id_is_null_when_nothing_matches(self):
-        # PROFILE's role_applied is 'Data Analyst' - no such vacancy exists.
+    def test_open_job_titles_are_passed_to_extraction(self):
+        Job.objects.create(title='HRBP', status=Job.Status.OPEN)
+        Job.objects.create(title='General Application', status=Job.Status.CLOSED)
+        Job.objects.create(title='Archived Role', status=Job.Status.OPEN, is_archived=True)
+        with mock.patch('candidates.views.cv_extraction.extract_profile', return_value=PROFILE) as extract:
+            self._post({'content_base64': base64.b64encode(b'%PDF-1.4 fake').decode()})
+        # Only still-open, non-archived titles are offered - not General
+        # Application (closed) or the archived one.
+        self.assertEqual(extract.call_args.kwargs['open_job_titles'], ['HRBP'])
+
+    def test_matched_job_id_is_null_when_the_model_returns_no_match(self):
         with mock.patch('candidates.views.cv_extraction.extract_profile', return_value=PROFILE):
             response = self._post({'content_base64': base64.b64encode(b'%PDF-1.4 fake').decode()})
         self.assertIsNone(response.json()['matched_job_id'])
 
-    def test_matched_job_id_is_set_when_role_applied_matches_an_open_vacancy(self):
-        job = Job.objects.create(title='Data Analyst', status=Job.Status.OPEN)
-        with mock.patch('candidates.views.cv_extraction.extract_profile', return_value=PROFILE):
+    def test_matched_job_id_resolves_the_models_matched_title_to_a_real_id(self):
+        job = Job.objects.create(title='HRBP', status=Job.Status.OPEN)
+        result = {**PROFILE, 'matched_job_title': 'HRBP'}
+        with mock.patch('candidates.views.cv_extraction.extract_profile', return_value=result):
             response = self._post({'content_base64': base64.b64encode(b'%PDF-1.4 fake').decode()})
-        self.assertEqual(response.json()['matched_job_id'], job.pk)
+        data = response.json()
+        self.assertEqual(data['matched_job_id'], job.pk)
+        # The raw title isn't leaked into the response - only the resolved id.
+        self.assertNotIn('matched_job_title', data)
 
-
-class JobMatchingTests(TestCase):
-    """candidates/job_matching.py - the careers-intake fuzzy fallback for when
-    @role_applied doesn't exactly match a vacancy title (see
-    sql/sp_intake_add_candidate.sql's @matched_job_id parameter)."""
-
-    def setUp(self):
-        self.analytics = Job.objects.create(title='Analytics Consultant AI', status=Job.Status.OPEN)
-        self.hrbp = Job.objects.create(title='HRBP', status=Job.Status.OPEN)
-        self.marketing = Job.objects.create(title='Marketing Associate', status=Job.Status.OPEN)
-        self.sales_mkt_uae = Job.objects.create(
-            title='Sales and Marketing Manager - UAE', status=Job.Status.OPEN)
-        self.sales = Job.objects.create(title='Sales Associate', status=Job.Status.OPEN)
-
-    def test_extra_qualifier_on_the_vacancy_title_still_matches(self):
-        self.assertEqual(
-            job_matching.match_job_by_title('Sales and Marketing Manager'), self.sales_mkt_uae)
-
-    def test_extra_word_on_the_applied_text_still_matches(self):
-        self.assertEqual(job_matching.match_job_by_title('HRBP Role'), self.hrbp)
-
-    def test_spaced_out_acronym_still_matches(self):
-        self.assertEqual(job_matching.match_job_by_title('HR BP ROLE'), self.hrbp)
-
-    def test_compound_role_text_prefers_the_more_specific_title(self):
-        self.assertEqual(
-            job_matching.match_job_by_title('Marketing Associate and Sales Associate'), self.marketing)
-        self.assertEqual(
-            job_matching.match_job_by_title('Sales Associate – Analytics & AI'), self.sales)
-
-    def test_too_generic_to_safely_match_falls_through(self):
-        # "HR Role" alone doesn't say BP - real accuracy over recall here.
-        self.assertIsNone(job_matching.match_job_by_title('HR Role'))
-
-    def test_unrelated_roles_do_not_false_positive_on_letter_overlap(self):
-        # A plain character-similarity score once rated 'Accountant' a good
-        # match for 'Analytics Consultant AI' on coincidental letter overlap.
-        for role in ['Accountant', 'Operations Manager', 'Finance Manager',
-                     'Software Engineer', 'Business Analyst']:
-            self.assertIsNone(job_matching.match_job_by_title(role), role)
-
-    def test_closed_or_archived_jobs_are_never_matched(self):
-        Job.objects.create(title='Retired Role', status=Job.Status.CLOSED)
-        Job.objects.create(title='Archived Role', status=Job.Status.OPEN, is_archived=True)
-        self.assertIsNone(job_matching.match_job_by_title('Retired Role'))
-        self.assertIsNone(job_matching.match_job_by_title('Archived Role'))
-
-    def test_blank_or_too_short_applied_text_returns_none(self):
-        self.assertIsNone(job_matching.match_job_by_title(None))
-        self.assertIsNone(job_matching.match_job_by_title(''))
-        self.assertIsNone(job_matching.match_job_by_title('AI'))
+    def test_matched_job_id_is_null_if_the_matched_title_is_no_longer_open(self):
+        # Defensive: the model can only pick from titles it was given, but
+        # one could in principle close/archive between that call and this
+        # lookup - treat a stale title the same as no match, not a crash.
+        Job.objects.create(title='HRBP', status=Job.Status.CLOSED)
+        result = {**PROFILE, 'matched_job_title': 'HRBP'}
+        with mock.patch('candidates.views.cv_extraction.extract_profile', return_value=result):
+            response = self._post({'content_base64': base64.b64encode(b'%PDF-1.4 fake').decode()})
+        self.assertIsNone(response.json()['matched_job_id'])
 
 
 class BackButtonTests(TestCase):

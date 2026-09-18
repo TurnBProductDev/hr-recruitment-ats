@@ -23,7 +23,7 @@ import requests
 from django.conf import settings
 
 from HR_management import pdf_text
-from prompts.cv_extraction import RESPONSE_JSON_SCHEMA, SYSTEM_PROMPT
+from prompts.cv_extraction import SYSTEM_PROMPT, response_json_schema
 from prompts.store import render_prompt
 
 logger = logging.getLogger(__name__)
@@ -139,7 +139,7 @@ def _build_messages(cv_text, page_images):
     ]
 
 
-def extract_profile(content, role_hint=None, source_hint=None, email_context=None):
+def extract_profile(content, role_hint=None, source_hint=None, email_context=None, open_job_titles=None):
     """Read a CV (raw PDF bytes) and return a dict of Candidate-shaped fields
     plus an 'experience' list of CandidateExperience-shaped dicts and an
     'education' list of CandidateEducation-shaped dicts.
@@ -150,6 +150,13 @@ def extract_profile(content, role_hint=None, source_hint=None, email_context=Non
     (the careers-mailbox intake's email Subject + Body) for the model to
     infer role_applied/source *from*, the way Extract_completion's prompt
     used to.
+
+    open_job_titles: currently open, non-archived vacancy titles (careers-
+    mailbox intake only - see CVExtractAPIView) - lets the model match the
+    application to one of them (returned as 'matched_job_title', see
+    prompts/cv_extraction.py), on top of the free-text role_applied it
+    already extracts. Omitted/empty for Bulk Upload CV, where the vacancy is
+    already fixed by the upload screen.
 
     Raises CVExtractionError (message fit for the results screen) only when
     nothing could be read at all - a partially-empty result is not an error,
@@ -168,6 +175,7 @@ def extract_profile(content, role_hint=None, source_hint=None, email_context=Non
         if not cv_text and not page_images:
             raise CVExtractionError('Could not read this CV - the file may be corrupted.')
 
+    open_job_titles = list(open_job_titles or [])
     hint_lines = []
     if email_context:
         hint_lines.append(email_context)
@@ -175,6 +183,9 @@ def extract_profile(content, role_hint=None, source_hint=None, email_context=Non
         hint_lines.append(f'Vacancy applied to (from the upload/email context): {role_hint}')
     if source_hint:
         hint_lines.append(f'Application source: {source_hint}')
+    if open_job_titles:
+        hint_lines.append('Open vacancies to match against for matched_job_title (see rule 11):\n' +
+                          '\n'.join(f'- {t}' for t in open_job_titles))
     messages = _build_messages(
         ('\n'.join(hint_lines) + '\n\n' + cv_text) if hint_lines else cv_text, page_images)
 
@@ -182,7 +193,7 @@ def extract_profile(content, role_hint=None, source_hint=None, email_context=Non
         'messages': messages,
         'temperature': 0,
         'max_tokens': 1800,
-        'response_format': {'type': 'json_schema', 'json_schema': RESPONSE_JSON_SCHEMA},
+        'response_format': {'type': 'json_schema', 'json_schema': response_json_schema(open_job_titles)},
     }
     timeout = int(getattr(settings, 'CV_PARSER_TIMEOUT', 180))
 
@@ -208,6 +219,7 @@ def extract_profile(content, role_hint=None, source_hint=None, email_context=Non
     email = (_clean(raw.get('email')) or '').lower().replace(' ', '')
 
     return {
+        'matched_job_title': _clean(raw.get('matched_job_title'), 255),
         'full_name': _clean(raw.get('name'), 255),
         'email': email or None,
         'phone': _clean(raw.get('mobile'), 20),

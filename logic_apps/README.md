@@ -264,7 +264,7 @@ actions produced no link (`Create_file_1` or the sharing-link step failed),
 `Respond` takes the else branch and returns `status: error` with the first
 failed action's message, instead of a misleadingly-`ok` empty response.
 
-### Vacancy matching now has a fuzzy fallback (`matched_job_id`)
+### Vacancy matching now has an AI fallback (`matched_job_id`)
 
 `sp_intake_add_candidate`'s own vacancy resolution is an exact, case-
 insensitive title match on `@role_applied` - it was missing most real
@@ -273,18 +273,26 @@ Manager **- UAE**", an applicant who wrote "**HRBP Role**" instead of
 "HRBP", or "Sales Associate **and** Marketing Associate" naming two roles
 at once all fell through to General Application).
 
-`CVExtractAPIView` now also runs `candidates/job_matching.py` against the
-extracted `role_applied` text and returns a `matched_job_id` (an open,
-non-archived Job's id, or `null`) alongside the other fields - see that
-module's docstring for why it's substring containment on letters-only text,
-not a character-similarity score (a similarity score was tried first and
-rated "Accountant" a good match for "Analytics Consultant AI" on
-coincidental letter overlap). Both `Execute stored procedure (V2)` actions
-now pass this straight through as `matched_job_id`; the procedure uses it
-ahead of its own exact match when it resolves to a real, still-open row,
-and falls back to the exact match (then General Application) exactly as
-before when it's `null` - so the disabled legacy `CV-Automation-Flow`,
-which never sends this parameter, is unaffected.
+A string-similarity fallback was tried first (substring containment on
+letters-only text) and worked, but the ask was to use the CV-reading model's
+own judgement instead of string tricks. So `CVExtractAPIView` now passes the
+currently open, non-archived vacancy titles into the *same* Azure OpenAI
+call `candidates/cv_extraction.py` already makes per CV (no second call, no
+extra cost/latency) - see `prompts/cv_extraction.py`'s `matched_job_title`
+field (rule 11): a strict JSON-schema enum of exactly those titles plus
+`null`, so the model can only ever return one of the real given titles or
+null, never an invented one. The prompt explicitly favours null over a
+guess ("a wrong match is worse than General Application"), which is what
+keeps this safe against a case like rating "Accountant" a match for
+"Analytics Consultant AI" on superficial wording. `CVExtractAPIView`
+resolves that title to a real, still-open Job's id (defensive: a title
+could in principle go stale between the AI call and this lookup) and
+returns it as `matched_job_id`, dropping the raw title from the response.
+Both `Execute stored procedure (V2)` actions pass this straight through;
+the procedure uses it ahead of its own exact match when set, and falls back
+to the exact match (then General Application) exactly as before when it's
+`null` - so the disabled legacy `CV-Automation-Flow`, which never sends
+this parameter, is unaffected.
 
 ## Extending the extracted fields
 
