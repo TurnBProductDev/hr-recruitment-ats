@@ -434,6 +434,12 @@ html { scroll-behavior: smooth; }
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
           <div class="section-eyebrow mb-0"><i class="bi bi-check-circle-fill"></i> {{ stage.label }}</div>
           <div class="d-flex align-items-center gap-2">
+            {% if stage.comm_channel == 'PHONE' %}
+            <button type="button" class="btn btn-sm btn-outline-app" data-bs-toggle="modal" data-bs-target="#screeningQuestionsModal"
+                    data-load-url="{% url 'candidate_screening_questions' candidate.pk %}">
+              <i class="bi bi-question-circle"></i> {% if candidate.screening_questions %}View{% else %}Generate{% endif %} Questions
+            </button>
+            {% endif %}
             {% if stage.decision %}<span class="stage-decision-badge stage-tone-{{ stage.decision.tone }}">{{ stage.decision.label }}</span>{% endif %}
           </div>
         </div>
@@ -449,6 +455,12 @@ html { scroll-behavior: smooth; }
             {% if stage.interview_rounds and stage.round_phase == 'schedule' %}{{ stage.schedule_label }}{% else %}{{ stage.label }}{% endif %}
           </div>
           <div class="d-flex align-items-center gap-2">
+            {% if stage.comm_channel == 'PHONE' %}
+            <button type="button" class="btn btn-sm btn-outline-app" data-bs-toggle="modal" data-bs-target="#screeningQuestionsModal"
+                    data-load-url="{% url 'candidate_screening_questions' candidate.pk %}">
+              <i class="bi bi-question-circle"></i> {% if candidate.screening_questions %}View{% else %}Generate{% endif %} Questions
+            </button>
+            {% endif %}
             {% if stage.latest_call %}<span class="call-status-badge">{{ stage.latest_call.get_outcome_display }}</span>{% endif %}
             {% if is_on_hold %}<span class="hold-banner"><i class="bi bi-pause-circle-fill"></i> On Hold</span>{% endif %}
           </div>
@@ -829,6 +841,20 @@ html { scroll-behavior: smooth; }
   </div>
 </div>
 
+<div class="modal fade" id="screeningQuestionsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Tele Screening Questions</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="screeningQuestionsBody">
+        <div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm"></span> Loading…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal fade" id="rejectionModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
@@ -1132,6 +1158,22 @@ pollCandidateAction("{% url 'candidate_rescore_status' candidate.pk %}");
         else if (submitBtn) { submitBtn.disabled = false; }
       })
       .catch(function () { if (submitBtn) { submitBtn.disabled = false; } });
+  });
+})();
+
+// Tele Screening Questions popup: generated on first open (see
+// CandidateScreeningQuestionsView), just displayed on every open after that.
+(function () {
+  var modalEl = document.getElementById('screeningQuestionsModal');
+  if (!modalEl) return;
+  var body = document.getElementById('screeningQuestionsBody');
+  modalEl.addEventListener('show.bs.modal', function (event) {
+    var btn = event.relatedTarget;
+    body.innerHTML = '<div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm"></span> Generating…</div>';
+    fetch(btn.dataset.loadUrl, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+      .then(function (r) { return r.text(); })
+      .then(function (html) { body.innerHTML = html; })
+      .catch(function () { body.innerHTML = '<div class="alert alert-danger">Could not load questions. Please try again.</div>'; });
   });
 })();
 
