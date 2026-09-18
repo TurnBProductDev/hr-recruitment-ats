@@ -1930,11 +1930,12 @@ class ScoringCriteriaView(GroupRequiredMixin, View):
     rubric (e.g. "weight AI/ML skills higher") - one role at a time, since
     what should score higher for an AI role and a Sales role are rarely the
     same thing (see ScoringCriteria's own docstring for how it reaches the
-    prompt). Admin-only: unlike Score Candidates itself, this changes the
-    rubric for every future score on a role, not just one run, so it's a
-    more consequential lever than Recruiter's day-to-day scoring actions."""
+    prompt). Open to Recruiter as well as HR Admin, same as the
+    extra_scoring_criteria field on the Vacancy form itself (jobs.views.
+    _can_set_scoring_criteria) - there's no reason this dedicated page should
+    be more locked down than the other place the same field is edited."""
     template_name = 'candidates/scoring_criteria.html'
-    allowed_groups = (HR_ADMIN,)
+    allowed_groups = (HR_ADMIN, RECRUITER)
 
     def _job_list(self):
         return (Job.objects.exclude(title__iexact=GENERAL_APPLICATION)
@@ -1969,8 +1970,10 @@ class ScoringCriteriaRescoreView(GroupRequiredMixin, View):
     page, since saving new criteria text has no effect on anyone already
     scored until they're re-scored (see candidates.scoring.start_bulk_rescore).
     Scoped to this one role, not every role - criteria (and so the reason to
-    re-score) is per-role now."""
-    allowed_groups = (HR_ADMIN,)
+    re-score) is per-role now. Same access as ScoringCriteriaView itself -
+    Recruiter can save criteria on this page, so it needs this button to
+    work too."""
+    allowed_groups = (HR_ADMIN, RECRUITER)
 
     def post(self, request, job_id):
         job = get_object_or_404(Job, pk=job_id)

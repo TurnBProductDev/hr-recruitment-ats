@@ -2193,8 +2193,8 @@ class ScoringCriteriaPromptAndCacheTests(TestCase):
 
 
 class ScoringCriteriaViewTests(TestCase):
-    """HR Admin only (a more consequential lever than day-to-day scoring
-    actions - it changes the rubric for every future score on a role)."""
+    """HR Admin and Recruiter (same access as the extra_scoring_criteria
+    field on the Vacancy form itself - see jobs.views._can_set_scoring_criteria)."""
 
     def setUp(self):
         self.admin = get_user_model().objects.create_user('admin1', password='pw')
@@ -2203,10 +2203,10 @@ class ScoringCriteriaViewTests(TestCase):
         self.recruiter.groups.add(Group.objects.get_or_create(name=RECRUITER)[0])
         self.job = Job.objects.create(job_code='J1', title='Analytics Consultant AI')
 
-    def test_recruiter_cannot_reach_the_page(self):
+    def test_recruiter_can_reach_the_page(self):
         self.client.login(username='rec1', password='pw')
         response = self.client.get(f"{reverse('scoring_criteria')}?job={self.job.pk}")
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 200)
 
     def test_no_role_selected_shows_the_picker_only(self):
         self.client.login(username='admin1', password='pw')
@@ -2223,17 +2223,22 @@ class ScoringCriteriaViewTests(TestCase):
         self.assertEqual(criteria.extra_instructions, 'Weight AI/ML skills higher.')
         self.assertEqual(criteria.updated_by, self.admin)
 
-    def test_recruiter_cannot_save(self):
+    def test_recruiter_can_save(self):
         self.client.login(username='rec1', password='pw')
         response = self.client.post(reverse('scoring_criteria'),
-                                    {'job': self.job.pk, 'extra_instructions': 'Sneaky edit.'})
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(ScoringCriteria.load_for(self.job).extra_instructions, '')
+                                    {'job': self.job.pk, 'extra_instructions': 'Weight AI/ML skills higher.'})
+        self.assertRedirects(response, f"{reverse('scoring_criteria')}?job={self.job.pk}")
+        criteria = ScoringCriteria.load_for(self.job)
+        self.assertEqual(criteria.extra_instructions, 'Weight AI/ML skills higher.')
+        self.assertEqual(criteria.updated_by, self.recruiter)
 
-    def test_rescore_this_role_requires_admin(self):
+    def test_rescore_this_role_allows_recruiter(self):
         self.client.login(username='rec1', password='pw')
-        response = self.client.post(reverse('scoring_criteria_rescore', args=[self.job.pk]))
-        self.assertEqual(response.status_code, 403)
+        with self.settings(AZURE_OPENAI_ENDPOINT='https://example.test', AZURE_OPENAI_KEY='key'):
+            with mock.patch('candidates.views.scoring.start_bulk_rescore', return_value=3) as start:
+                response = self.client.post(reverse('scoring_criteria_rescore', args=[self.job.pk]))
+        start.assert_called_once_with(job=self.job)
+        self.assertRedirects(response, f"{reverse('scoring_criteria')}?job={self.job.pk}")
 
     def test_rescore_this_role_triggers_a_scoped_bulk_rescore(self):
         self.client.login(username='admin1', password='pw')
