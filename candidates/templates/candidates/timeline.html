@@ -240,18 +240,29 @@ html { scroll-behavior: smooth; }
             </div>
             <div>
               <div class="field-label mb-1">Mapped Source</div>
-              <form method="post" action="{% url 'candidate_change_source' candidate.pk %}" class="d-flex gap-2 align-items-center">
+              <form method="post" action="{% url 'candidate_change_source' candidate.pk %}" class="d-flex gap-2 align-items-center flex-wrap">
                 {% csrf_token %}
                 {% comment %}
-                  list= offers the canonical names as suggestions without
-                  forcing one - the field is still a plain text input, so
-                  anything else can still be typed in directly.
+                  A real dropdown of the canonical names, not just a browser
+                  autocomplete hint (a datalist-backed text input used to be
+                  here - no visible affordance that a list even existed in
+                  most browsers). "Other" swaps in a plain text box for
+                  anything not on the list; this page's own extra_js folds
+                  that typed value back into this select as its submitted
+                  value on submit, so only one field is ever actually posted.
                 {% endcomment %}
-                <input type="text" name="source" value="{{ candidate.source|default:'' }}" list="sourceOptions"
-                       class="form-control form-control-sm flex-grow-1" placeholder="e.g. Careers" autocomplete="off">
-                <datalist id="sourceOptions">
-                  {% for s in source_options %}<option value="{{ s }}">{% endfor %}
-                </datalist>
+                <select name="source" id="sourceSelect" class="form-select form-select-sm" style="min-width:140px;">
+                  <option value="">— Select —</option>
+                  {% for s in source_options %}
+                  <option value="{{ s }}" {% if candidate.source == s %}selected{% endif %}>{{ s }}</option>
+                  {% endfor %}
+                  {% if candidate.source and candidate.source not in source_options %}
+                  <option value="{{ candidate.source }}" selected>{{ candidate.source }}</option>
+                  {% endif %}
+                  <option value="__other__">Other (type manually)…</option>
+                </select>
+                <input type="text" id="sourceCustomInput" class="form-control form-control-sm"
+                       placeholder="Type source…" style="min-width:140px;" hidden>
                 <button type="submit" class="btn btn-sm btn-outline-app">Save</button>
               </form>
             </div>
@@ -895,6 +906,34 @@ html { scroll-behavior: smooth; }
   if (!raw || !target || typeof marked === 'undefined' || typeof DOMPurify === 'undefined') return;
   var html = DOMPurify.sanitize(marked.parse(raw.textContent));
   target.innerHTML = html;
+})();
+
+// Mapped Source: "Other" reveals a plain text box instead of one of the
+// canonical names - its typed value gets folded into the select itself (as
+// a new, selected option) right before submit, so only the one field ever
+// actually posts, matching what CandidateChangeSourceView already expects.
+(function () {
+  var select = document.getElementById('sourceSelect');
+  var customInput = document.getElementById('sourceCustomInput');
+  var form = select && select.closest('form');
+  if (!select || !customInput || !form) return;
+
+  function syncCustomVisibility() {
+    customInput.hidden = select.value !== '__other__';
+    if (!customInput.hidden) customInput.focus();
+  }
+  select.addEventListener('change', syncCustomVisibility);
+  syncCustomVisibility();
+
+  form.addEventListener('submit', function () {
+    var typed = customInput.value.trim();
+    if (select.value === '__other__' && typed) {
+      var opt = document.createElement('option');
+      opt.value = typed;
+      opt.selected = true;
+      select.appendChild(opt);
+    }
+  });
 })();
 
 // Hide each Save button until the user types/selects something (so they don't

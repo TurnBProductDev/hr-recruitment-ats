@@ -1434,12 +1434,23 @@ class SourceMappingTests(TestCase):
         self.candidate = Candidate.objects.create(full_name='Rose E G', email='rose@example.com')
         services.record_creation(self.candidate)
 
-    def test_canonical_sources_are_offered_as_suggestions(self):
+    def test_canonical_sources_are_offered_as_dropdown_options(self):
         response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
         content = response.content.decode()
-        self.assertIn('list="sourceOptions"', content)
+        self.assertIn('id="sourceSelect"', content)
+        self.assertIn('id="sourceCustomInput"', content)
         for source in ('Careers', 'Linked In', 'Referral', 'Naukri', 'Agency', 'Other'):
-            self.assertIn(f'<option value="{source}">', content)
+            self.assertIn(f'value="{source}"', content)
+            self.assertIn(f'>{source}</option>', content)
+
+    def test_an_existing_custom_source_still_shows_up_selected(self):
+        """A source that predates the canonical list (or was typed as
+        something else entirely) must still show as the current value, not
+        silently reset to blank just because it isn't one of the presets."""
+        self.candidate.source = 'Some Job Fair'
+        self.candidate.save(update_fields=['source'])
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertContains(response, '<option value="Some Job Fair" selected>Some Job Fair</option>')
 
 
 class HiringBlockStageLabelTests(TestCase):
