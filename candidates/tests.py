@@ -23,7 +23,7 @@ from interviews.models import Interview, InterviewRequest
 from jobs.models import Job
 
 from . import (
-    bulk, cv_extraction, cv_parser, logic_app_mail, match_scoring, rejection_emails,
+    bulk, cv_extraction, cv_parser, job_matching, logic_app_mail, match_scoring, rejection_emails,
     screening_questions, scoring, services, views,
 )
 from .cv_extraction import CVExtractionError
@@ -453,6 +453,70 @@ class CVExtractAPIViewTests(TestCase):
         data = response.json()
         self.assertEqual(data['status'], 'error')
         self.assertIn('could not read this cv', data['message'].lower())
+
+    def test_matched_job_id_is_null_when_nothing_matches(self):
+        # PROFILE's role_applied is 'Data Analyst' - no such vacancy exists.
+        with mock.patch('candidates.views.cv_extraction.extract_profile', return_value=PROFILE):
+            response = self._post({'content_base64': base64.b64encode(b'%PDF-1.4 fake').decode()})
+        self.assertIsNone(response.json()['matched_job_id'])
+
+    def test_matched_job_id_is_set_when_role_applied_matches_an_open_vacancy(self):
+        job = Job.objects.create(title='Data Analyst', status=Job.Status.OPEN)
+        with mock.patch('candidates.views.cv_extraction.extract_profile', return_value=PROFILE):
+            response = self._post({'content_base64': base64.b64encode(b'%PDF-1.4 fake').decode()})
+        self.assertEqual(response.json()['matched_job_id'], job.pk)
+
+
+class JobMatchingTests(TestCase):
+    """candidates/job_matching.py - the careers-intake fuzzy fallback for when
+    @role_applied doesn't exactly match a vacancy title (see
+    sql/sp_intake_add_candidate.sql's @matched_job_id parameter)."""
+
+    def setUp(self):
+        self.analytics = Job.objects.create(title='Analytics Consultant AI', status=Job.Status.OPEN)
+        self.hrbp = Job.objects.create(title='HRBP', status=Job.Status.OPEN)
+        self.marketing = Job.objects.create(title='Marketing Associate', status=Job.Status.OPEN)
+        self.sales_mkt_uae = Job.objects.create(
+            title='Sales and Marketing Manager - UAE', status=Job.Status.OPEN)
+        self.sales = Job.objects.create(title='Sales Associate', status=Job.Status.OPEN)
+
+    def test_extra_qualifier_on_the_vacancy_title_still_matches(self):
+        self.assertEqual(
+            job_matching.match_job_by_title('Sales and Marketing Manager'), self.sales_mkt_uae)
+
+    def test_extra_word_on_the_applied_text_still_matches(self):
+        self.assertEqual(job_matching.match_job_by_title('HRBP Role'), self.hrbp)
+
+    def test_spaced_out_acronym_still_matches(self):
+        self.assertEqual(job_matching.match_job_by_title('HR BP ROLE'), self.hrbp)
+
+    def test_compound_role_text_prefers_the_more_specific_title(self):
+        self.assertEqual(
+            job_matching.match_job_by_title('Marketing Associate and Sales Associate'), self.marketing)
+        self.assertEqual(
+            job_matching.match_job_by_title('Sales Associate – Analytics & AI'), self.sales)
+
+    def test_too_generic_to_safely_match_falls_through(self):
+        # "HR Role" alone doesn't say BP - real accuracy over recall here.
+        self.assertIsNone(job_matching.match_job_by_title('HR Role'))
+
+    def test_unrelated_roles_do_not_false_positive_on_letter_overlap(self):
+        # A plain character-similarity score once rated 'Accountant' a good
+        # match for 'Analytics Consultant AI' on coincidental letter overlap.
+        for role in ['Accountant', 'Operations Manager', 'Finance Manager',
+                     'Software Engineer', 'Business Analyst']:
+            self.assertIsNone(job_matching.match_job_by_title(role), role)
+
+    def test_closed_or_archived_jobs_are_never_matched(self):
+        Job.objects.create(title='Retired Role', status=Job.Status.CLOSED)
+        Job.objects.create(title='Archived Role', status=Job.Status.OPEN, is_archived=True)
+        self.assertIsNone(job_matching.match_job_by_title('Retired Role'))
+        self.assertIsNone(job_matching.match_job_by_title('Archived Role'))
+
+    def test_blank_or_too_short_applied_text_returns_none(self):
+        self.assertIsNone(job_matching.match_job_by_title(None))
+        self.assertIsNone(job_matching.match_job_by_title(''))
+        self.assertIsNone(job_matching.match_job_by_title('AI'))
 
 
 class BackButtonTests(TestCase):

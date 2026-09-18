@@ -88,6 +88,12 @@
                           "message": {
                             "type": "string"
                           },
+                          "matched_job_id": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
                           "source": {
                             "type": [
                               "string",
@@ -225,6 +231,7 @@
                             "mail_date": "@triggerOutputs()?['body/receivedDateTime']",
                             "phone": "@body('Parse_extract_response')?['phone']",
                             "role_applied": "@body('Parse_extract_response')?['role_applied']",
+                            "matched_job_id": "@body('Parse_extract_response')?['matched_job_id']",
                             "source": "@first(body('Filter_array'))?['Agency Name']",
                             "linkedin": "@body('Parse_extract_response')?['linkedin']",
                             "portfolio_url": "@body('Parse_extract_response')?['portfolio_url']",
@@ -264,6 +271,7 @@
                               "mail_date": "@triggerOutputs()?['body/receivedDateTime']",
                               "phone": "@body('Parse_extract_response')?['phone']",
                               "role_applied": "@body('Parse_extract_response')?['role_applied']",
+                              "matched_job_id": "@body('Parse_extract_response')?['matched_job_id']",
                               "source": "@coalesce(body('Parse_extract_response')?['source'], 'Careers')",
                               "linkedin": "@body('Parse_extract_response')?['linkedin']",
                               "portfolio_url": "@body('Parse_extract_response')?['portfolio_url']",

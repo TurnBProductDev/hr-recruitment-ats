@@ -20,7 +20,10 @@ from django.views.generic import DetailView, ListView, UpdateView
 from interviews.models import Interview, InterviewReschedule, InterviewRequest
 from jobs.models import Job
 
-from . import bulk, cv_extraction, cv_parser, cv_storage, match_scoring, rejection_emails, screening_questions, scoring, services
+from . import (
+    bulk, cv_extraction, cv_parser, cv_storage, job_matching, match_scoring, rejection_emails,
+    screening_questions, scoring, services,
+)
 from .forms import (
     BulkUploadForm,
     CandidateApplicationForm,
@@ -1809,7 +1812,12 @@ class BulkUploadRetryView(GroupRequiredMixin, View):
 @method_decorator(csrf_exempt, name='dispatch')
 class CVExtractAPIView(View):
     """POST a CV (+ optional email context) here, get back every field
-    candidates/cv_extraction.py can read from it, as JSON.
+    candidates/cv_extraction.py can read from it, as JSON - plus a best-guess
+    matched_job_id (see job_matching.py) for the extracted role_applied text,
+    since sp_intake_add_candidate's own vacancy resolution is exact-title-
+    match only and was missing most real applications. Passed through by the
+    Logic App into the stored procedure's @matched_job_id parameter, which
+    takes priority over that exact match when set.
 
     Built for CV-Automation-Flow-Final (see logic_apps/README.md) - the
     careers-mailbox intake Logic App's equivalent of what Bulk Upload CV
@@ -1852,7 +1860,8 @@ class CVExtractAPIView(View):
             # this replaces - the caller reads the body, not the status code.
             return JsonResponse({'status': 'error', 'message': str(exc)})
 
-        return JsonResponse({'status': 'ok', **fields})
+        matched_job = job_matching.match_job_by_title(fields.get('role_applied'))
+        return JsonResponse({'status': 'ok', 'matched_job_id': matched_job.pk if matched_job else None, **fields})
 
 
 class ScoreCandidatesView(GroupRequiredMixin, View):

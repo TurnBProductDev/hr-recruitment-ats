@@ -67,7 +67,14 @@ CREATE OR ALTER PROCEDURE dbo.sp_intake_add_candidate
     -- recent degree" string), and as the sole source of both when
     -- @education_json is NULL/empty, so the disabled legacy
     -- CV-Automation-Flow (single-string only) keeps working unmodified.
-    @education_json          nvarchar(max)  = NULL
+    @education_json          nvarchar(max)  = NULL,
+    -- Resolved by candidates/job_matching.py (called via CVExtractAPIView)
+    -- against @role_applied - catches wording the exact-title match below
+    -- misses (a qualifier like "- UAE" on the vacancy, an extra word like
+    -- "Role", a compound "X and Y" application). Takes priority over the
+    -- exact match when set; NULL (unmatched, or the disabled legacy flow
+    -- which never sends this) falls through to the exact match as before.
+    @matched_job_id          bigint         = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -92,9 +99,14 @@ BEGIN
     -- straight from Office 365) - just use it as-is; no reconstruction needed.
     DECLARE @created datetimeoffset(7) = ISNULL(@mail_date, @now);
 
-    -- Resolve vacancy: exact title match, else General Application, else NULL
+    -- Resolve vacancy: @matched_job_id (fuzzy match, Django-side) if it's
+    -- still a real, open row - else exact title match - else General
+    -- Application, else NULL.
     DECLARE @job_id bigint = (SELECT TOP 1 id FROM dbo.jobs_job
-        WHERE LOWER(title) = LOWER(LTRIM(RTRIM(@role_applied))) ORDER BY id);
+        WHERE id = @matched_job_id AND status = 'OPEN' AND is_archived = 0);
+    IF @job_id IS NULL
+        SET @job_id = (SELECT TOP 1 id FROM dbo.jobs_job
+            WHERE LOWER(title) = LOWER(LTRIM(RTRIM(@role_applied))) ORDER BY id);
     IF @job_id IS NULL
         SET @job_id = (SELECT TOP 1 id FROM dbo.jobs_job WHERE title = 'General Application' ORDER BY id);
 
