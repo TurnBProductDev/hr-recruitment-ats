@@ -70,7 +70,7 @@ class InterviewScheduleView(GroupRequiredMixin, CreateView):
     model = Interview
     form_class = InterviewForm
     template_name = 'interviews/interview_form.html'
-    allowed_groups = (HR_ADMIN, RECRUITER)
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
 
     def dispatch(self, request, *args, **kwargs):
         self.candidate = get_object_or_404(Candidate, pk=kwargs['candidate_id'])
@@ -147,7 +147,7 @@ class InterviewAllocateView(GroupRequiredMixin, CreateView):
     model = InterviewRequest
     form_class = InterviewAllocationForm
     template_name = 'interviews/interview_allocate_form.html'
-    allowed_groups = (HR_ADMIN, RECRUITER)
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
 
     def dispatch(self, request, *args, **kwargs):
         self.candidate = get_object_or_404(Candidate, pk=kwargs['candidate_id'])
@@ -219,7 +219,7 @@ class InterviewRequestApproveView(GroupRequiredMixin, View):
     review/send, results, reschedule) is the existing flow, untouched. No
     invite is auto-sent (the popup's Send button is already paused - see
     _invite_draft_response); HR sends it manually for now."""
-    allowed_groups = (HR_ADMIN, RECRUITER)
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
 
     def post(self, request, pk):
         request_obj = get_object_or_404(
@@ -264,7 +264,7 @@ class InterviewRequestRescheduleView(GroupRequiredMixin, UpdateView):
     model = InterviewRequest
     form_class = InterviewAllocationForm
     template_name = 'interviews/interview_allocate_form.html'
-    allowed_groups = (HR_ADMIN, RECRUITER)
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
@@ -327,7 +327,7 @@ class InterviewRequestNewSlotsView(GroupRequiredMixin, View):
     """HR isn't happy with any of the proposed slots, or wants to reschedule
     after the candidate already picked one - clears the slots/pick and sends
     the interviewer back to propose a fresh set."""
-    allowed_groups = (HR_ADMIN, RECRUITER)
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
 
     def post(self, request, pk):
         request_obj = get_object_or_404(
@@ -402,7 +402,7 @@ class InterviewRescheduleView(GroupRequiredMixin, UpdateView):
     model = Interview
     form_class = InterviewForm
     template_name = 'interviews/interview_form.html'
-    allowed_groups = (HR_ADMIN, RECRUITER)
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
 
     def get_object(self, queryset=None):
         obj = super().get_object(queryset)
@@ -458,7 +458,7 @@ class InterviewMarkDoneView(GroupRequiredMixin, View):
     the pass/fail decision, which the candidate's next stage card (Cleared/
     Hold/Reject/Blacklist) makes instead - see CandidateStatusActionView,
     which settles this interview's result to match once that decision lands."""
-    allowed_groups = (HR_ADMIN, RECRUITER)
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
 
     def post(self, request, pk):
         interview = get_object_or_404(Interview, pk=pk)
@@ -471,7 +471,7 @@ class InterviewCancelView(GroupRequiredMixin, View):
     """Marks an interview cancelled/no-show. Not a result (pass/fail) - the
     Hiring block prompts for Reject or Hold once an interview is cancelled,
     rather than silently leaving the candidate stuck at this stage."""
-    allowed_groups = (HR_ADMIN, RECRUITER)
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
 
     def post(self, request, pk):
         interview = get_object_or_404(Interview, pk=pk)
@@ -615,7 +615,7 @@ class InterviewSendInviteView(GroupRequiredMixin, View):
 
     Console backend in dev (see settings.EMAIL_BACKEND) - invites print to
     the log instead of sending until real SMTP credentials are configured."""
-    allowed_groups = (HR_ADMIN, RECRUITER)
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
 
     def post(self, request, pk):
         interview = get_object_or_404(Interview, pk=pk)

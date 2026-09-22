@@ -777,24 +777,38 @@ class BulkDeleteTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(Candidate.objects.count(), 2)
 
+    def test_hiring_managers_can_bulk_delete_too(self):
+        manager = get_user_model().objects.create_user('mgr', 'mgr@example.com', 'pw')
+        manager.groups.add(Group.objects.get_or_create(name=HIRING_MANAGER)[0])
+        self.client.force_login(manager)
+        response = self.client.post(reverse('candidate_bulk_delete'),
+                                    {'ids': [self.candidates[0].pk]})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Candidate.objects.count(), 2)
+
     def test_other_roles_cannot_bulk_delete(self):
         viewer = get_user_model().objects.create_user('view', 'view@example.com', 'pw')
-        viewer.groups.add(Group.objects.get_or_create(name=HIRING_MANAGER)[0])
+        viewer.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
         self.client.force_login(viewer)
         response = self.client.post(reverse('candidate_bulk_delete'),
                                     {'ids': [self.candidates[0].pk]})
         self.assertEqual(response.status_code, 403)
         self.assertEqual(Candidate.objects.count(), 3)
 
-    def test_repository_shows_tick_boxes_for_admins_only(self):
+    def test_repository_shows_tick_boxes_for_hr_recruiter_and_hiring_manager(self):
+        # Every ANY_STAFF role now sees them - Hiring Manager has the same
+        # create/modify/delete access as HR Admin/Recruiter throughout the
+        # main app. Interviewer never reaches this page at all (not in
+        # ANY_STAFF - see CandidateRepositoryListView), so there's no longer
+        # an in-scope role that can view this page without tick boxes.
         response = self.client.get(reverse('candidate_repository'))
         self.assertContains(response, 'row-select')
 
-        viewer = get_user_model().objects.create_user('view', 'view@example.com', 'pw')
-        viewer.groups.add(Group.objects.get_or_create(name=HIRING_MANAGER)[0])
-        self.client.force_login(viewer)
+        manager = get_user_model().objects.create_user('mgr', 'mgr@example.com', 'pw')
+        manager.groups.add(Group.objects.get_or_create(name=HIRING_MANAGER)[0])
+        self.client.force_login(manager)
         response = self.client.get(reverse('candidate_repository'))
-        self.assertNotContains(response, 'row-select')
+        self.assertContains(response, 'row-select')
 
     def test_bulk_delete_form_is_not_nested_inside_the_filter_form(self):
         """Regression guard: #bulkDeleteForm used to sit inside

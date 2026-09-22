@@ -198,7 +198,7 @@
       <a href="?tab={{ tab }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-x-circle"></i> Clear Filters</a>
     </div>
 
-    {% if is_hr_admin or is_recruiter %}
+    {% if is_hr_admin or is_recruiter or is_hiring_manager %}
     <div id="bulkBar" class="repo-bulkbar">
       <span><strong id="bulkCount">0</strong> selected</span>
       <div class="bulk-actions">
@@ -221,7 +221,7 @@
       <table id="candidateTable" class="table table-hover align-middle w-100">
         <thead>
           <tr>
-            {% if is_hr_admin or is_recruiter %}<th class="no-export" style="width:2rem">
+            {% if is_hr_admin or is_recruiter or is_hiring_manager %}<th class="no-export" style="width:2rem">
               <input type="checkbox" class="form-check-input" id="selectAll" title="Select all on this page">
             </th>{% endif %}
             <th>Candidate</th><th>Role</th><th>Score</th><th>Exp.</th><th>Applied</th><th>Status</th><th class="text-end no-export">Actions</th>
@@ -230,7 +230,7 @@
         <tbody>
           {% for c in candidates %}
           <tr>
-            {% if is_hr_admin or is_recruiter %}<td class="no-export">
+            {% if is_hr_admin or is_recruiter or is_hiring_manager %}<td class="no-export">
               <input type="checkbox" class="form-check-input row-select" value="{{ c.id }}"
                      aria-label="Select {{ c.full_name }}">
             </td>{% endif %}
@@ -261,14 +261,14 @@
             </td>
             <td class="text-nowrap text-end">
               <a href="{% url 'candidate_timeline' c.id %}" class="btn btn-sm btn-outline-app">View</a>
-              {% if tab in 'open,shortlisted,round1,interview,final_selection' or is_hr_admin or is_recruiter %}
+              {% if tab in 'open,shortlisted,round1,interview,final_selection' or is_hr_admin or is_recruiter or is_hiring_manager %}
               <div class="dropdown d-inline-block">
                 <button class="btn btn-sm btn-outline-app kebab-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">&#8942;</button>
                 <ul class="dropdown-menu dropdown-menu-end">
                   {% if tab in 'open,shortlisted,round1,interview,final_selection' %}
                   <li><button type="button" class="dropdown-item act" data-action="{% url 'candidate_blacklist' c.id %}" data-title="Blacklist {{ c.full_name }}" data-require="1" data-btn="btn-dark" data-label="Blacklist">Blacklist</button></li>
                   {% endif %}
-                  {% if is_hr_admin or is_recruiter %}
+                  {% if is_hr_admin or is_recruiter or is_hiring_manager %}
                     {% if tab in 'open,shortlisted,round1,interview,final_selection' %}<li><hr class="dropdown-divider"></li>{% endif %}
                     <li><button type="button" class="dropdown-item text-danger act" data-action="{% url 'candidate_delete' c.id %}" data-title="Delete {{ c.full_name }}?" data-nofields="1" data-btn="btn-danger" data-label="Delete permanently" data-msg="This permanently deletes the candidate and all their interviews, notes and history. This cannot be undone.">Delete</button></li>
                   {% endif %}
@@ -284,7 +284,7 @@
   </div>
 </form>
 
-{% if is_hr_admin or is_recruiter %}
+{% if is_hr_admin or is_recruiter or is_hiring_manager %}
 {% comment %}
   Was nested inside #repoFilterForm above - invalid HTML (forms can't nest),
   so the browser silently dropped this form entirely and
@@ -358,7 +358,7 @@ $(function () {
     language: { info: 'Showing _START_ to _END_ of _TOTAL_', infoEmpty: 'No candidates', zeroRecords: 'No candidates match this filter.' }
   });
 
-  {% if is_hr_admin or is_recruiter %}
+  {% if is_hr_admin or is_recruiter or is_hiring_manager %}
   // --- Multi-select bulk bar -------------------------------------------------
   function selectedIds() {
     return $('#candidateTable').find('.row-select:checked').map(function () { return this.value; }).get();

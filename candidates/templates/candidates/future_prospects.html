@@ -73,7 +73,7 @@
       </a>
     </div>
 
-    {% if is_hr_admin or is_recruiter %}
+    {% if is_hr_admin or is_recruiter or is_hiring_manager %}
     <div id="bulkBar" class="ga-bulkbar">
       <span><strong id="bulkCount">0</strong> selected</span>
       <div class="bulk-actions">
@@ -96,7 +96,7 @@
       <table id="prospectsTable" class="table table-hover align-middle w-100">
         <thead>
           <tr>
-            {% if is_hr_admin or is_recruiter %}<th class="no-export" style="width:2rem">
+            {% if is_hr_admin or is_recruiter or is_hiring_manager %}<th class="no-export" style="width:2rem">
               <input type="checkbox" class="form-check-input" id="selectAll" title="Select all on this page">
             </th>{% endif %}
             <th>Candidate</th><th>Vacancy</th><th>Source</th><th>Held Since</th><th>Reason</th><th>Suggested Role</th><th class="text-end">Actions</th>
@@ -105,7 +105,7 @@
         <tbody>
           {% for c in candidates %}
           <tr>
-            {% if is_hr_admin or is_recruiter %}<td class="no-export">
+            {% if is_hr_admin or is_recruiter or is_hiring_manager %}<td class="no-export">
               <input type="checkbox" class="form-check-input row-select" value="{{ c.id }}"
                      aria-label="Select {{ c.full_name }}">
             </td>{% endif %}
@@ -140,7 +140,7 @@
                               data-action="{% url 'candidate_reject' c.id %}"
                               data-title="Reject {{ c.full_name }}" data-require="1"
                               data-btn="btn-outline-danger" data-label="Reject">Reject</button></li>
-                  {% if is_hr_admin or is_recruiter %}
+                  {% if is_hr_admin or is_recruiter or is_hiring_manager %}
                   <li><hr class="dropdown-divider"></li>
                   <li><button type="button" class="dropdown-item text-danger act"
                               data-action="{% url 'candidate_delete' c.id %}"
@@ -224,7 +224,7 @@ $(function () {
     bootstrap.Modal.getOrCreateInstance(document.getElementById('actionModal')).show(this);
   });
 
-  {% if is_hr_admin or is_recruiter %}
+  {% if is_hr_admin or is_recruiter or is_hiring_manager %}
   // --- Multi-select bulk bar -------------------------------------------------
   function selectedIds() {
     return $('#prospectsTable').find('.row-select:checked').map(function () { return this.value; }).get();

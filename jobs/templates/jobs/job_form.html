@@ -71,7 +71,7 @@
           <div class="row g-3">
             <div class="col-12"><label class="form-label">Description</label>{{ form.description }}</div>
             <div class="col-12"><label class="form-label">Must Have</label>{{ form.requirements }}</div>
-            {% if is_hr_admin or is_recruiter %}
+            {% if is_hr_admin or is_recruiter or is_hiring_manager %}
             <div class="col-12">
               <label class="form-label">Extra Requirements</label>
               {{ form.extra_scoring_criteria }}

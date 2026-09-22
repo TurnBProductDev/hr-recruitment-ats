@@ -872,7 +872,7 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
 
         u = self.request.user
         ctx['is_hr_admin'] = u.is_superuser or u.groups.filter(name=HR_ADMIN).exists()
-        ctx['can_revert'] = ctx['is_hr_admin'] or u.groups.filter(name=RECRUITER).exists()
+        ctx['can_revert'] = ctx['is_hr_admin'] or u.groups.filter(name__in=(RECRUITER, HIRING_MANAGER)).exists()
         ctx['all_jobs'] = Job.objects.all().order_by('title')
         ctx['source_options'] = CANONICAL_SOURCES
         # same email seen on another record => reapply
@@ -1049,7 +1049,7 @@ class CandidateUpdateView(GroupRequiredMixin, UpdateView):
     model = Candidate
     form_class = CandidateApplicationForm
     template_name = 'candidates/candidate_form.html'
-    allowed_groups = (HR_ADMIN, RECRUITER)
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -1227,7 +1227,7 @@ class CandidateSetStatusView(GroupRequiredMixin, View):
 class CandidateRescoreView(GroupRequiredMixin, View):
     """Recreate this one candidate's match score - after they're edited, the
     mapped role's JD changes, or the scoring prompt/model changes."""
-    allowed_groups = (HR_ADMIN, RECRUITER)
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
 
     def post(self, request, pk):
         candidate = get_object_or_404(Candidate, pk=pk)
@@ -1454,7 +1454,7 @@ class CandidateRevertLastActionView(GroupRequiredMixin, View):
     recording aren't covered here; those already have their own dedicated
     undo-ish paths (the invite-draft popup before sending, the Mark Result
     form itself) rather than needing this catch-all."""
-    allowed_groups = (HR_ADMIN, RECRUITER)
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
 
     def post(self, request, pk):
         candidate = get_object_or_404(Candidate, pk=pk)
@@ -1554,7 +1554,7 @@ class CandidateRevertLastActionView(GroupRequiredMixin, View):
 
 class CandidateDeleteView(GroupRequiredMixin, View):
     """Permanently delete a candidate and all their related records."""
-    allowed_groups = (HR_ADMIN, RECRUITER)
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
 
     def post(self, request, pk):
         candidate = get_object_or_404(Candidate, pk=pk)
@@ -1664,7 +1664,7 @@ class CandidateBulkBlacklistView(GroupRequiredMixin, View):
 class CandidateBulkDeleteView(GroupRequiredMixin, View):
     """Delete several candidates at once, ticked on the Candidate Repository
     (same access as deleting one)."""
-    allowed_groups = (HR_ADMIN, RECRUITER)
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
 
     def post(self, request):
         ids = request.POST.getlist('ids')
@@ -1731,7 +1731,7 @@ class BulkUploadCVView(GroupRequiredMixin, View):
     Logic App (same extraction as the careers mailbox intake); candidates are
     created only for CVs that parse. HR watches progress on the results screen."""
     template_name = 'candidates/bulk_upload.html'
-    allowed_groups = (HR_ADMIN, RECRUITER)
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
 
     def get(self, request):
         return render(request, self.template_name, {
@@ -1770,7 +1770,7 @@ class BulkUploadProgressView(GroupRequiredMixin, View):
     """Step 2: live progress while the CVs are parsed, then the results -
     which CVs became candidates and which failed, with a retry for the failures."""
     template_name = 'candidates/bulk_progress.html'
-    allowed_groups = (HR_ADMIN, RECRUITER)
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
 
     def get(self, request, pk):
         batch = get_object_or_404(BulkUploadBatch.objects.select_related('job'), pk=pk)
@@ -1785,7 +1785,7 @@ class BulkUploadProgressView(GroupRequiredMixin, View):
 class BulkUploadStatusView(GroupRequiredMixin, View):
     """Poll target for the progress page: just the counts, so the page can show
     a live bar and reload itself once the batch is finished."""
-    allowed_groups = (HR_ADMIN, RECRUITER)
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
 
     def get(self, request, pk):
         batch = get_object_or_404(BulkUploadBatch, pk=pk)
@@ -1795,7 +1795,7 @@ class BulkUploadStatusView(GroupRequiredMixin, View):
 
 class BulkUploadRetryView(GroupRequiredMixin, View):
     """Re-queue the failed CVs in a batch (same files, no re-upload needed)."""
-    allowed_groups = (HR_ADMIN, RECRUITER)
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
 
     def post(self, request, pk):
         batch = get_object_or_404(BulkUploadBatch, pk=pk)
@@ -1882,7 +1882,7 @@ class ScoreCandidatesView(GroupRequiredMixin, View):
     those candidates aren't mapped to a role to score against) with how many of
     its candidates are still pending a score."""
     template_name = 'candidates/score_candidates.html'
-    allowed_groups = (HR_ADMIN, RECRUITER)
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
 
     def get(self, request):
         jobs = (Job.objects.exclude(title__iexact=GENERAL_APPLICATION)
@@ -1903,7 +1903,7 @@ class ScoreCandidatesView(GroupRequiredMixin, View):
 
 class ScoreCandidatesRunView(GroupRequiredMixin, View):
     """Kick off (or resume) scoring every pending candidate on one vacancy."""
-    allowed_groups = (HR_ADMIN, RECRUITER)
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
 
     def post(self, request, job_id):
         job = get_object_or_404(Job, pk=job_id)
@@ -1923,7 +1923,7 @@ class ScoreCandidatesProgressView(GroupRequiredMixin, View):
     """Step 2: live progress while candidates are scored, then the results -
     every candidate mapped to the role with their score."""
     template_name = 'candidates/score_progress.html'
-    allowed_groups = (HR_ADMIN, RECRUITER)
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
 
     def get(self, request, job_id):
         job = get_object_or_404(Job, pk=job_id)
@@ -1941,7 +1941,7 @@ class ScoreCandidatesProgressView(GroupRequiredMixin, View):
 class ScoreCandidatesStatusView(GroupRequiredMixin, View):
     """Poll target for the progress page: just the counts, so the page can
     show a live bar and reload itself once the run is finished."""
-    allowed_groups = (HR_ADMIN, RECRUITER)
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
 
     def get(self, request, job_id):
         return JsonResponse(scoring.summarise(job_id))
@@ -1957,7 +1957,7 @@ class ScoringCriteriaView(GroupRequiredMixin, View):
     _can_set_scoring_criteria) - there's no reason this dedicated page should
     be more locked down than the other place the same field is edited."""
     template_name = 'candidates/scoring_criteria.html'
-    allowed_groups = (HR_ADMIN, RECRUITER)
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
 
     def _job_list(self):
         return (Job.objects.exclude(title__iexact=GENERAL_APPLICATION)
@@ -1995,7 +1995,7 @@ class ScoringCriteriaRescoreView(GroupRequiredMixin, View):
     re-score) is per-role now. Same access as ScoringCriteriaView itself -
     Recruiter can save criteria on this page, so it needs this button to
     work too."""
-    allowed_groups = (HR_ADMIN, RECRUITER)
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
 
     def post(self, request, job_id):
         job = get_object_or_404(Job, pk=job_id)

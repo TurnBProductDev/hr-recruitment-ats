@@ -8,7 +8,7 @@ from django.views.generic import CreateView, DetailView, ListView, UpdateView
 
 from candidates import services
 from candidates.models import Candidate, ScoringCriteria
-from candidates.permissions import HR_ADMIN, RECRUITER, GroupRequiredMixin
+from candidates.permissions import HIRING_MANAGER, HR_ADMIN, RECRUITER, GroupRequiredMixin
 from candidates.views import GENERAL_APPLICATION
 
 from . import jd_extraction
@@ -74,11 +74,11 @@ class JobManageListView(GroupRequiredMixin, ListView):
 
 
 def _can_set_scoring_criteria(user):
-    # Same two roles JobCreateView/JobUpdateView.allowed_groups already lets
-    # onto this form at all (plus the superuser bypass GroupRequiredMixin
-    # gives everywhere) - unlike the dedicated Scoring Criteria page
-    # (candidates.views.ScoringCriteriaView), which stays HR_ADMIN-only.
-    return user.is_superuser or user.groups.filter(name__in=(HR_ADMIN, RECRUITER)).exists()
+    # Same roles JobCreateView/JobUpdateView.allowed_groups already lets onto
+    # this form at all (plus the superuser bypass GroupRequiredMixin gives
+    # everywhere) - same access as the dedicated Scoring Criteria page
+    # (candidates.views.ScoringCriteriaView).
+    return user.is_superuser or user.groups.filter(name__in=(HR_ADMIN, RECRUITER, HIRING_MANAGER)).exists()
 
 
 def _save_scoring_criteria(job, form, user):
@@ -100,7 +100,7 @@ class JobCreateView(GroupRequiredMixin, CreateView):
     model = Job
     form_class = JobForm
     template_name = 'jobs/job_form.html'
-    allowed_groups = (HR_ADMIN, RECRUITER)
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
     success_url = reverse_lazy('job_manage_list')
 
     def form_valid(self, form):
@@ -115,7 +115,7 @@ class JobUpdateView(GroupRequiredMixin, UpdateView):
     model = Job
     form_class = JobForm
     template_name = 'jobs/job_form.html'
-    allowed_groups = (HR_ADMIN, RECRUITER)
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
     success_url = reverse_lazy('job_manage_list')
 
     def get_context_data(self, **kwargs):
@@ -138,7 +138,7 @@ class JobExtractJDView(GroupRequiredMixin, View):
     fills the two textareas and the actual save still happens through the
     normal form submit, same as everywhere else edits are reviewed before
     being committed."""
-    allowed_groups = (HR_ADMIN, RECRUITER)
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
 
     def post(self, request):
         jd_file = request.FILES.get('jd_file')
@@ -160,7 +160,7 @@ class JobCloseView(GroupRequiredMixin, View):
     Prospects in the same step - see job_manage_list.html's Close Vacancy
     modal, which asks this every time rather than a separate global "Reject
     candidates of closed vacancies" action."""
-    allowed_groups = (HR_ADMIN, RECRUITER)
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
     ACTIVE_STATUSES = (
         Candidate.Status.OPEN, Candidate.Status.SHORTLISTED, Candidate.Status.ROUND1,
         Candidate.Status.INTERVIEW, Candidate.Status.FINAL_SELECTION,
@@ -194,7 +194,7 @@ class JobCloseView(GroupRequiredMixin, View):
 
 
 class JobArchiveView(GroupRequiredMixin, View):
-    allowed_groups = (HR_ADMIN, RECRUITER)
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
 
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk)
@@ -205,7 +205,7 @@ class JobArchiveView(GroupRequiredMixin, View):
 
 
 class JobReopenView(GroupRequiredMixin, View):
-    allowed_groups = (HR_ADMIN, RECRUITER)
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
 
     def post(self, request, pk):
         job = get_object_or_404(Job, pk=pk)
