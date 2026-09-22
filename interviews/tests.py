@@ -957,10 +957,11 @@ class ProposeSlotsSplitDateTimeTests(TestCase):
             interviewer=self.interviewer)
 
     def test_submitting_two_split_slots_creates_them_and_awaits_selection(self):
+        future_date = (timezone.now() + timezone.timedelta(days=7)).strftime('%Y-%m-%d')
         response = self.client.post(
             reverse('interviewer_propose_slots', args=[self.request_obj.pk]), {
-                'slot_1_0': '2026-09-20', 'slot_1_1': '10:00',
-                'slot_2_0': '2026-09-20', 'slot_2_1': '14:00',
+                'slot_1_0': future_date, 'slot_1_1': '10:00',
+                'slot_2_0': future_date, 'slot_2_1': '14:00',
             })
         self.assertRedirects(response, reverse('interviewer_home'))
         self.request_obj.refresh_from_db()
@@ -968,10 +969,11 @@ class ProposeSlotsSplitDateTimeTests(TestCase):
         self.assertEqual(self.request_obj.slots.count(), 2)
 
     def test_an_incomplete_slot_is_rejected(self):
+        future_date = (timezone.now() + timezone.timedelta(days=7)).strftime('%Y-%m-%d')
         response = self.client.post(
             reverse('interviewer_propose_slots', args=[self.request_obj.pk]), {
-                'slot_1_0': '2026-09-20', 'slot_1_1': '',
-                'slot_2_0': '2026-09-20', 'slot_2_1': '14:00',
+                'slot_1_0': future_date, 'slot_1_1': '',
+                'slot_2_0': future_date, 'slot_2_1': '14:00',
             })
         self.assertEqual(response.status_code, 400)  # redisplayed with the error
         self.assertEqual(self.request_obj.slots.count(), 0)
