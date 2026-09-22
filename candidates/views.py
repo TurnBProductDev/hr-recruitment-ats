@@ -1694,7 +1694,14 @@ RECENT_BATCH_COUNT = 8
 
 def recent_batches(limit=RECENT_BATCH_COUNT):
     """Last few bulk uploads with their counts, so HR can reopen the results of
-    a batch after navigating away from the progress screen."""
+    a batch after navigating away from the progress screen.
+
+    order_by() is explicit here rather than relying on BulkUploadBatch.Meta's
+    default ordering - on this backend (mssql-django), the default ordering
+    silently gets dropped once annotate()'s GROUP BY is added, leaving the
+    query with no ORDER BY at all and rows back in whatever arbitrary order
+    SQL Server feels like - not "most recent first". Confirmed by inspecting
+    the generated SQL: no ORDER BY clause without this."""
     waiting = (BulkUploadItem.Status.PENDING, BulkUploadItem.Status.PARSING)
     return (BulkUploadBatch.objects.select_related('job')
             .annotate(
@@ -1702,7 +1709,7 @@ def recent_batches(limit=RECENT_BATCH_COUNT):
                 success=Count('items', filter=Q(items__status=BulkUploadItem.Status.SUCCESS)),
                 errors=Count('items', filter=Q(items__status=BulkUploadItem.Status.ERROR)),
                 waiting=Count('items', filter=Q(items__status__in=waiting)),
-            )[:limit])
+            ).order_by('-created_at')[:limit])
 
 
 def _validate_cv_files(files):

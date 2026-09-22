@@ -1018,6 +1018,22 @@ class BulkUploadViewTests(TestCase):
         self.assertContains(response, '1 failed')
         self.assertContains(response, reverse('candidate_bulk_progress', args=[batch.pk]))
 
+    def test_recent_batches_are_ordered_newest_first(self):
+        # Explicit created_at values, out of insertion order - a query that
+        # (incorrectly) relies on default row/insertion order instead of an
+        # explicit ORDER BY could still pass a naive version of this test by
+        # accident, so the batches are created in an order that only a real
+        # "order by created_at desc" gets right.
+        older = BulkUploadBatch.objects.create(job=self.job, source='Naukri')
+        newer = BulkUploadBatch.objects.create(job=self.job, source='Careers')
+        BulkUploadBatch.objects.filter(pk=older.pk).update(
+            created_at=timezone.now() - datetime.timedelta(days=5))
+        BulkUploadBatch.objects.filter(pk=newer.pk).update(
+            created_at=timezone.now() - datetime.timedelta(days=1))
+
+        batches = list(views.recent_batches())
+        self.assertEqual([b.pk for b in batches], [newer.pk, older.pk])
+
     def test_retry_requeues_failed_items(self):
         batch = BulkUploadBatch.objects.create(job=self.job, source='Naukri')
         item = BulkUploadItem.objects.create(
