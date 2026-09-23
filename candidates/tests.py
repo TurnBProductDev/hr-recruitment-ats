@@ -646,6 +646,63 @@ class CVExtractAPIViewTests(TestCase):
         self.assertIsNone(response.json()['matched_job_id'])
 
 
+class ReapplyBadgeTests(TestCase):
+    """The Reapply badge (Repository list + Timeline page) distinguishes
+    reapplying for the same role from applying for a different one - both
+    just mean "this email exists on another candidate record", but only the
+    same-role case is the one worth a second look."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser('hr', 'hr@example.com', 'pw')
+        self.client.force_login(self.user)
+        self.job_a = Job.objects.create(title='Data Analyst')
+        self.job_b = Job.objects.create(title='Marketing Associate')
+
+    def test_no_other_application_shows_no_badge(self):
+        c = Candidate.objects.create(full_name='Rose E G', email='rose@example.com', job=self.job_a)
+        response = self.client.get(reverse('candidate_timeline', args=[c.pk]))
+        self.assertEqual(response.context['reapply'], False)
+        self.assertEqual(response.context['reapply_same_role'], False)
+        self.assertNotContains(response, 'Reapply')
+
+    def test_same_role_reapply_on_timeline(self):
+        Candidate.objects.create(full_name='Rose E G', email='rose@example.com', job=self.job_a)
+        c = Candidate.objects.create(full_name='Rose E G', email='rose@example.com', job=self.job_a)
+        response = self.client.get(reverse('candidate_timeline', args=[c.pk]))
+        self.assertTrue(response.context['reapply_same_role'])
+        self.assertContains(response, 'Reapply · Same Role')
+        self.assertNotContains(response, 'Reapply · Other Role')
+
+    def test_different_role_reapply_on_timeline(self):
+        Candidate.objects.create(full_name='Rose E G', email='rose@example.com', job=self.job_a)
+        c = Candidate.objects.create(full_name='Rose E G', email='rose@example.com', job=self.job_b)
+        response = self.client.get(reverse('candidate_timeline', args=[c.pk]))
+        self.assertTrue(response.context['reapply'])
+        self.assertFalse(response.context['reapply_same_role'])
+        self.assertContains(response, 'Reapply · Other Role')
+        self.assertNotContains(response, 'Reapply · Same Role')
+
+    def test_two_general_application_records_are_not_treated_as_same_role(self):
+        Candidate.objects.create(full_name='Rose E G', email='rose@example.com', job=None)
+        c = Candidate.objects.create(full_name='Rose E G', email='rose@example.com', job=None)
+        response = self.client.get(reverse('candidate_timeline', args=[c.pk]))
+        self.assertTrue(response.context['reapply'])
+        self.assertFalse(response.context['reapply_same_role'])
+
+    def test_repository_list_shows_the_right_badge_per_row(self):
+        Candidate.objects.create(full_name='Rose E G', email='rose@example.com', job=self.job_a)
+        same_role = Candidate.objects.create(full_name='Rose E G', email='rose@example.com', job=self.job_a)
+        other_role = Candidate.objects.create(full_name='Rose E G', email='rose@example.com', job=self.job_b)
+        for c in (same_role, other_role):
+            services.record_creation(c)
+
+        response = self.client.get(reverse('candidate_repository'))
+        by_pk = {c.pk: c for c in response.context['candidates']}
+        self.assertTrue(by_pk[same_role.pk].reapply_same_role)
+        self.assertFalse(by_pk[other_role.pk].reapply_same_role)
+        self.assertTrue(by_pk[other_role.pk].reapply)
+
+
 class BackButtonTests(TestCase):
     """Back from a candidate's own pages goes to the repository tab the
     candidate is in, not back through browser history."""

@@ -491,8 +491,14 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
         next_interview = (Interview.objects
                           .filter(candidate=OuterRef('pk')).order_by('-scheduled_date')
                           .values('scheduled_date')[:1])
-        # 'reapply' = the same email exists on another candidate record
+        # 'reapply' = the same email exists on another candidate record.
+        # 'reapply_same_role' = one of those other records is mapped to this
+        # same vacancy - job=OuterRef('job') never matches when this row's
+        # own job is NULL (General Application), which is what we want: two
+        # General Application rows aren't "the same role" just because
+        # neither has one.
         dup = Candidate.objects.filter(email=OuterRef('email')).exclude(pk=OuterRef('pk'))
+        dup_same_role = dup.filter(job=OuterRef('job'))
         # 'called' = a phone call was already logged with an inconclusive outcome
         # (Unable to connect / Call back), so the candidate isn't a fresh, un-called one
         called = CommunicationLog.objects.filter(
@@ -502,6 +508,7 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
               .annotate(last_action_at=Subquery(last_action),
                         interview_at=Subquery(next_interview),
                         reapply=Exists(dup),
+                        reapply_same_role=Exists(dup_same_role),
                         called=Exists(called)))
 
         # A "flow" link (from the dashboard Overview) filters by a derived stage
@@ -875,8 +882,13 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
         ctx['can_revert'] = ctx['is_hr_admin'] or u.groups.filter(name__in=(RECRUITER, HIRING_MANAGER)).exists()
         ctx['all_jobs'] = Job.objects.all().order_by('title')
         ctx['source_options'] = source_options()
-        # same email seen on another record => reapply
-        ctx['reapply'] = Candidate.objects.filter(email=candidate.email).exclude(pk=candidate.pk).exists()
+        # same email seen on another record => reapply; same_role narrows that
+        # to "one of those other records is mapped to this same vacancy" -
+        # candidate.job=None (General Application) never matches here, same
+        # reasoning as CandidateRepositoryListView's dup_same_role.
+        other_applications = Candidate.objects.filter(email=candidate.email).exclude(pk=candidate.pk)
+        ctx['reapply'] = other_applications.exists()
+        ctx['reapply_same_role'] = bool(candidate.job) and other_applications.filter(job=candidate.job).exists()
 
         ctx['is_on_hold'] = candidate.status == STATUS.SCREENING_HOLD
         hiring_stages, active_stage_index = _build_hiring_stages(candidate, ctx['history'])

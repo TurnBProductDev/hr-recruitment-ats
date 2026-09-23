@@ -160,7 +160,8 @@ html { scroll-behavior: smooth; }
 {% block content %}
 <div class="d-flex justify-content-end align-items-center gap-3 mb-3">
   <span class="{{ candidate.status|badge_class }}">{{ candidate.status_label }}</span>
-  {% if reapply %}<span class="badge-dup ms-2">Reapply</span>{% endif %}
+  {% if reapply_same_role %}<span class="badge-dup ms-2" title="Applied for this same role before">Reapply · Same Role</span>
+  {% elif reapply %}<span class="badge-dup-other ms-2" title="Applied for a different role before">Reapply · Other Role</span>{% endif %}
   {% if candidate.is_blacklisted and candidate.status != 'BLACKLISTED' %}<span class="badge-status badge-blacklisted ms-2">Blacklisted</span>{% endif %}
   <a href="{% url 'candidate_edit' candidate.pk %}" class="btn btn-outline-app btn-sm ms-2">Edit</a>
   {% if can_revert %}

@@ -220,6 +220,18 @@ table.dataTable tbody td {
   font-size: 0.75rem;
 }
 
+/* Reapplied for a *different* role than the one this candidate is currently
+   mapped to - see .badge-dup, whose amber tone is reserved for reapplying to
+   the same role (already seen/decided on once), which deserves a second look
+   in a way a different-role reapplication routinely doesn't. */
+.badge-dup-other {
+  background-color: #e3eefc;
+  color: #2d5f96;
+  border-radius: 20px;
+  padding: 0.35em 0.7em;
+  font-size: 0.75rem;
+}
+
 .stat-card h2 {
   color: var(--dark-green);
   font-size: 26px;

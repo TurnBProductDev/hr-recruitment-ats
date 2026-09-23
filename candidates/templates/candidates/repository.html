@@ -49,6 +49,15 @@
   background:#fbf1d6; color:#8a6a12; font-size:.62rem; font-weight:700;
   letter-spacing:.3px; text-transform:uppercase; vertical-align:middle;
 }
+/* Reapplied for a *different* role than this row - a lighter, informational
+   tone rather than .repo-pill-reapply's warning amber, since reapplying to a
+   different opening is routine, not something that needs a second look the
+   way reapplying to the same role (already seen/decided on once) does. */
+.repo-pill-reapply-other {
+  display:inline-block; margin-left:6px; padding:1px 7px; border-radius:4px;
+  background:#e3eefc; color:#2d5f96; font-size:.62rem; font-weight:700;
+  letter-spacing:.3px; text-transform:uppercase; vertical-align:middle;
+}
 .repo-called-icon { color:var(--text-muted); margin-left:4px; }
 
 .score-meter { min-width:84px; }
@@ -236,7 +245,8 @@
             </td>{% endif %}
             <td class="repo-name">
               <a href="{% url 'candidate_timeline' c.id %}">{{ c.full_name }}</a>
-              {% if c.reapply %}<span class="repo-pill-reapply">Reapply</span>{% endif %}
+              {% if c.reapply_same_role %}<span class="repo-pill-reapply" title="Applied for this same role before">Reapply · Same Role</span>
+              {% elif c.reapply %}<span class="repo-pill-reapply-other" title="Applied for a different role before">Reapply · Other Role</span>{% endif %}
               {% if c.called %}<i class="bi bi-telephone-fill repo-called-icon" title="Already called — Unable to connect / Call back logged"></i>{% endif %}
               <div class="repo-meta">{{ c.email }} &middot; {{ c.candidate_code }}</div>
             </td>
