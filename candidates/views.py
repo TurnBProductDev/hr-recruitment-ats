@@ -874,7 +874,7 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
         ctx['is_hr_admin'] = u.is_superuser or u.groups.filter(name=HR_ADMIN).exists()
         ctx['can_revert'] = ctx['is_hr_admin'] or u.groups.filter(name__in=(RECRUITER, HIRING_MANAGER)).exists()
         ctx['all_jobs'] = Job.objects.all().order_by('title')
-        ctx['source_options'] = CANONICAL_SOURCES
+        ctx['source_options'] = source_options()
         # same email seen on another record => reapply
         ctx['reapply'] = Candidate.objects.filter(email=candidate.email).exclude(pk=candidate.pk).exists()
 
@@ -1692,6 +1692,24 @@ ALLOWED_CV_EXTENSIONS = ('.pdf', '.doc', '.docx')
 RECENT_BATCH_COUNT = 8
 
 
+def source_options():
+    """CANONICAL_SOURCES plus any custom value someone has already typed into
+    an "Other" source combobox - Bulk Upload's or a candidate's own Mapped
+    Source - so a typed-in value becomes a selectable option everywhere a
+    source combobox appears from then on, not just remembered on that one
+    candidate/batch. Checked against both Candidate and BulkUploadBatch so a
+    custom value used on a batch still counts even if every CV in it failed
+    to parse (so no Candidate row ever got created with it)."""
+    extra = set(
+        Candidate.objects.exclude(source__isnull=True).exclude(source='')
+        .exclude(source__in=CANONICAL_SOURCES).values_list('source', flat=True)
+    ) | set(
+        BulkUploadBatch.objects.exclude(source__isnull=True).exclude(source='')
+        .exclude(source__in=CANONICAL_SOURCES).values_list('source', flat=True)
+    )
+    return list(CANONICAL_SOURCES) + sorted(extra)
+
+
 def recent_batches(limit=RECENT_BATCH_COUNT):
     """Last few bulk uploads with their counts, so HR can reopen the results of
     a batch after navigating away from the progress screen.
@@ -1745,6 +1763,7 @@ class BulkUploadCVView(GroupRequiredMixin, View):
             'form': BulkUploadForm(),
             'parser_configured': cv_parser.is_configured(),
             'recent_batches': recent_batches(),
+            'source_options': source_options(),
         })
 
     def post(self, request):
@@ -1770,6 +1789,7 @@ class BulkUploadCVView(GroupRequiredMixin, View):
             'form': form,
             'parser_configured': cv_parser.is_configured(),
             'recent_batches': recent_batches(),
+            'source_options': source_options(),
         })
 
 

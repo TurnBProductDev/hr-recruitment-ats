@@ -1003,6 +1003,28 @@ class BulkUploadViewTests(TestCase):
         self.assertContains(finished, 'Password-protected PDF.')
         self.assertContains(finished, 'Retry 1 failed CV')
 
+    def test_source_field_is_a_dropdown_with_an_other_option(self):
+        response = self.client.get(reverse('candidate_bulk_upload'))
+        content = response.content.decode()
+        self.assertIn('id="sourceSelect"', content)
+        self.assertIn('id="sourceCustomInput"', content)
+        self.assertIn('Other (type manually)', content)
+        for source in ('Careers', 'Linked In', 'Referral', 'Naukri', 'Agency'):
+            self.assertIn(f'>{source}</option>', content)
+
+    def test_a_custom_source_can_be_submitted_and_is_then_offered_next_time(self):
+        files = [SimpleUploadedFile('a.pdf', b'%PDF a')]
+        with mock.patch('candidates.views.bulk.start_batch'):
+            response = self.client.post(reverse('candidate_bulk_upload'), {
+                'job': self.job.pk, 'source': 'Campus Drive - IIT Kochi', 'cvs': files,
+            })
+        self.assertEqual(response.status_code, 302)
+        batch = BulkUploadBatch.objects.get()
+        self.assertEqual(batch.source, 'Campus Drive - IIT Kochi')
+
+        response = self.client.get(reverse('candidate_bulk_upload'))
+        self.assertContains(response, '>Campus Drive - IIT Kochi</option>')
+
     def test_upload_page_lists_recent_batches(self):
         batch = BulkUploadBatch.objects.create(job=self.job, source='Naukri')
         BulkUploadItem.objects.create(batch=batch, filename='a.pdf',
@@ -1672,6 +1694,16 @@ class SourceMappingTests(TestCase):
         self.candidate.save(update_fields=['source'])
         response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
         self.assertContains(response, '<option value="Some Job Fair" selected>Some Job Fair</option>')
+
+    def test_a_custom_source_typed_on_one_candidate_is_offered_on_another(self):
+        """Once "Other" produces a real value anywhere in the app, it becomes
+        a selectable option everywhere a source combobox appears, not just
+        remembered on the one record it was typed on."""
+        other = Candidate.objects.create(full_name='Someone Else', email='else@example.com')
+        other.source = 'Campus Drive - IIT Kochi'
+        other.save(update_fields=['source'])
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertContains(response, '>Campus Drive - IIT Kochi</option>')
 
 
 class HiringBlockStageLabelTests(TestCase):

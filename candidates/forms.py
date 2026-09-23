@@ -5,7 +5,6 @@ from HR_management.widgets import BareClearableFileInput
 from jobs.models import Job
 
 from .models import (
-    CANONICAL_SOURCES,
     Candidate,
     CandidateEducation,
     CandidateExperience,
@@ -117,10 +116,13 @@ class CommunicationLogForm(BootstrapFormMixin, forms.ModelForm):
 
 class BulkUploadForm(BootstrapFormMixin, forms.Form):
     job = forms.ModelChoiceField(queryset=Job.objects.filter(status=Job.Status.OPEN), label='Vacancy')
-    # Canonical source names — must match the values already in the database and
-    # the Logic App intake proc, otherwise the dashboard splits one source in two
-    # (e.g. 'LinkedIn' vs 'Linked In'). See CANONICAL_SOURCES below.
-    source = forms.ChoiceField(choices=[(s, s) for s in CANONICAL_SOURCES])
+    # A CharField, not a ChoiceField - the template renders its own dropdown
+    # (candidates/views.py's source_options: CANONICAL_SOURCES plus any
+    # custom value already typed into "Other" on a past upload) with an
+    # "Other" option that reveals a free-text box, same combobox pattern as
+    # the candidate page's Mapped Source. A ChoiceField would reject
+    # whatever gets typed there since it isn't one of the fixed choices.
+    source = forms.CharField(max_length=255)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

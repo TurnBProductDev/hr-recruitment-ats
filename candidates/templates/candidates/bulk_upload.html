@@ -23,7 +23,32 @@
       <form method="post" enctype="multipart/form-data">
         {% csrf_token %}
         <div class="mb-3"><label class="form-label">Vacancy</label>{{ form.job }}</div>
-        <div class="mb-3"><label class="form-label">Source</label>{{ form.source }}</div>
+        <div class="mb-3">
+          <label class="form-label">Source</label>
+          {% comment %}
+            A real dropdown of the canonical names plus any custom value
+            already typed into "Other" on a past upload (source_options -
+            see candidates/views.py) - same combobox pattern as the
+            candidate page's Mapped Source. "Other" swaps in a plain text
+            box for anything not on the list; this page's own script below
+            folds that typed value back into this select as its submitted
+            value on submit, so only one field is ever actually posted, and
+            the form's plain CharField accepts whatever comes through.
+          {% endcomment %}
+          <select name="source" id="sourceSelect" class="form-select {% if form.source.errors %}is-invalid{% endif %}">
+            <option value="">— Select —</option>
+            {% for s in source_options %}
+            <option value="{{ s }}" {% if form.source.value == s %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+            {% if form.source.value and form.source.value not in source_options %}
+            <option value="{{ form.source.value }}" selected>{{ form.source.value }}</option>
+            {% endif %}
+            <option value="__other__">Other (type manually)…</option>
+          </select>
+          <input type="text" id="sourceCustomInput" class="form-control mt-2"
+                 placeholder="Type source…" hidden>
+          {% if form.source.errors %}<div class="invalid-feedback d-block">{{ form.source.errors.0 }}</div>{% endif %}
+        </div>
         <div class="mb-3">
           <label class="form-label">CV Files</label>
           <input type="file" name="cvs" multiple class="form-control" accept=".pdf,.doc,.docx" required>
@@ -65,4 +90,39 @@
     {% endif %}
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{% comment %}
+  Source: "Other" reveals a plain text box instead of one of the canonical
+  names/past custom values - its typed value gets folded into the select
+  itself (as a new, selected option) right before submit, so only the one
+  field ever actually posts. Same pattern as the candidate page's Mapped
+  Source.
+{% endcomment %}
+<script>
+(function () {
+  var select = document.getElementById('sourceSelect');
+  var customInput = document.getElementById('sourceCustomInput');
+  var form = select && select.closest('form');
+  if (!select || !customInput || !form) return;
+
+  function syncCustomVisibility() {
+    customInput.hidden = select.value !== '__other__';
+    if (!customInput.hidden) customInput.focus();
+  }
+  select.addEventListener('change', syncCustomVisibility);
+  syncCustomVisibility();
+
+  form.addEventListener('submit', function () {
+    var typed = customInput.value.trim();
+    if (select.value === '__other__' && typed) {
+      var opt = document.createElement('option');
+      opt.value = typed;
+      opt.selected = true;
+      select.appendChild(opt);
+    }
+  });
+})();
+</script>
 {% endblock %}
