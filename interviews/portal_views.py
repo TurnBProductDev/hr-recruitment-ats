@@ -31,10 +31,13 @@ logger = logging.getLogger(__name__)
 
 
 def _is_admin(user):
-    """Admin (HR_ADMIN) or superuser - sees every interview/candidate in the
-    portal instead of only their own, e.g. to check what an interviewer sees
-    or to browse every scheduled interview from this simpler view instead of
-    the full HR Interview Scheduler."""
+    """Admin (HR_ADMIN) or superuser - allowed through the portal's login
+    gate alongside Interviewer (see InterviewerLoginView.form_valid). Once
+    inside, an Admin is scoped exactly like any other interviewer - HR Admin
+    can now be assigned as an interviewer themselves (interviews/forms.py),
+    so "every interview, every interviewer" here would show interviews that
+    aren't theirs. Browsing everyone's is still available via the full HR
+    Interview Scheduler, which Admin already has unrestricted access to."""
     return user.is_superuser or user.groups.filter(name=HR_ADMIN).exists()
 
 
@@ -72,8 +75,8 @@ class InterviewerHomeView(GroupRequiredMixin, ListView):
     """Landing page after an interviewer signs in, as 3 tabs: Prospects
     (interviewer-proposes-slots requests still in progress), Scheduled
     (upcoming interviews) and Result Pending (the slot has passed but no
-    result recorded yet). An Admin sees every interviewer's, instead of
-    just their own."""
+    result recorded yet). Always scoped to the signed-in user's own
+    interviews, including for an Admin - see _is_admin's docstring."""
     model = Interview
     template_name = 'interviews/portal_home.html'
     context_object_name = 'interviews'
@@ -84,16 +87,13 @@ class InterviewerHomeView(GroupRequiredMixin, ListView):
         # page - once a result is recorded (or the interview is cancelled)
         # it drops off entirely; that history lives on the candidate's own
         # timeline instead.
-        qs = Interview.objects.filter(status__in=Interview.OPEN_STATUSES) \
-            .select_related('candidate', 'candidate__job', 'interviewer')
-        if not _is_admin(self.request.user):
-            qs = qs.filter(interviewer=self.request.user)
-        return qs.order_by('scheduled_date')
+        return (Interview.objects.filter(
+                    status__in=Interview.OPEN_STATUSES, interviewer=self.request.user)
+                .select_related('candidate', 'candidate__job', 'interviewer')
+                .order_by('scheduled_date'))
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        is_admin = _is_admin(self.request.user)
-        ctx['is_admin_view'] = is_admin
         # Scheduled: still ahead of us. Result Pending: the slot has passed
         # but nothing's been recorded yet - the interviewer needs to act.
         now = timezone.now()
@@ -101,11 +101,11 @@ class InterviewerHomeView(GroupRequiredMixin, ListView):
         ctx['scheduled'] = [i for i in interviews if i.scheduled_date > now]
         ctx['result_pending'] = [i for i in interviews if i.scheduled_date <= now]
 
-        requests_qs = InterviewRequest.objects.filter(status__in=InterviewRequest.OPEN_STATUSES) \
+        ctx['next_prospects'] = (
+            InterviewRequest.objects.filter(
+                status__in=InterviewRequest.OPEN_STATUSES, interviewer=self.request.user)
             .select_related('candidate', 'candidate__job', 'interviewer')
-        if not is_admin:
-            requests_qs = requests_qs.filter(interviewer=self.request.user)
-        ctx['next_prospects'] = requests_qs.order_by('-created_at')
+            .order_by('-created_at'))
         return ctx
 
 
@@ -118,54 +118,46 @@ class InterviewerCandidateView(GroupRequiredMixin, DetailView):
     just a Prospect for (an InterviewRequest allocated to them, before any
     slot is even scheduled - see the portal home's Prospects tab, which
     links here) - not the whole repository by ID - a 404, not just a group
-    check, for anyone else. An Admin can open any candidate with either."""
+    check, for anyone else. Applies the same way to an Admin using the
+    portal - see _is_admin's docstring."""
     model = Candidate
     template_name = 'interviews/portal_candidate.html'
     context_object_name = 'candidate'
     allowed_groups = (INTERVIEWER, HR_ADMIN)
 
     def get_queryset(self):
-        if _is_admin(self.request.user):
-            return Candidate.objects.filter(
-                Q(interviews__isnull=False) | Q(interview_requests__isnull=False)).distinct()
         user = self.request.user
         return Candidate.objects.filter(
             Q(interviews__interviewer=user) | Q(interview_requests__interviewer=user)).distinct()
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        is_admin = _is_admin(self.request.user)
-        interviews_qs = self.object.interviews.all() if is_admin else (
-            self.object.interviews.filter(interviewer=self.request.user))
-        ctx['my_interviews'] = interviews_qs.select_related('interviewer').order_by('-scheduled_date')
-        ctx['is_admin_view'] = is_admin
+        ctx['my_interviews'] = (
+            self.object.interviews.filter(interviewer=self.request.user)
+            .select_related('interviewer').order_by('-scheduled_date'))
         ctx['open_statuses'] = Interview.OPEN_STATUSES
         ctx['back_url'] = reverse('interviewer_home')
         ctx['back_label'] = 'My Interviews'
         # A later-round interviewer (e.g. Round 2) otherwise has no way to see
-        # what an earlier round's interviewer wrote - an admin already sees
-        # every interview via my_interviews above, so this is non-admin only.
-        if not is_admin:
-            ctx['other_round_feedback'] = (
-                self.object.interviews.exclude(interviewer=self.request.user)
-                .exclude(feedback__isnull=True).exclude(feedback='')
-                .select_related('interviewer').order_by('scheduled_date'))
+        # what an earlier round's interviewer wrote.
+        ctx['other_round_feedback'] = (
+            self.object.interviews.exclude(interviewer=self.request.user)
+            .exclude(feedback__isnull=True).exclude(feedback='')
+            .select_related('interviewer').order_by('scheduled_date'))
         return ctx
 
 
 class InterviewProposeSlotsView(GroupRequiredMixin, View):
     """Step 2 of the interviewer-proposes-slots flow: the interviewer offers
     2-3 one-hour times for a candidate HR allocated to them. Scoped to their
-    own requests only (an Admin using the portal can see every request via
-    InterviewerHomeView.next_prospects, but proposing slots on someone else's
-    behalf isn't offered here)."""
+    own requests only, including for an Admin - proposing slots on someone
+    else's behalf isn't offered here."""
     allowed_groups = (INTERVIEWER, HR_ADMIN)
     template_name = 'interviews/portal_propose_slots.html'
 
     def _request_or_404(self, pk, user):
-        qs = InterviewRequest.objects.filter(status=InterviewRequest.Status.AWAITING_SLOTS)
-        if not _is_admin(user):
-            qs = qs.filter(interviewer=user)
+        qs = InterviewRequest.objects.filter(
+            status=InterviewRequest.Status.AWAITING_SLOTS, interviewer=user)
         return get_object_or_404(qs, pk=pk)
 
     def get(self, request, pk):

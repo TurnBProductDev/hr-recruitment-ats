@@ -4,7 +4,7 @@ from django import forms
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
-from candidates.permissions import INTERVIEWER
+from candidates.permissions import HR_ADMIN, INTERVIEWER
 
 from . import graph_client
 from .models import (
@@ -88,10 +88,14 @@ class InterviewForm(BootstrapFormMixin, forms.ModelForm):
                 self.fields['round_type'].initial = resolving_request.round_type
                 self.fields['interviewer'].initial = resolving_request.interviewer_id
                 self.fields['mode'].initial = resolving_request.mode
-        # Only people in the Interviewer group are assignable, ordered by name.
+        # Interviewer group + HR Admin are assignable - HR Admin can take
+        # interviews themselves, not just delegate them - ordered by name.
+        # distinct() since groups__name__in joins per matching group, and an
+        # account in both groups would otherwise list twice.
         User = get_user_model()
         self.fields['interviewer'].queryset = (
-            User.objects.filter(groups__name=INTERVIEWER).order_by('first_name', 'last_name'))
+            User.objects.filter(groups__name__in=(INTERVIEWER, HR_ADMIN))
+            .order_by('first_name', 'last_name').distinct())
         self.fields['interviewer'].label_from_instance = (
             lambda u: u.get_full_name() or u.username)
         self.fields['interviewer'].empty_label = 'Unassigned'
@@ -188,9 +192,11 @@ class InterviewAllocationForm(BootstrapFormMixin, forms.ModelForm):
         self.candidate = candidate
         self.fields['round_type'].choices = _simplified_round_type_choices(
             self.instance.round_type if self.instance.pk else None)
+        # Interviewer group + HR Admin - see InterviewForm's __init__ above.
         User = get_user_model()
         self.fields['interviewer'].queryset = (
-            User.objects.filter(groups__name=INTERVIEWER).order_by('first_name', 'last_name'))
+            User.objects.filter(groups__name__in=(INTERVIEWER, HR_ADMIN))
+            .order_by('first_name', 'last_name').distinct())
         self.fields['interviewer'].label_from_instance = (
             lambda u: u.get_full_name() or u.username)
         self._add_bootstrap_classes()

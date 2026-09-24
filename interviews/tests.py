@@ -173,6 +173,48 @@ class OneOpenInterviewTests(TestCase):
         self.assertEqual(other.interviews.count(), 1)
 
 
+class InterviewerFieldIncludesHRAdminTests(TestCase):
+    """HR Admin can take interviews themselves, not just delegate them - the
+    interviewer dropdown on both InterviewForm (direct scheduling) and
+    InterviewAllocationForm (Allocate Interviewer) offers Interviewer-group
+    accounts and HR Admin accounts, nothing else."""
+
+    def setUp(self):
+        self.job = Job.objects.create(job_code='J1', title='Program Manager')
+        self.candidate = Candidate.objects.create(
+            full_name='Rose E G', email='rose@example.com', job=self.job)
+        self.interviewer = get_user_model().objects.create_user(
+            'panel', 'panel@turnb.com', 'pw', first_name='Sreejith', last_name='K R')
+        self.interviewer.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
+        self.admin = get_user_model().objects.create_user(
+            'admin', 'admin@turnb.com', 'pw', first_name='Amrita', last_name='S')
+        self.admin.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.recruiter = get_user_model().objects.create_user(
+            'rec', 'rec@turnb.com', 'pw', first_name='Someone', last_name='Else')
+        self.recruiter.groups.add(Group.objects.get_or_create(name=RECRUITER)[0])
+
+    def test_interview_form_offers_interviewer_and_hr_admin_only(self):
+        # interviews.0002_seed_interviewers seeds real interviewer accounts
+        # into every fresh database - assert on membership, not an exact set.
+        form = InterviewForm(candidate=self.candidate)
+        choices = set(form.fields['interviewer'].queryset)
+        self.assertIn(self.interviewer, choices)
+        self.assertIn(self.admin, choices)
+        self.assertNotIn(self.recruiter, choices)
+
+    def test_allocation_form_offers_interviewer_and_hr_admin_only(self):
+        form = InterviewAllocationForm(candidate=self.candidate)
+        choices = set(form.fields['interviewer'].queryset)
+        self.assertIn(self.interviewer, choices)
+        self.assertIn(self.admin, choices)
+        self.assertNotIn(self.recruiter, choices)
+
+    def test_an_account_in_both_groups_is_not_listed_twice(self):
+        self.admin.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
+        form = InterviewForm(candidate=self.candidate)
+        self.assertEqual(list(form.fields['interviewer'].queryset).count(self.admin), 1)
+
+
 class RoundTypeChoicesTests(TestCase):
     """Allocate Interviewer / Manual Slot Allocate only offer Round 1 /
     Round 2 - the older Technical/Managerial/Final/HR Round sub-types
@@ -1079,8 +1121,11 @@ class InterviewRequestRescheduleTests(TestCase):
 
 
 class InterviewerPortalAdminTests(TestCase):
-    """Admin sees every interview/candidate in the portal, not just their
-    own - unlike a plain Interviewer, who stays scoped to themselves."""
+    """Admin may sign in through the Interviewer portal, but is scoped to
+    their own interviews exactly like a plain Interviewer - HR Admin can now
+    be assigned as an interviewer themselves (see interviews/forms.py), so
+    "sees everyone's" would show interviews that aren't theirs. Browsing
+    everyone's is still available via the full HR Interview Scheduler."""
 
     def setUp(self):
         self.admin = get_user_model().objects.create_user('admin', 'admin@turnb.com', 'pw')
@@ -1109,11 +1154,21 @@ class InterviewerPortalAdminTests(TestCase):
         response = self.client.post(reverse('interviewer_login'), {'username': 'admin', 'password': 'pw'})
         self.assertRedirects(response, reverse('interviewer_home'))
 
-    def test_admin_sees_every_interviewers_interviews(self):
+    def test_admin_with_no_interviews_of_their_own_sees_none_of_the_others(self):
         self.client.force_login(self.admin)
         response = self.client.get(reverse('interviewer_home'))
-        self.assertContains(response, 'Rose E G')
+        self.assertNotContains(response, 'Rose E G')
+        self.assertNotContains(response, 'Nikhil Shaji')
+
+    def test_admin_sees_their_own_when_assigned_as_the_interviewer(self):
+        Interview.objects.create(
+            candidate=self.candidate_b, interviewer=self.admin,
+            round_type=Interview.RoundType.ROUND2,
+            scheduled_date=timezone.now() + timezone.timedelta(days=3))
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse('interviewer_home'))
         self.assertContains(response, 'Nikhil Shaji')
+        self.assertNotContains(response, 'Rose E G')
 
     def test_plain_interviewer_still_only_sees_their_own(self):
         self.client.force_login(self.interviewer_a)
@@ -1121,7 +1176,16 @@ class InterviewerPortalAdminTests(TestCase):
         self.assertContains(response, 'Rose E G')
         self.assertNotContains(response, 'Nikhil Shaji')
 
-    def test_admin_can_view_any_candidate_with_an_interview(self):
+    def test_admin_cannot_view_a_candidate_they_have_no_interview_with(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse('interviewer_candidate', args=[self.candidate_b.pk]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_admin_can_view_a_candidate_they_do_have_an_interview_with(self):
+        Interview.objects.create(
+            candidate=self.candidate_b, interviewer=self.admin,
+            round_type=Interview.RoundType.ROUND2,
+            scheduled_date=timezone.now() + timezone.timedelta(days=3))
         self.client.force_login(self.admin)
         response = self.client.get(reverse('interviewer_candidate', args=[self.candidate_b.pk]))
         self.assertEqual(response.status_code, 200)
