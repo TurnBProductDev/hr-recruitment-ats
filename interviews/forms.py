@@ -4,7 +4,7 @@ from django import forms
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
-from candidates.permissions import HR_ADMIN, INTERVIEWER
+from candidates.permissions import HIRING_MANAGER, INTERVIEWER
 
 from . import graph_client
 from .models import (
@@ -88,13 +88,16 @@ class InterviewForm(BootstrapFormMixin, forms.ModelForm):
                 self.fields['round_type'].initial = resolving_request.round_type
                 self.fields['interviewer'].initial = resolving_request.interviewer_id
                 self.fields['mode'].initial = resolving_request.mode
-        # Interviewer group + HR Admin are assignable - HR Admin can take
-        # interviews themselves, not just delegate them - ordered by name.
+        # Interviewer group + Hiring Manager are assignable - Hiring Manager
+        # can take interviews themselves, not just delegate them - ordered by
+        # name. HR Admin is deliberately not included - Admin is the
+        # oversight role (sees every interviewer's assignments in the portal,
+        # see interviews/portal_views.py's _is_admin), not an assignee.
         # distinct() since groups__name__in joins per matching group, and an
         # account in both groups would otherwise list twice.
         User = get_user_model()
         self.fields['interviewer'].queryset = (
-            User.objects.filter(groups__name__in=(INTERVIEWER, HR_ADMIN))
+            User.objects.filter(groups__name__in=(INTERVIEWER, HIRING_MANAGER))
             .order_by('first_name', 'last_name').distinct())
         self.fields['interviewer'].label_from_instance = (
             lambda u: u.get_full_name() or u.username)
@@ -192,10 +195,10 @@ class InterviewAllocationForm(BootstrapFormMixin, forms.ModelForm):
         self.candidate = candidate
         self.fields['round_type'].choices = _simplified_round_type_choices(
             self.instance.round_type if self.instance.pk else None)
-        # Interviewer group + HR Admin - see InterviewForm's __init__ above.
+        # Interviewer group + Hiring Manager - see InterviewForm's __init__ above.
         User = get_user_model()
         self.fields['interviewer'].queryset = (
-            User.objects.filter(groups__name__in=(INTERVIEWER, HR_ADMIN))
+            User.objects.filter(groups__name__in=(INTERVIEWER, HIRING_MANAGER))
             .order_by('first_name', 'last_name').distinct())
         self.fields['interviewer'].label_from_instance = (
             lambda u: u.get_full_name() or u.username)
