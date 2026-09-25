@@ -194,6 +194,14 @@ BULK_UPLOAD_MAX_MB = int(os.environ.get("BULK_UPLOAD_MAX_MB", "10"))
 AZURE_OPENAI_ENDPOINT = os.environ.get("AZURE_OPENAI_ENDPOINT", "")
 AZURE_OPENAI_KEY = os.environ.get("AZURE_OPENAI_KEY", "")
 AZURE_OPENAI_SCORING_DEPLOYMENT = os.environ.get("AZURE_OPENAI_SCORING_DEPLOYMENT", "cv-data-agent")
+# candidates/cv_extraction.py's per-CV read is pure structured-field
+# extraction (name/email/education/experience into a fixed JSON shape) -
+# a much smaller model handles this as well as the flagship one at a
+# fraction of the cost, unlike match_scoring.py's holistic candidate-vs-JD
+# judgement call, which stays on AZURE_OPENAI_SCORING_DEPLOYMENT. Deployment
+# created 2026-09-25 (gpt-4.1-mini - gpt-4o-mini itself is deprecated for
+# new deployments) specifically for this.
+AZURE_OPENAI_EXTRACTION_DEPLOYMENT = os.environ.get("AZURE_OPENAI_EXTRACTION_DEPLOYMENT", "cv-extraction-mini")
 # 2024-08-01-preview+ is required for structured outputs (response_format:
 # json_schema), which match_scoring.py relies on for a guaranteed-valid reply.
 AZURE_OPENAI_API_VERSION = os.environ.get("AZURE_OPENAI_API_VERSION", "2024-08-01-preview")

@@ -43,8 +43,11 @@ def is_configured():
 
 
 def _endpoint_url():
+    # A smaller/cheaper deployment than match_scoring.py's - this is
+    # structured field extraction, not a holistic judgement call. See
+    # settings.AZURE_OPENAI_EXTRACTION_DEPLOYMENT.
     endpoint = settings.AZURE_OPENAI_ENDPOINT.rstrip('/')
-    deployment = settings.AZURE_OPENAI_SCORING_DEPLOYMENT
+    deployment = settings.AZURE_OPENAI_EXTRACTION_DEPLOYMENT
     api_version = settings.AZURE_OPENAI_API_VERSION
     return f'{endpoint}/openai/deployments/{deployment}/chat/completions?api-version={api_version}'
 
