@@ -663,6 +663,9 @@ class GeneralApplicationsListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
         return ctx
 
 
+TYPED_ROLE_PREFIX = 'text:'  # Future Prospects' role filter value prefix for a typed "Other" role
+
+
 class FutureProspectsListView(RemembersListUrlMixin, GroupRequiredMixin, ListView):
     """Candidates put on Hold before they were ever screened - kept as a pool
     to revisit for future openings rather than counted as an active
@@ -689,8 +692,10 @@ class FutureProspectsListView(RemembersListUrlMixin, GroupRequiredMixin, ListVie
         q = self.request.GET.get('q')
         if q:
             qs = qs.filter(Q(full_name__icontains=q) | Q(email__icontains=q))
-        role = self.request.GET.get('role')
-        if role:
+        role = self.request.GET.get('role', '')
+        if role.startswith(TYPED_ROLE_PREFIX):
+            qs = qs.filter(suggested_role_text=role[len(TYPED_ROLE_PREFIX):])
+        elif role:
             qs = qs.filter(suggested_role_id=role)
         return qs.order_by('-held_at')
 
@@ -699,6 +704,11 @@ class FutureProspectsListView(RemembersListUrlMixin, GroupRequiredMixin, ListVie
         ctx['q'] = self.request.GET.get('q', '')
         ctx['selected_role'] = self.request.GET.get('role', '')
         ctx['role_options'] = Job.objects.exclude(title__iexact=GENERAL_APPLICATION).order_by('title')
+        # Roles typed into Move to Future's "Other" - filterable too, as
+        # role=text:<typed value> (see get_queryset).
+        ctx['typed_role_options'] = sorted(set(
+            self.base_queryset().exclude(suggested_role_text='').values_list('suggested_role_text', flat=True)))
+        ctx['typed_role_prefix'] = TYPED_ROLE_PREFIX
         ctx['total'] = self.base_queryset().count()
         ctx['querystring'] = _querystring_without_page(self.request)
         u = self.request.user
@@ -788,7 +798,8 @@ class FutureProspectsExportView(GroupRequiredMixin, _ExcelExportMixin, View):
         ('Role', lambda c: c.job.title if c.job else ''),
         ('Held At', lambda c: c.held_at.strftime('%Y-%m-%d') if c.held_at else ''),
         ('Hold Reason', lambda c: c.hold_reason or ''),
-        ('Suggested Role', lambda c: c.suggested_role.title if c.suggested_role else (c.role_applied or '')),
+        ('Suggested Role', lambda c: (c.suggested_role.title if c.suggested_role
+                                      else c.suggested_role_text or c.role_applied or '')),
     )
 
 
@@ -1433,6 +1444,9 @@ class CandidateSendRejectionView(GroupRequiredMixin, View):
         return redirect(next_url)
 
 
+OTHER_ROLE = '__other__'  # Move to Future's "Other (type manually)" option value
+
+
 class CandidateMoveToFutureView(GroupRequiredMixin, View):
     """Re-tag a candidate as a Future Prospect - see
     services.move_to_future_prospects. Offered alongside the normal
@@ -1446,14 +1460,25 @@ class CandidateMoveToFutureView(GroupRequiredMixin, View):
         candidate = get_object_or_404(Candidate, pk=pk)
         reason = request.POST.get('reason', '').strip()
         role_id = request.POST.get('suggested_role', '').strip()
-        suggested_role = get_object_or_404(Job, pk=role_id) if role_id else None
+        suggested_role = None
+        suggested_role_text = ''
+        if role_id == OTHER_ROLE:
+            # "Other" on the modal: a typed role that isn't one of our
+            # vacancies. Checked before anything changes, so a blank box
+            # can't leave the candidate half-moved.
+            suggested_role_text = request.POST.get('suggested_role_other', '').strip()
+            if not suggested_role_text:
+                messages.error(request, 'Type the suggested role when choosing "Other".')
+                return redirect(request.POST.get('next') or reverse('candidate_timeline', args=[pk]))
+        elif role_id:
+            suggested_role = get_object_or_404(Job, pk=role_id)
         performed_by = _performed_by(request)
         if candidate.status != STATUS.SCREENING_HOLD:
             services.change_status(candidate, STATUS.SCREENING_HOLD, user=request.user,
                                    remarks=reason or None, performed_by=performed_by)
         services.move_to_future_prospects(
             candidate, user=request.user, remarks=reason or None, performed_by=performed_by,
-            suggested_role=suggested_role)
+            suggested_role=suggested_role, suggested_role_text=suggested_role_text)
         messages.success(request, f'{candidate.full_name} moved to Future Prospects.')
         next_url = request.POST.get('next')
         return redirect(next_url or reverse('candidate_timeline', args=[pk]))

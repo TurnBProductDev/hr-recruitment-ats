@@ -75,7 +75,8 @@ def change_status(candidate, new_status, user=None, remarks=None, performed_by=N
     return candidate
 
 
-def move_to_future_prospects(candidate, user=None, remarks=None, performed_by=None, suggested_role=None):
+def move_to_future_prospects(candidate, user=None, remarks=None, performed_by=None, suggested_role=None,
+                             suggested_role_text=''):
     """Re-tag a hold taken at any stage as a screening-stage hold, so it's
     tracked on the Future Prospects page and counted as Rejected (see
     dashboard.views.INITIAL_HOLD / candidates.flows.screened_out) the exact
@@ -85,12 +86,16 @@ def move_to_future_prospects(candidate, user=None, remarks=None, performed_by=No
     A no-op if the candidate isn't currently on hold.
 
     `suggested_role` (a Job, optional) records which role HR thinks might
-    suit them later, so Future Prospects can be filtered by it."""
+    suit them later, so Future Prospects can be filtered by it. When the
+    role isn't one of our vacancies, `suggested_role_text` holds what HR
+    typed instead (the modal's "Other" option) - only one of the two is ever
+    kept, so a re-move never leaves a stale value from the previous one."""
     if candidate.status != STATUS.SCREENING_HOLD:
         return candidate
     candidate.hold_from_status = STATUS.OPEN
     candidate.suggested_role = suggested_role
-    candidate.save(update_fields=['hold_from_status', 'suggested_role', 'updated_at'])
+    candidate.suggested_role_text = '' if suggested_role else (suggested_role_text or '').strip()[:255]
+    candidate.save(update_fields=['hold_from_status', 'suggested_role', 'suggested_role_text', 'updated_at'])
     CandidateStatusHistory.objects.create(
         candidate=candidate, old_status=STATUS.SCREENING_HOLD, new_status=STATUS.SCREENING_HOLD,
         changed_by=user, performed_by=performed_by,

@@ -1663,6 +1663,57 @@ class MoveToFutureProspectsTests(TestCase):
         response = self.client.get(reverse('candidate_future_prospects'), {'role': other_job.pk})
         self.assertNotIn(self.candidate, response.context['candidates'])
 
+    def _move_with_typed_role(self, text='Product Designer'):
+        return self.client.post(reverse('candidate_move_to_future', args=[self.candidate.pk]), {
+            'suggested_role': '__other__', 'suggested_role_other': text})
+
+    def test_modal_offers_an_other_option_with_a_text_box(self):
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertContains(response, 'value="__other__"')
+        self.assertContains(response, 'name="suggested_role_other"')
+
+    def test_other_saves_the_typed_role_and_leaves_the_vacancy_unset(self):
+        self._move_with_typed_role('  Product Designer  ')
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.suggested_role_text, 'Product Designer')
+        self.assertIsNone(self.candidate.suggested_role)
+        self.assertEqual(self.candidate.hold_from_status, Candidate.Status.OPEN)  # actually moved
+
+    def test_other_with_a_blank_box_is_rejected_and_moves_nothing(self):
+        services.change_status(self.candidate, Candidate.Status.ROUND1)  # active, not on hold
+        response = self._move_with_typed_role('   ')
+        self.assertEqual(response.status_code, 302)
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.status, Candidate.Status.ROUND1)  # untouched
+        self.assertEqual(self.candidate.suggested_role_text, '')
+
+    def test_picking_a_vacancy_clears_a_previously_typed_role(self):
+        self._move_with_typed_role('Product Designer')
+        job = Job.objects.create(title='Data Analyst')
+        self.client.post(reverse('candidate_move_to_future', args=[self.candidate.pk]),
+                         {'suggested_role': job.pk})
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.suggested_role, job)
+        self.assertEqual(self.candidate.suggested_role_text, '')
+
+    def test_future_prospects_shows_and_filters_the_typed_role(self):
+        self._move_with_typed_role('Product Designer')
+        response = self.client.get(reverse('candidate_future_prospects'))
+        self.assertContains(response, 'Product Designer')
+        self.assertIn('Product Designer', response.context['typed_role_options'])
+
+        response = self.client.get(reverse('candidate_future_prospects'), {'role': 'text:Product Designer'})
+        self.assertIn(self.candidate, response.context['candidates'])
+        response = self.client.get(reverse('candidate_future_prospects'), {'role': 'text:Someone Else'})
+        self.assertNotIn(self.candidate, response.context['candidates'])
+
+    def test_export_includes_the_typed_role(self):
+        self._move_with_typed_role('Product Designer')
+        response = self.client.get(reverse('candidate_future_prospects_export'))
+        workbook = openpyxl.load_workbook(io.BytesIO(response.content))
+        values = [cell.value for row in workbook.active.iter_rows() for cell in row]
+        self.assertIn('Product Designer', values)
+
 
 class MoveToFutureAlwaysAvailableTests(TestCase):
     """The Final Status box's own small "Move to Future" button - available

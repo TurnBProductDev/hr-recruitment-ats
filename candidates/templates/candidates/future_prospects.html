@@ -64,6 +64,9 @@
           {% for j in role_options %}
           <option value="{{ j.id }}" {% if selected_role == j.id|stringformat:'s' %}selected{% endif %}>{{ j.title }}</option>
           {% endfor %}
+          {% for t in typed_role_options %}
+          <option value="{{ typed_role_prefix }}{{ t }}" {% if selected_role == typed_role_prefix|add:t %}selected{% endif %}>{{ t }} (other)</option>
+          {% endfor %}
         </select>
       </div>
       <button type="submit" class="btn btn-sm btn-outline-app"><i class="bi bi-search"></i> Search</button>
@@ -121,7 +124,7 @@
               {% else %}-{% endif %}
             </td>
             <td class="small ga-reason">{{ c.hold_reason|default:"-" }}</td>
-            <td>{{ c.suggested_role.title|default:c.role_applied|default:"-" }}</td>
+            <td>{{ c.suggested_role.title|default:c.suggested_role_text|default:c.role_applied|default:"-" }}</td>
             <td class="text-nowrap text-end">
               <a href="{% url 'candidate_timeline' c.id %}" class="btn btn-sm btn-outline-app">View</a>
               {% comment %}

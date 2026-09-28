@@ -895,14 +895,17 @@ html { scroll-behavior: smooth; }
           <p class="text-muted small mb-3">This stops actively pursuing {{ candidate.full_name }} for this vacancy and keeps them as a prospect for future openings instead.</p>
           <div class="mb-3">
             <label class="form-label">Suggested Role <span class="text-danger">*</span></label>
-            <select name="suggested_role" class="form-select" required>
+            <select name="suggested_role" id="suggestedRoleSelect" class="form-select" required>
               <option value="">Select a role…</option>
               {% for j in all_jobs %}
               {% if j.title|lower != 'general application' %}
               <option value="{{ j.id }}">{{ j.title }}</option>
               {% endif %}
               {% endfor %}
+              <option value="__other__">Other (type manually)…</option>
             </select>
+            <input type="text" name="suggested_role_other" id="suggestedRoleOther" class="form-control mt-2"
+                   placeholder="Type the suggested role…" maxlength="255" hidden>
           </div>
           <div class="mb-1">
             <label class="form-label">Remarks / Reason</label>
@@ -933,6 +936,24 @@ html { scroll-behavior: smooth; }
   if (!raw || !target || typeof marked === 'undefined' || typeof DOMPurify === 'undefined') return;
   var html = DOMPurify.sanitize(marked.parse(raw.textContent));
   target.innerHTML = html;
+})();
+
+// Move to Future: "Other" reveals a text box for a suggested role that isn't
+// one of our vacancies. The select posts "__other__" and the box posts
+// separately as suggested_role_other (CandidateMoveToFutureView) - required
+// only while it's actually shown, so picking a real vacancy never demands it.
+(function () {
+  var select = document.getElementById('suggestedRoleSelect');
+  var other = document.getElementById('suggestedRoleOther');
+  if (!select || !other) return;
+  function sync() {
+    var isOther = select.value === '__other__';
+    other.hidden = !isOther;
+    other.required = isOther;
+    if (isOther) other.focus(); else other.value = '';
+  }
+  select.addEventListener('change', sync);
+  sync();
 })();
 
 // Mapped Source: "Other" reveals a plain text box instead of one of the

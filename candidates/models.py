@@ -123,6 +123,10 @@ class Candidate(models.Model):
     # can be filtered by it.
     suggested_role = models.ForeignKey(
         Job, on_delete=models.SET_NULL, null=True, blank=True, related_name='future_prospect_candidates')
+    # "Other" on the Move to Future modal: a role HR typed in that isn't one of
+    # our vacancies. Mutually exclusive with suggested_role - see
+    # services.move_to_future_prospects, which clears whichever isn't used.
+    suggested_role_text = models.CharField(max_length=255, blank=True, default='')
     source = models.CharField(max_length=255, blank=True, null=True)
     # The position the applicant actually asked for, as written on the CV / in the
     # application email. `job` is where we filed them, which is often
