@@ -1400,7 +1400,9 @@ class CandidateSendRejectionView(GroupRequiredMixin, View):
     with target_status=REJECTED) and emails them the reviewed draft in one
     step. The internal reason/remarks field is separate from the email body -
     it's carried over from the stage card's own remarks box by JS so it still
-    lands in CandidateStatusHistory.remarks as usual."""
+    lands in CandidateStatusHistory.remarks as usual. The popup's "Reject
+    Without Email" button posts skip_email=1: same rejection, no email (e.g.
+    an interview that was cancelled / the candidate never turned up)."""
     allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
 
     def post(self, request, pk):
@@ -1410,8 +1412,18 @@ class CandidateSendRejectionView(GroupRequiredMixin, View):
         subject = request.POST.get('subject', '').strip()
         body = request.POST.get('body', '')
         reason = request.POST.get('reason', '').strip()
+        skip_email = request.POST.get('skip_email') == '1'
         performed_by = _performed_by(request)
         next_url = request.POST.get('next') or reverse('candidate_timeline', args=[pk])
+
+        if skip_email:
+            _settle_round_interview(candidate, STATUS.REJECTED)
+            services.change_status(candidate, STATUS.REJECTED, user=request.user,
+                                   remarks=reason or None, performed_by=performed_by)
+            if is_ajax:
+                return JsonResponse({'ok': True})
+            messages.success(request, f'{candidate.full_name} moved to "Rejected" (no email sent).')
+            return redirect(next_url)
 
         if not to_email:
             error = 'A recipient email is required.'

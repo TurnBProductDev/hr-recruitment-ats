@@ -183,7 +183,10 @@ class Candidate(models.Model):
         Round 1/Round 2 additionally say whether an interview is actually
         booked yet - "Round 1" alone doesn't tell HR whether they still need
         to act, so it reads "Round 1 - Schedule Pending" until an Interview
-        row for that round is actually Scheduled/Rescheduled."""
+        row for that round is actually Scheduled/Rescheduled. Once that
+        round's latest interview is marked Done it reads "Decision Pending"
+        (HR still has to Clear/Reject), and if it was cancelled, "Interview
+        Cancelled" - the same latest-row rule the timeline's stage card uses."""
         if self.status == self.Status.SCREENING_HOLD:
             return hold_label(self.hold_from_status)
         if self.status in (self.Status.ROUND1, self.Status.INTERVIEW):
@@ -192,9 +195,17 @@ class Candidate(models.Model):
                 (Interview.RoundType.ROUND1,) if self.status == self.Status.ROUND1 else
                 (Interview.RoundType.ROUND2, Interview.RoundType.TECHNICAL, Interview.RoundType.MANAGERIAL,
                  Interview.RoundType.FINAL, Interview.RoundType.HR))
-            scheduled = self.interviews.filter(
-                round_type__in=round_types, status__in=Interview.OPEN_STATUSES).exists()
-            suffix = 'Scheduled' if scheduled else 'Schedule Pending'
+            statuses = list(self.interviews.filter(round_type__in=round_types)
+                            .order_by('-pk').values_list('status', flat=True))
+            latest = statuses[0] if statuses else None
+            if any(s in Interview.OPEN_STATUSES for s in statuses):
+                suffix = 'Scheduled'
+            elif latest == Interview.Status.COMPLETED:
+                suffix = 'Decision Pending'
+            elif latest == Interview.Status.CANCELLED:
+                suffix = 'Interview Cancelled'
+            else:
+                suffix = 'Schedule Pending'
             return f'{self.get_status_display()} - {suffix}'
         return self.get_status_display()
 

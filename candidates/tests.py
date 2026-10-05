@@ -2455,6 +2455,66 @@ class RejectionEmailPopupTests(TestCase):
         self.assertContains(response, reverse('candidate_reject', args=[c2.pk]))
         self.assertNotContains(response, 'data-bs-target="#rejectionModal"')
 
+    def test_reject_without_email_rejects_but_sends_nothing(self):
+        with mock.patch('candidates.views.rejection_emails.send_rejection_email') as send:
+            response = self.client.post(
+                reverse('candidate_send_rejection', args=[self.candidate.pk]),
+                {'skip_email': '1', 'to_email': '', 'reason': 'No-show.'},
+                HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.json(), {'ok': True})
+        send.assert_not_called()
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.status, Candidate.Status.REJECTED)
+        self.assertEqual(self.candidate.history.latest('changed_at').remarks, 'No-show.')
+
+    def test_draft_offers_reject_without_email(self):
+        response = self.client.get(reverse('candidate_rejection_draft', args=[self.candidate.pk]))
+        self.assertContains(response, 'name="skip_email"')
+
+    def test_cancelled_interview_card_offers_one_click_reject_without_email(self):
+        Interview.objects.create(
+            candidate=self.candidate, round_type=Interview.RoundType.ROUND1,
+            status=Interview.Status.CANCELLED,
+            scheduled_date=timezone.now() - timezone.timedelta(days=1))
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertContains(response, 'Reject (No Email)')
+        self.assertContains(response, reverse('candidate_reject', args=[self.candidate.pk]))
+
+
+class RoundStatusLabelTests(TestCase):
+    """The header badge for Round 1/Round 2 says what HR has to do next."""
+
+    def setUp(self):
+        self.candidate = Candidate.objects.create(full_name='Sam P', email='sam@example.com')
+        services.record_creation(self.candidate)
+        services.change_status(self.candidate, Candidate.Status.SHORTLISTED)
+        services.change_status(self.candidate, Candidate.Status.ROUND1)
+
+    def _interview(self, status):
+        return Interview.objects.create(
+            candidate=self.candidate, round_type=Interview.RoundType.ROUND1, status=status,
+            scheduled_date=timezone.now() - timezone.timedelta(days=1))
+
+    def test_nothing_booked_is_schedule_pending(self):
+        self.assertEqual(self.candidate.status_label, 'Round 1 - Schedule Pending')
+
+    def test_open_interview_is_scheduled(self):
+        self._interview(Interview.Status.SCHEDULED)
+        self.assertEqual(self.candidate.status_label, 'Round 1 - Scheduled')
+
+    def test_done_interview_is_decision_pending(self):
+        self._interview(Interview.Status.COMPLETED)
+        self.assertEqual(self.candidate.status_label, 'Round 1 - Decision Pending')
+
+    def test_cancelled_interview_says_so(self):
+        self._interview(Interview.Status.CANCELLED)
+        self.assertEqual(self.candidate.status_label, 'Round 1 - Interview Cancelled')
+
+    def test_rebooked_after_cancel_is_scheduled(self):
+        self._interview(Interview.Status.CANCELLED)
+        self._interview(Interview.Status.SCHEDULED)
+        self.assertEqual(self.candidate.status_label, 'Round 1 - Scheduled')
+
 
 class CandidateListPaginationAndExportTests(TestCase):
     """None of the candidate lists paginate by default any more - it broke

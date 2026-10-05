@@ -488,6 +488,9 @@ html { scroll-behavior: smooth; }
                 <button type="button" class="stage-action-btn stage-tone-reject"
                         data-bs-toggle="modal" data-bs-target="#rejectionModal"
                         data-load-url="{% url 'candidate_rejection_draft' candidate.pk %}">Reject</button>
+                {# A no-show/cancelled candidate usually doesn't need the "thank you for interviewing" email. #}
+                <button type="submit" formaction="{% url 'candidate_reject' candidate.pk %}" class="stage-action-btn stage-tone-reject"
+                        onclick="return confirm('Reject {{ candidate.full_name|escapejs }} without sending an email?');">Reject (No Email)</button>
                 <button type="submit" formaction="{% url 'candidate_screening_hold' candidate.pk %}" class="stage-action-btn stage-tone-hold">Hold</button>
               </div>
             </form>
@@ -1238,15 +1241,23 @@ pollCandidateAction("{% url 'candidate_rescore_status' candidate.pk %}");
     var form = event.target;
     if (!(form instanceof HTMLFormElement) || form.dataset.step !== 'send-rejection') return;
     event.preventDefault();
-    var submitBtn = form.querySelector('button[type="submit"]');
-    if (submitBtn) { submitBtn.disabled = true; }
+    // "Reject Without Email" vs "Reject & Send Email": FormData(form) alone
+    // drops the clicked button's name/value, so carry it over by hand.
+    var submitBtn = event.submitter;
+    var data = new FormData(form);
+    if (submitBtn && submitBtn.name) { data.append(submitBtn.name, submitBtn.value); }
+    var buttons = form.querySelectorAll('button[type="submit"]');
+    function setBusy(busy) {
+      buttons.forEach(function (b) { b.disabled = busy || b.hasAttribute('data-no-email-disabled'); });
+    }
+    setBusy(true);
     fetch(form.action, {
-      method: 'POST', headers: {'X-Requested-With': 'XMLHttpRequest'}, body: new FormData(form),
+      method: 'POST', headers: {'X-Requested-With': 'XMLHttpRequest'}, body: data,
     })
       .then(function (r) { return r.json().then(function (data) { return {data: data, ok: r.ok}; }); })
       .then(function (result) {
         if (result.data.ok) { modal.hide(); window.location.reload(); return; }
-        if (submitBtn) { submitBtn.disabled = false; }
+        setBusy(false);
         var box = form.querySelector('#rejectionSendError');
         if (box) { box.hidden = false; box.textContent = result.data.error || 'Could not complete the rejection.'; }
         if (result.data.error && result.data.error.indexOf('but the email could not be sent') !== -1) {
@@ -1256,7 +1267,7 @@ pollCandidateAction("{% url 'candidate_rescore_status' candidate.pk %}");
         }
       })
       .catch(function () {
-        if (submitBtn) { submitBtn.disabled = false; }
+        setBusy(false);
         var box = form.querySelector('#rejectionSendError');
         if (box) { box.hidden = false; box.textContent = 'Network error - please try again.'; }
       });
