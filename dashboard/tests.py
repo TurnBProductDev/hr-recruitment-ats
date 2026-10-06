@@ -508,6 +508,25 @@ class DailyViewCandidateGroupingTests(TestCase):
         self.assertEqual(response.context['total_actions'], 3)
         self.assertContains(response, '3 actions across 1 candidate')
 
+    def test_grouped_events_carry_the_interview_dates(self):
+        [group] = daily_view.grouped_events('round1', (self.today, self.today), None)
+        self.interview.refresh_from_db()
+        self.assertEqual(group['interview'], self.interview)
+        dates = {a['action']: a['interview_date'] for a in group['actions']}
+        reschedule = self.interview.reschedules.get()
+        # Scheduled = the originally booked date; Rescheduled = where it moved to.
+        self.assertEqual(dates['Round 1 Interview Scheduled'], reschedule.previous_date)
+        self.assertEqual(dates['Round 1 Interview Rescheduled'], reschedule.new_date)
+        self.assertIsNone(dates['Rejected after Round 1'])
+
+    def test_drilldown_page_shows_the_interview_date(self):
+        user = get_user_model().objects.create_superuser('hr10', 'hr10@example.com', 'pw')
+        self.client.force_login(user)
+        response = self.client.get(reverse('daily_action_drilldown', args=['round1']),
+                                   {'daily_from': self.today.isoformat(), 'daily_to': self.today.isoformat()})
+        self.assertContains(response, 'Interview:')
+        self.assertContains(response, '<span class="dd-for">')  # the original booking, since it was rescheduled
+
 
 class UserManagementTests(TestCase):
     """The in-app Manage Users page - add/edit accounts and their role,

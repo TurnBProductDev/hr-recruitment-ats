@@ -1471,6 +1471,35 @@ class RepositoryStatusFilterTests(TestCase):
             services.change_status(c, Candidate.Status.SCREENING_HOLD)
         return c
 
+    def test_round_tabs_show_that_rounds_interview_date(self):
+        # Fixed future date in IST working hours, so the rendered day is stable.
+        when = timezone.make_aware(timezone.datetime(2030, 3, 14, 11, 0))
+        r1 = self._candidate('Round one', Candidate.Status.ROUND1)
+        Interview.objects.create(candidate=r1, round_type=Interview.RoundType.ROUND1, scheduled_date=when)
+        r2 = self._candidate('Round two', Candidate.Status.INTERVIEW)
+        Interview.objects.create(candidate=r2, round_type=Interview.RoundType.ROUND2,
+                                 scheduled_date=when + timezone.timedelta(days=1))
+
+        response = self.client.get(reverse('candidate_repository'), {'tab': 'round1', 'scoped': '1'})
+        self.assertContains(response, '<th>Round 1 Date</th>', html=True)
+        self.assertContains(response, '14 Mar 2030')
+
+        response = self.client.get(reverse('candidate_repository'), {'tab': 'interview', 'scoped': '1'})
+        self.assertContains(response, '<th>Round 2 Date</th>', html=True)
+        self.assertContains(response, '15 Mar 2030')
+
+        response = self.client.get(reverse('candidate_repository'), {'tab': 'open', 'scoped': '1'})
+        self.assertNotContains(response, 'Round 1 Date')
+
+    def test_round_date_skips_a_cancelled_interview(self):
+        c = self._candidate('Cancelled one', Candidate.Status.ROUND1)
+        Interview.objects.create(candidate=c, round_type=Interview.RoundType.ROUND1,
+                                 status=Interview.Status.CANCELLED,
+                                 scheduled_date=timezone.make_aware(timezone.datetime(2030, 3, 14, 11, 0)))
+        response = self.client.get(reverse('candidate_repository'), {'tab': 'round1', 'scoped': '1'})
+        self.assertNotContains(response, '14 Mar 2030')
+        self.assertContains(response, 'Not scheduled')
+
     def test_min_experience_filter_is_gone(self):
         response = self.client.get(reverse('candidate_repository'))
         self.assertNotContains(response, 'Min Exp.')

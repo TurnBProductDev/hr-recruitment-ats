@@ -30,6 +30,8 @@ TERMINAL = (S.REJECTED, S.BLACKLISTED)
 NON_R1_ROUNDS = (Interview.RoundType.ROUND2, Interview.RoundType.TECHNICAL, Interview.RoundType.MANAGERIAL,
                  Interview.RoundType.FINAL, Interview.RoundType.HR)
 
+ROUND_TYPES_BY_COLUMN = {'round1': (Interview.RoundType.ROUND1,), 'round2': NON_R1_ROUNDS}
+
 COLUMNS = [
     ('resumes', 'Resumes Received'),
     ('screened', 'Screened'),
@@ -136,7 +138,7 @@ def _interview_created_qs(round_types, date_range, job_id):
     qs = Interview.objects.filter(round_type__in=round_types, created_at__date__range=date_range)
     if job_id:
         qs = qs.filter(candidate__job_id=job_id)
-    return qs.select_related('candidate', 'candidate__job')
+    return qs.select_related('candidate', 'candidate__job').prefetch_related('reschedules')
 
 
 def _interview_rescheduled_qs(round_types, date_range, job_id):
@@ -234,6 +236,20 @@ def _merge_attended_into_resolution(rows):
             if not (r['action'] == ATTENDED_ACTION and r['candidate'].pk in resolved_candidates)]
 
 
+def _interview_date_for(obj):
+    """The interview date an event booked: a Reschedule row's new date, or -
+    for the original Schedule - the date it was first booked for (the
+    Interview row itself only holds the latest date, since rescheduling
+    rewrites it in place; the earliest reschedule's previous_date is the
+    original). None for events that aren't a booking."""
+    if isinstance(obj, InterviewReschedule):
+        return obj.new_date
+    if isinstance(obj, Interview):
+        first = min(obj.reschedules.all(), key=lambda r: (r.changed_at, r.pk), default=None)
+        return first.previous_date if first else obj.scheduled_date
+    return None
+
+
 def _rows_for(column, date_range, job_id):
     """The flat list of individual events behind one Daily View column -
     shared by compute() (which counts them) and events() (which lists
@@ -244,7 +260,8 @@ def _rows_for(column, date_range, job_id):
     for qs, date_attr, action_label, candidate_path in _sources_for(column, date_range, job_id):
         for obj in qs:
             candidate = obj if candidate_path == 'self' else _resolve(obj, candidate_path)
-            rows.append({'candidate': candidate, 'when': getattr(obj, date_attr), 'action': action_label})
+            rows.append({'candidate': candidate, 'when': getattr(obj, date_attr), 'action': action_label,
+                         'interview_date': _interview_date_for(obj)})
     if column == 'calls':
         rows = _merge_attended_into_resolution(rows)
     return rows
@@ -298,11 +315,21 @@ def grouped_events(column, date_range, job_id=None):
             groups[cid] = {'candidate': row['candidate'], 'actions': []}
             order.append(cid)
         groups[cid]['actions'].append(row)
+    # Round 1/Round 2: each candidate's current interview for that round
+    # (latest row by pk - a reschedule rewrites the same row), so the
+    # drill-through shows when it is/was booked whatever the action was.
+    round_types = ROUND_TYPES_BY_COLUMN.get(column)
+    current_interview = {}
+    if round_types and order:
+        for interview in (Interview.objects.filter(candidate_id__in=order, round_type__in=round_types)
+                          .order_by('pk')):
+            current_interview[interview.candidate_id] = interview
     result = []
     for cid in order:
         group = groups[cid]
         group['actions'].sort(key=lambda r: r['when'])
         group['latest'] = group['actions'][-1]['when']
+        group['interview'] = current_interview.get(cid)
         result.append(group)
     result.sort(key=lambda g: g['latest'], reverse=True)
     return result

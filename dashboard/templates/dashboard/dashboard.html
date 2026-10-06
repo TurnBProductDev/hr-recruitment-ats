@@ -164,6 +164,8 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
 .daily-range-field { flex: 1; }
 .daily-range-field label { display: block; font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); margin-bottom: 3px; }
 .daily-range-field input { width: 100%; border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 8px; font-size: .8rem; color: var(--text-primary); background: var(--bg-hover); }
+.daily-range-field input:focus { outline: none; border-color: var(--primary-green, #008C8C); background: var(--bg-surface); }
+.daily-range-field input.is-invalid { border-color: #dc3545; }
 #dailyRangeInput { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .daily-range-dropdown .flatpickr-calendar.inline { box-shadow: none; margin: 0 auto; }
 .daily-range-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
@@ -436,11 +438,11 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
             <div class="daily-range-fields">
               <div class="daily-range-field">
                 <label for="dailyRangeStart">Start Date</label>
-                <input type="text" id="dailyRangeStart" readonly>
+                <input type="text" id="dailyRangeStart" placeholder="DD/MM/YYYY" autocomplete="off">
               </div>
               <div class="daily-range-field">
                 <label for="dailyRangeEnd">End Date</label>
-                <input type="text" id="dailyRangeEnd" readonly>
+                <input type="text" id="dailyRangeEnd" placeholder="DD/MM/YYYY" autocomplete="off">
               </div>
             </div>
             <input type="text" id="dailyRangeInput">
@@ -513,7 +515,8 @@ document.querySelectorAll('#funnelBars .fnl-stagewrap').forEach(function (wrap) 
 });
 
 // Daily View's date-range picker: an inline calendar in a dropdown, with its
-// own Start/End Date fields kept in sync as days are clicked. Nothing is
+// own Start/End Date fields kept in sync as days are clicked - and the other
+// way round, since the fields can also be typed into (see applyTyped). Nothing is
 // applied until OK is pressed (or Cancel/an outside click discards it) -
 // only then does it reload with daily_from/daily_to set (preserving the
 // job/scope filters already in the URL) so the server recomputes the chart.
@@ -530,7 +533,27 @@ document.querySelectorAll('#funnelBars .fnl-stagewrap').forEach(function (wrap) 
   var fmtUrl = function (d) {
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   };
-  var fmtDisplay = function (d) { return d ? flatpickr.formatDate(d, 'd M Y') : ''; };
+  // DD/MM/YYYY so the fields show exactly what HR would type into them.
+  var fmtDisplay = function (d) { return d ? flatpickr.formatDate(d, 'd/m/Y') : ''; };
+
+  // Typed dates: DD/MM/YYYY (also - . or space as separator), YYYY-MM-DD,
+  // or "05 Sep 2026". Returns null for anything that isn't a real date or
+  // is after today (same limit as the calendar's maxDate).
+  function parseTyped(value) {
+    var v = (value || '').trim(), d = null, m;
+    if ((m = v.match(/^(\d{1,2})[\/\-. ](\d{1,2})[\/\-. ](\d{4})$/))) {
+      d = new Date(+m[3], +m[2] - 1, +m[1]);
+      if (d.getDate() !== +m[1] || d.getMonth() !== +m[2] - 1) { d = null; }
+    } else if ((m = v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/))) {
+      d = new Date(+m[1], +m[2] - 1, +m[3]);
+      if (d.getDate() !== +m[3] || d.getMonth() !== +m[2] - 1) { d = null; }
+    } else if (v) {
+      d = flatpickr.parseDate(v, 'j M Y') || null;
+    }
+    if (d && isNaN(d.getTime())) { d = null; }
+    var today = new Date(); today.setHours(23, 59, 59, 999);
+    return d && d <= today ? d : null;
+  }
 
   var picker = flatpickr(input, {
     mode: 'range',
@@ -545,6 +568,28 @@ document.querySelectorAll('#funnelBars .fnl-stagewrap').forEach(function (wrap) 
   });
   startField.value = fmtDisplay(picker.selectedDates[0]);
   endField.value = fmtDisplay(picker.selectedDates[1] || picker.selectedDates[0]);
+
+  // Push what was typed into the calendar. A blank End Date means a single
+  // day; a reversed range is swapped. Returns false (and flags the field)
+  // when either date can't be read, so OK doesn't apply a half-typed range.
+  function applyTyped() {
+    var start = parseTyped(startField.value);
+    var end = endField.value.trim() ? parseTyped(endField.value) : start;
+    startField.classList.toggle('is-invalid', !start);
+    endField.classList.toggle('is-invalid', !end);
+    if (!start || !end) { return false; }
+    if (end < start) { var t = start; start = end; end = t; }
+    picker.setDate([start, end], true);
+    picker.jumpToDate(start);
+    return true;
+  }
+  [startField, endField].forEach(function (field) {
+    field.addEventListener('change', applyTyped);
+    field.addEventListener('input', function () { field.classList.remove('is-invalid'); });
+    field.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); if (applyTyped()) { okBtn.click(); } }
+    });
+  });
 
   function outsideClick(e) {
     if (!dropdown.contains(e.target) && e.target !== btn && !btn.contains(e.target)) { close(); }
@@ -564,6 +609,7 @@ document.querySelectorAll('#funnelBars .fnl-stagewrap').forEach(function (wrap) 
   cancelBtn.addEventListener('click', close);
 
   okBtn.addEventListener('click', function () {
+    if (!applyTyped()) { return; }
     var dates = picker.selectedDates;
     if (!dates.length) { return; }
     var start = dates[0], end = dates[1] || dates[0];

@@ -233,7 +233,9 @@
             {% if is_hr_admin or is_recruiter or is_hiring_manager %}<th class="no-export" style="width:2rem">
               <input type="checkbox" class="form-check-input" id="selectAll" title="Select all on this page">
             </th>{% endif %}
-            <th>Candidate</th><th>Role</th><th>Score</th><th>Exp.</th><th>Applied</th><th>Status</th><th class="text-end no-export">Actions</th>
+            <th>Candidate</th><th>Role</th><th>Score</th><th>Exp.</th><th>Applied</th>
+            {% if tab == 'round1' %}<th>Round 1 Date</th>{% elif tab == 'interview' %}<th>Round 2 Date</th>{% endif %}
+            <th>Status</th><th class="text-end no-export">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -265,6 +267,10 @@
               {{ c.created_at|date:"d M Y" }}
               <div class="repo-meta">{{ c.created_at|timesince }} ago</div>
             </td>
+            {% if tab == 'round1' or tab == 'interview' %}
+            {% if tab == 'round1' %}{% with at=c.round1_at %}{% include 'candidates/_round_date_cell.html' %}{% endwith %}
+            {% else %}{% with at=c.round2_at %}{% include 'candidates/_round_date_cell.html' %}{% endwith %}{% endif %}
+            {% endif %}
             <td>
               <span class="{{ c.status|badge_class }}">{{ c.status_label }}</span>
               {% if c.is_blacklisted and c.status != 'BLACKLISTED' %}<span class="badge-status badge-blacklisted ms-1">Blacklisted</span>{% endif %}

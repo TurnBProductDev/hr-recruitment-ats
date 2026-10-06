@@ -17,6 +17,12 @@
 .dd-action { display: flex; align-items: baseline; gap: 10px; font-size: .82rem; color: var(--text-primary); }
 .dd-when { flex: 0 0 150px; color: var(--text-muted); font-size: .76rem; }
 .dd-arrow { color: var(--text-muted); }
+/* Round 1/Round 2: when the candidate's interview is booked for. */
+.dd-interview { display: inline-flex; align-items: center; gap: 5px; font-size: .76rem; font-weight: 600; color: var(--text-primary); background: var(--bg-hover); border: 1px solid var(--border-color); border-radius: 999px; padding: 2px 10px; }
+.dd-interview i { color: var(--accent-teal); }
+.dd-interview-status { font-weight: 500; color: var(--text-muted); }
+.dd-interview-status.is-cancelled { color: #dc3545; }
+.dd-for { color: var(--text-muted); font-size: .76rem; }
 </style>
 {% endblock %}
 
@@ -38,6 +44,12 @@
     <div class="dd-group-head">
       <a href="{% url 'candidate_timeline' g.candidate.pk %}">{{ g.candidate.full_name }}</a>
       <span class="dd-role">{{ g.candidate.job.title|default:"&mdash;" }}</span>
+      {% if g.interview %}
+      <span class="dd-interview" title="Interview date">
+        <i class="bi bi-calendar-event"></i> Interview: {{ g.interview.scheduled_date|date:"d M Y, h:i A" }}
+        <span class="dd-interview-status {% if g.interview.status == 'CANCELLED' %}is-cancelled{% endif %}">&middot; {{ g.interview.get_status_display }}</span>
+      </span>
+      {% endif %}
       {% if g.actions|length > 1 %}<span class="dd-count">{{ g.actions|length }} actions</span>{% endif %}
     </div>
     <div class="dd-actions">
@@ -46,6 +58,10 @@
         <span class="dd-when">{{ a.when|date:"d M Y, H:i" }}</span>
         <span class="dd-arrow">&rarr;</span>
         <span>{{ a.action }}</span>
+        {# The date this booking was for - only when it differs from the current one above (i.e. it later moved). #}
+        {% if a.interview_date and a.interview_date != g.interview.scheduled_date %}
+        <span class="dd-for">for {{ a.interview_date|date:"d M Y, h:i A" }}</span>
+        {% endif %}
       </div>
       {% endfor %}
     </div>

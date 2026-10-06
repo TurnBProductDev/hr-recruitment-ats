@@ -1,0 +1,7 @@
+{# Repository's Round 1 / Round 2 Date cell - `at` is that round's interview date (see CandidateRepositoryListView.round_date). #}
+<td data-order="{% if at %}{{ at|date:'U' }}{% else %}0{% endif %}">
+  {% if at %}
+  {{ at|date:"d M Y" }}
+  <div class="repo-meta">{{ at|date:"h:i A" }}</div>
+  {% else %}<span class="text-muted small">Not scheduled</span>{% endif %}
+</td>

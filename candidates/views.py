@@ -491,6 +491,15 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
         next_interview = (Interview.objects
                           .filter(candidate=OuterRef('pk')).order_by('-scheduled_date')
                           .values('scheduled_date')[:1])
+
+        # The Round 1 / Round 2 tabs' "Round N Date" column: when that round's
+        # latest (by pk - a reschedule rewrites the same row) not-cancelled
+        # interview is/was booked for.
+        def round_date(round_types):
+            return Subquery(Interview.objects
+                            .filter(candidate=OuterRef('pk'), round_type__in=round_types)
+                            .exclude(status=Interview.Status.CANCELLED)
+                            .order_by('-pk').values('scheduled_date')[:1])
         # 'reapply' = the same email exists on another candidate record.
         # 'reapply_same_role' = one of those other records is mapped to this
         # same vacancy - job=OuterRef('job') never matches when this row's
@@ -507,6 +516,8 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
         qs = (self._filtered_queryset().select_related('job')
               .annotate(last_action_at=Subquery(last_action),
                         interview_at=Subquery(next_interview),
+                        round1_at=round_date(ROUND1_TYPES),
+                        round2_at=round_date(ROUND2_TYPES),
                         reapply=Exists(dup),
                         reapply_same_role=Exists(dup_same_role),
                         called=Exists(called)))
@@ -762,6 +773,10 @@ class CandidateRepositoryExportView(GroupRequiredMixin, _ExcelExportMixin, View)
         ('Score', lambda c: c.match_score if c.match_score is not None else ''),
         ('Experience (yrs)', 'total_experience_years'),
         ('Applied', lambda c: c.created_at.strftime('%Y-%m-%d') if c.created_at else ''),
+        ('Round 1 Date', lambda c: (timezone.localtime(c.round1_at).strftime('%Y-%m-%d %H:%M')
+                                    if c.round1_at else '')),
+        ('Round 2 Date', lambda c: (timezone.localtime(c.round2_at).strftime('%Y-%m-%d %H:%M')
+                                    if c.round2_at else '')),
         ('Status', 'status_label'),
     )
 
