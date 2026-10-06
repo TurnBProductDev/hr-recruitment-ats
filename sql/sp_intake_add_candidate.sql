@@ -83,6 +83,11 @@ CREATE OR ALTER PROCEDURE dbo.sp_intake_add_candidate
 AS
 BEGIN
     SET NOCOUNT ON;
+    -- All-or-nothing: any failed insert below rolls the whole intake back.
+    -- Without this, a failing candidate insert (e.g. a new NOT NULL column
+    -- not listed below) still let the email-registry insert succeed, leaving
+    -- an orphan registry row that flagged the applicant's retry as a duplicate.
+    SET XACT_ABORT ON;
 
     DECLARE @email_norm nvarchar(254) = LOWER(LTRIM(RTRIM(@email)));
 
@@ -114,6 +119,8 @@ BEGIN
             WHERE LOWER(title) = LOWER(LTRIM(RTRIM(@role_applied))) ORDER BY id);
     IF @job_id IS NULL
         SET @job_id = (SELECT TOP 1 id FROM dbo.jobs_job WHERE title = 'General Application' ORDER BY id);
+
+    BEGIN TRANSACTION;
 
     -- Duplicate + blacklist detection
     DECLARE @is_dup bit = CASE WHEN EXISTS (
@@ -177,17 +184,19 @@ BEGIN
     -- match_state has no database-level default (Django's default='PENDING' on
     -- the model is app-side only) - list it explicitly or a NOT NULL candidates_candidate
     -- column omitted here fails the insert. Keep this in sync with any future
-    -- NOT NULL Candidate field that has only a Django-side default.
+    -- NOT NULL Candidate field that has only a Django-side default -
+    -- suggested_role_text (migration 0022, Move to Future's "Other" role) is
+    -- one such: omitting it failed every intake from 2026-09-28 on.
     INSERT INTO dbo.candidates_candidate
         (candidate_code, full_name, email, phone, qualification, institution, resume_url,
          source, status, is_duplicate, is_blacklisted, is_on_hold, hold_from_status,
-         created_at, updated_at, job_id, cv_summary, role_applied, match_state,
+         created_at, updated_at, job_id, cv_summary, role_applied, match_state, suggested_role_text,
          linkedin, portfolio_url, current_location, dob, last_role, last_company,
          total_experience_years, skills, notice_period, expected_salary, current_salary)
     VALUES
         (@code, @full_name, @email_norm, @phone, @education, NULLIF(@edu_inst, ''), @cv_link,
          @src, @status, @is_dup, @is_black, 0, '',
-         @created, @now, @job_id, @cv_summary, @role, 'PENDING',
+         @created, @now, @job_id, @cv_summary, @role, 'PENDING', '',
          @linkedin, @portfolio_url, @current_location, @dob, @last_role, @last_company,
          @total_experience_years, @skills, @notice_period, @expected_salary, @current_salary);
     DECLARE @cid bigint = SCOPE_IDENTITY();
@@ -252,6 +261,8 @@ BEGIN
         ) AS x
         WHERE x.company_name IS NOT NULL AND LTRIM(RTRIM(x.company_name)) <> '';
     END
+
+    COMMIT TRANSACTION;
 
     SELECT @cid AS candidate_id, @code AS candidate_code, @status AS [status],
            @is_dup AS is_duplicate, @job_id AS job_id;
