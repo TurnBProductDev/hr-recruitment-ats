@@ -1491,6 +1491,17 @@ class RepositoryStatusFilterTests(TestCase):
         response = self.client.get(reverse('candidate_repository'), {'tab': 'open', 'scoped': '1'})
         self.assertNotContains(response, 'Round 1 Date')
 
+    def test_called_icon_only_on_the_qualified_tab(self):
+        c = self._candidate('Called one', Candidate.Status.SHORTLISTED)
+        CommunicationLog.objects.create(candidate=c, channel=CommunicationLog.Channel.PHONE,
+                                        outcome=CommunicationLog.Outcome.UNABLE)
+        icon = 'repo-called-icon'
+        response = self.client.get(reverse('candidate_repository'), {'tab': 'shortlisted', 'scoped': '1'})
+        self.assertContains(response, f'class="bi bi-telephone-fill {icon}"')
+        services.change_status(c, Candidate.Status.ROUND1)
+        response = self.client.get(reverse('candidate_repository'), {'tab': 'round1', 'scoped': '1'})
+        self.assertNotContains(response, f'class="bi bi-telephone-fill {icon}"')
+
     def test_round_date_skips_a_cancelled_interview(self):
         c = self._candidate('Cancelled one', Candidate.Status.ROUND1)
         Interview.objects.create(candidate=c, round_type=Interview.RoundType.ROUND1,

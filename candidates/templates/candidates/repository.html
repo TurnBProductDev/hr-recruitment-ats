@@ -249,7 +249,8 @@
               <a href="{% url 'candidate_timeline' c.id %}">{{ c.full_name }}</a>
               {% if c.reapply_same_role %}<span class="repo-pill-reapply" title="Applied for this same role before">Reapply · Same Role</span>
               {% elif c.reapply %}<span class="repo-pill-reapply-other" title="Applied for a different role before">Reapply · Other Role</span>{% endif %}
-              {% if c.called %}<i class="bi bi-telephone-fill repo-called-icon" title="Already called — Unable to connect / Call back logged"></i>{% endif %}
+              {# Tele-screening hint only - past that stage an old Unable/Call Back log means nothing. #}
+              {% if c.called and tab == 'shortlisted' %}<i class="bi bi-telephone-fill repo-called-icon" title="Already called — Unable to connect / Call back logged"></i>{% endif %}
               <div class="repo-meta">{{ c.email }} &middot; {{ c.candidate_code }}</div>
             </td>
             <td>{{ c.job.title|default:"-" }}</td>
