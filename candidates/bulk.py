@@ -108,7 +108,15 @@ def process_item(item, batch=None):
             content,
             role_hint=batch.job.title if batch.job else None,
             source_hint=batch.source,
+            filename=item.filename,
         )
+        document_type = fields.get('document_type', 'cv')
+        if document_type != 'cv':
+            # A cover letter, brochure, certificate... dropped into the upload by
+            # mistake - not an applicant, so no candidate row to inflate counts.
+            raise CVExtractionError(
+                f'Not a CV - this looks like a {cv_extraction.DOCUMENT_TYPE_LABELS[document_type].lower()}, '
+                f'so no candidate was created.')
         if not fields.get('full_name'):
             fields['full_name'] = name_from_filename(item.filename)
 

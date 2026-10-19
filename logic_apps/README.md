@@ -294,6 +294,37 @@ to the exact match (then General Application) exactly as before when it's
 `null` - so the disabled legacy `CV-Automation-Flow`, which never sends
 this parameter, is unaffected.
 
+### Only a CV becomes a candidate; one email, one candidate per applicant (2026-10)
+
+Every PDF/Word attachment used to become a candidate of its own - a cover
+letter sent with the CV showed up as a second row (a "reapply"), and
+brochures, certificates or proposals mailed to the careers inbox were counted
+as applicants. Now:
+
+- **`document_type`.** The same CV-reading call also says what the file is
+  (`cv` / `cover_letter` / `other` - `prompts/cv_extraction.py` rule 12, with
+  the attachment's file name as a hint). `Condition_Is_CV` only runs the
+  stored procedure for a `cv`; anything else is appended to the `ExtraDocs`
+  variable and, after the loop, `Condition_Has_ExtraDocs` files it onto the
+  candidate from the same email via `sql/sp_intake_add_attachments.sql`
+  (shown under Attachments on the candidate's page). If the CV reader fails
+  (no `document_type` at all), the file is treated as a CV exactly as before,
+  unless its name contains "cover".
+- **`source_message_id`.** The email's Internet Message-ID (variable
+  `MessageId`) is stored on the candidate. `sp_intake_add_candidate` inserts
+  nothing when a candidate with the same message id *and* email already exists
+  (the CV attached as .pdf and .docx) - an agency email with several different
+  people's CVs still gives one candidate each.
+- **Unique blob names (`Blob_name`).** Blobs used to be named after the
+  attachment itself, so two applicants' `Resume.pdf` overwrote each other in
+  `candidate-cvs` (27 CV links were already shared by 2+ candidates). Each blob
+  is now `<yyyyMMddHHmmss>-<8 hex>-<original name>`. SharePoint naming is unchanged.
+- The file-type check is now case-insensitive (`.PDF` used to be skipped).
+
+Deploy order: Django (migration `candidates.0023`) → both stored procedures →
+this workflow (CLI, with the real `djangoApiKey` patched into a local copy -
+see below). Rows from before this change: `manage.py cleanup_intake_rows`.
+
 ## Extending the extracted fields
 
 CV *reading* (Skills, Experience, Summary, everything beyond a SharePoint

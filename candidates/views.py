@@ -34,6 +34,7 @@ from .forms import (
 )
 from .models import (
     CANONICAL_SOURCES,
+    Attachment,
     CAREERS,
     BulkUploadBatch,
     BulkUploadItem,
@@ -1189,6 +1190,24 @@ class CandidateCvView(GroupRequiredMixin, View):
         return redirect(target)
 
 
+class CandidateAttachmentView(GroupRequiredMixin, View):
+    """Opens one of a candidate's extra documents (Attachment) - an uploaded
+    file, or a link the careers-mailbox intake filed (a cover letter sent with
+    the CV), signed here when it's one of our own blobs, same as
+    CandidateCvView does for the CV itself. Staff only - unlike the CV,
+    interviewers have no reason to open these."""
+    allowed_groups = ANY_STAFF
+
+    def get(self, request, pk, attachment_pk):
+        attachment = get_object_or_404(Attachment, pk=attachment_pk, candidate_id=pk)
+        url = (attachment.url or '').strip()
+        if url:
+            return redirect(cv_storage.sas_url(url) if cv_storage.is_our_blob_url(url) else url)
+        if attachment.file:
+            return redirect(attachment.file.url)
+        raise Http404('No file on this attachment.')
+
+
 class CandidateChangeJobView(GroupRequiredMixin, View):
     """Manually re-map a candidate to a different vacancy (e.g. move a
     'General Application' to a specific opening)."""
@@ -1917,6 +1936,12 @@ class CVExtractAPIView(View):
     that call and this lookup (a vacancy closing/archiving mid-request) -
     filtering to still-open here catches that edge case too.
 
+    Also returns `document_type` ('cv' / 'cover_letter' / 'other'): the Logic
+    App only creates a candidate for a 'cv', and attaches everything else to
+    the candidate from the same email instead (sp_intake_add_attachments). An
+    error response has no document_type at all - the Logic App then treats the
+    file as a CV, same as before this existed.
+
     Built for CV-Automation-Flow-Final (see logic_apps/README.md) - the
     careers-mailbox intake Logic App's equivalent of what Bulk Upload CV
     already does in-process via candidates/bulk.py, so that flow can also
@@ -1954,7 +1979,8 @@ class CVExtractAPIView(View):
         try:
             fields = cv_extraction.extract_profile(
                 content, role_hint=payload.get('role_hint'), source_hint=payload.get('source_hint'),
-                email_context=email_context, open_job_titles=open_job_titles)
+                email_context=email_context, open_job_titles=open_job_titles,
+                filename=payload.get('filename'))
         except cv_extraction.CVExtractionError as exc:
             # HTTP 200 with status: error, same convention as the Logic Apps
             # this replaces - the caller reads the body, not the status code.

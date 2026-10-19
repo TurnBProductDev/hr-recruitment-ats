@@ -271,11 +271,11 @@ html { scroll-behavior: smooth; }
               <div class="field-label">Attachments</div>
               {% if candidate.resume_url or candidate.resume_blob_url %}
               <div class="field-value"><a href="{% url 'candidate_cv' candidate.pk %}" target="_blank"><i class="bi bi-file-earmark-person"></i> Open CV</a></div>
-              {% else %}
+              {% elif not attachments %}
               <div class="field-value text-muted">No attachments.</div>
               {% endif %}
               {% for a in attachments %}
-                <div class="mt-1"><a href="{{ a.file.url }}" target="_blank">{{ a.label|default:a.file.name }}</a> <span class="text-muted pd-meta">{{ a.uploaded_at|date:"d M Y" }}</span></div>
+                <div class="mt-1"><a href="{% url 'candidate_attachment' candidate.pk a.pk %}" target="_blank"><i class="bi bi-paperclip"></i> {{ a.label|default:a.file.name }}</a> <span class="text-muted pd-meta">{{ a.uploaded_at|date:"d M Y" }}</span></div>
               {% endfor %}
             </div>
           </div>

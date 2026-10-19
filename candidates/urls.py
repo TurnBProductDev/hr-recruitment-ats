@@ -38,6 +38,8 @@ urlpatterns = [
     path('hr/candidates/<int:pk>/', views.CandidateTimelineView.as_view(), name='candidate_timeline'),
     path('hr/candidates/<int:pk>/edit/', views.CandidateUpdateView.as_view(), name='candidate_edit'),
     path('hr/candidates/<int:pk>/cv/', views.CandidateCvView.as_view(), name='candidate_cv'),
+    path('hr/candidates/<int:pk>/attachments/<int:attachment_pk>/', views.CandidateAttachmentView.as_view(),
+         name='candidate_attachment'),
     path('hr/candidates/<int:pk>/change-job/', views.CandidateChangeJobView.as_view(), name='candidate_change_job'),
     path('hr/candidates/<int:pk>/change-source/', views.CandidateChangeSourceView.as_view(), name='candidate_change_source'),
     path('hr/candidates/<int:pk>/set-status/', views.CandidateSetStatusView.as_view(), name='candidate_set_status'),

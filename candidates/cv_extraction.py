@@ -31,6 +31,12 @@ logger = logging.getLogger(__name__)
 MIN_TEXT_CHARS = 200  # below this, treat the PDF as scanned and fall back to vision
 MAX_TEXT_CHARS = 12000  # mirrors the old Logic App's own cap on CV text sent to the model
 
+# prompts/cv_extraction.py's document_type enum. Only 'cv' becomes a
+# candidate; a missing/unexpected value is treated as a CV, so a model
+# hiccup never silently drops a real application.
+DOCUMENT_TYPES = ('cv', 'cover_letter', 'other')
+DOCUMENT_TYPE_LABELS = {'cv': 'CV', 'cover_letter': 'Cover letter', 'other': 'Other document'}
+
 _NULLISH = ('null', 'none', 'n/a', 'not found', 'not mentioned', 'not stated', '')
 
 
@@ -142,7 +148,8 @@ def _build_messages(cv_text, page_images):
     ]
 
 
-def extract_profile(content, role_hint=None, source_hint=None, email_context=None, open_job_titles=None):
+def extract_profile(content, role_hint=None, source_hint=None, email_context=None, open_job_titles=None,
+                    filename=None):
     """Read a CV (raw PDF bytes) and return a dict of Candidate-shaped fields
     plus an 'experience' list of CandidateExperience-shaped dicts and an
     'education' list of CandidateEducation-shaped dicts.
@@ -160,6 +167,10 @@ def extract_profile(content, role_hint=None, source_hint=None, email_context=Non
     prompts/cv_extraction.py), on top of the free-text role_applied it
     already extracts. Omitted/empty for Bulk Upload CV, where the vacancy is
     already fixed by the upload screen.
+
+    filename: the attachment's own name, a hint for 'document_type' (whether
+    this file is a CV at all - see prompts/cv_extraction.py rule 12); a file
+    called "Cover Letter.pdf" usually is one.
 
     Raises CVExtractionError (message fit for the results screen) only when
     nothing could be read at all - a partially-empty result is not an error,
@@ -180,6 +191,8 @@ def extract_profile(content, role_hint=None, source_hint=None, email_context=Non
 
     open_job_titles = list(open_job_titles or [])
     hint_lines = []
+    if filename:
+        hint_lines.append(f'File name: {filename}')
     if email_context:
         hint_lines.append(email_context)
     if role_hint:
@@ -221,7 +234,9 @@ def extract_profile(content, role_hint=None, source_hint=None, email_context=Non
 
     email = (_clean(raw.get('email')) or '').lower().replace(' ', '')
 
+    document_type = raw.get('document_type')
     return {
+        'document_type': document_type if document_type in DOCUMENT_TYPES else 'cv',
         'matched_job_title': _clean(raw.get('matched_job_title'), 255),
         'full_name': _clean(raw.get('name'), 255),
         'email': email or None,

@@ -79,7 +79,17 @@ CREATE OR ALTER PROCEDURE dbo.sp_intake_add_candidate
     -- Takes priority over the exact match when set; NULL (no confident
     -- match, or the disabled legacy flow which never sends this) falls
     -- through to the exact match as before.
-    @matched_job_id          bigint         = NULL
+    @matched_job_id          bigint         = NULL,
+    -- The careers-mailbox email's Internet Message-ID. One email must give
+    -- at most one candidate per applicant: when a candidate with this same
+    -- message id AND email already exists (the CV attached twice, as .pdf
+    -- and .docx), nothing is inserted and that existing candidate is
+    -- returned instead. Keyed on the email too, not the message alone, so
+    -- an agency/referral email carrying several different people's CVs
+    -- still gives one candidate each. Also how sp_intake_add_attachments
+    -- finds the candidate to attach that email's cover letter to. NULL (the
+    -- disabled legacy flow) skips the check entirely, as before.
+    @source_message_id       nvarchar(255)  = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -121,6 +131,22 @@ BEGIN
         SET @job_id = (SELECT TOP 1 id FROM dbo.jobs_job WHERE title = 'General Application' ORDER BY id);
 
     BEGIN TRANSACTION;
+
+    -- Same applicant from the same email already filed - return that row,
+    -- insert nothing (see @source_message_id). UPDLOCK/HOLDLOCK so two
+    -- overlapping calls for the same message can't both pass this check.
+    DECLARE @existing_id bigint = NULL;
+    IF @source_message_id IS NOT NULL
+        SELECT TOP 1 @existing_id = id FROM dbo.candidates_candidate WITH (UPDLOCK, HOLDLOCK)
+        WHERE source_message_id = @source_message_id AND email = @email_norm
+        ORDER BY id;
+    IF @existing_id IS NOT NULL
+    BEGIN
+        COMMIT TRANSACTION;
+        SELECT id AS candidate_id, candidate_code, [status], is_duplicate, job_id
+        FROM dbo.candidates_candidate WHERE id = @existing_id;
+        RETURN;
+    END
 
     -- Duplicate + blacklist detection
     DECLARE @is_dup bit = CASE WHEN EXISTS (
@@ -192,13 +218,15 @@ BEGIN
          source, status, is_duplicate, is_blacklisted, is_on_hold, hold_from_status,
          created_at, updated_at, job_id, cv_summary, role_applied, match_state, suggested_role_text,
          linkedin, portfolio_url, current_location, dob, last_role, last_company,
-         total_experience_years, skills, notice_period, expected_salary, current_salary)
+         total_experience_years, skills, notice_period, expected_salary, current_salary,
+         source_message_id)
     VALUES
         (@code, @full_name, @email_norm, @phone, @education, NULLIF(@edu_inst, ''), @cv_link,
          @src, @status, @is_dup, @is_black, 0, '',
          @created, @now, @job_id, @cv_summary, @role, 'PENDING', '',
          @linkedin, @portfolio_url, @current_location, @dob, @last_role, @last_company,
-         @total_experience_years, @skills, @notice_period, @expected_salary, @current_salary);
+         @total_experience_years, @skills, @notice_period, @expected_salary, @current_salary,
+         @source_message_id);
     DECLARE @cid bigint = SCOPE_IDENTITY();
 
     IF @is_dup = 1

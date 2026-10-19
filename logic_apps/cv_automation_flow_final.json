@@ -48,6 +48,36 @@
       }
     },
     "actions": {
+      "Initialize_MessageId": {
+        "type": "InitializeVariable",
+        "runAfter": {},
+        "inputs": {
+          "variables": [
+            {
+              "name": "MessageId",
+              "type": "string",
+              "value": "@{coalesce(triggerBody()?['internetMessageId'], triggerBody()?['id'])}"
+            }
+          ]
+        }
+      },
+      "Initialize_ExtraDocs": {
+        "type": "InitializeVariable",
+        "runAfter": {
+          "Initialize_MessageId": [
+            "Succeeded"
+          ]
+        },
+        "inputs": {
+          "variables": [
+            {
+              "name": "ExtraDocs",
+              "type": "array",
+              "value": []
+            }
+          ]
+        }
+      },
       "Condition": {
         "actions": {
           "For_each": {
@@ -65,7 +95,8 @@
                       "body": {
                         "content_base64": "@body('Get_Attachment_(V2)')?['contentBytes']",
                         "email_subject": "@triggerBody()?['subject']",
-                        "email_body": "@outputs('Html_to_text')?['body']"
+                        "email_body": "@outputs('Html_to_text')?['body']",
+                        "filename": "@body('Get_Attachment_(V2)')?['name']"
                       },
                       "retryPolicy": {
                         "type": "exponential",
@@ -207,6 +238,12 @@
                           },
                           "education": {
                             "type": "array"
+                          },
+                          "document_type": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           }
                         }
                       }
@@ -217,110 +254,6 @@
                       ]
                     },
                     "type": "ParseJson"
-                  },
-                  "Condition_2": {
-                    "actions": {
-                      "Execute_stored_procedure_(V2)": {
-                        "inputs": {
-                          "body": {
-                            "cv_link": "@if(equals(actions('Create_blob')?['status'], 'Succeeded'), concat('https://hirebcvfiles.blob.core.windows.net/candidate-cvs/', encodeURIComponent(body('Get_Attachment_(V2)')?['name'])), body('Create_sharing_link_for_a_file_or_folder')?['link']?['webUrl'])",
-                            "cv_summary": "@coalesce(body('Parse_extract_response')?['cv_summary'], '')",
-                            "education": "@body('Parse_extract_response')?['qualification']",
-                            "email": "@coalesce(body('Parse_extract_response')?['email'], concat('pending-', guid(), '@placeholder.local'))",
-                            "full_name": "@coalesce(body('Parse_extract_response')?['full_name'], body('Get_Attachment_(V2)')?['name'], 'Unnamed Candidate')",
-                            "mail_date": "@triggerOutputs()?['body/receivedDateTime']",
-                            "phone": "@body('Parse_extract_response')?['phone']",
-                            "role_applied": "@body('Parse_extract_response')?['role_applied']",
-                            "matched_job_id": "@body('Parse_extract_response')?['matched_job_id']",
-                            "source": "@first(body('Filter_array'))?['Agency Name']",
-                            "linkedin": "@body('Parse_extract_response')?['linkedin']",
-                            "portfolio_url": "@body('Parse_extract_response')?['portfolio_url']",
-                            "current_location": "@body('Parse_extract_response')?['current_location']",
-                            "dob": "@body('Parse_extract_response')?['dob']",
-                            "last_role": "@body('Parse_extract_response')?['last_role']",
-                            "last_company": "@body('Parse_extract_response')?['last_company']",
-                            "total_experience_years": "@body('Parse_extract_response')?['total_experience_years']",
-                            "skills": "@body('Parse_extract_response')?['skills']",
-                            "notice_period": "@body('Parse_extract_response')?['notice_period']",
-                            "expected_salary": "@body('Parse_extract_response')?['expected_salary']",
-                            "current_salary": "@body('Parse_extract_response')?['current_salary']",
-                            "experience_json": "@string(coalesce(body('Parse_extract_response')?['experience'], json('[]')))",
-                            "education_json": "@string(coalesce(body('Parse_extract_response')?['education'], json('[]')))"
-                          },
-                          "host": {
-                            "connection": {
-                              "name": "@parameters('$connections')['sql']['connectionId']"
-                            }
-                          },
-                          "method": "post",
-                          "path": "/v2/datasets/@{encodeURIComponent(encodeURIComponent('default'))},@{encodeURIComponent(encodeURIComponent('default'))}/procedures/@{encodeURIComponent(encodeURIComponent('[dbo].[sp_intake_add_candidate]'))}"
-                        },
-                        "type": "ApiConnection"
-                      }
-                    },
-                    "else": {
-                      "actions": {
-                        "Execute_stored_procedure_(V2)_1": {
-                          "inputs": {
-                            "body": {
-                              "cv_link": "@if(equals(actions('Create_blob')?['status'], 'Succeeded'), concat('https://hirebcvfiles.blob.core.windows.net/candidate-cvs/', encodeURIComponent(body('Get_Attachment_(V2)')?['name'])), body('Create_sharing_link_for_a_file_or_folder')?['link']?['webUrl'])",
-                              "cv_summary": "@coalesce(body('Parse_extract_response')?['cv_summary'], '')",
-                              "education": "@body('Parse_extract_response')?['qualification']",
-                              "email": "@coalesce(body('Parse_extract_response')?['email'], concat('pending-', guid(), '@placeholder.local'))",
-                              "full_name": "@coalesce(body('Parse_extract_response')?['full_name'], body('Get_Attachment_(V2)')?['name'], 'Unnamed Candidate')",
-                              "mail_date": "@triggerOutputs()?['body/receivedDateTime']",
-                              "phone": "@body('Parse_extract_response')?['phone']",
-                              "role_applied": "@body('Parse_extract_response')?['role_applied']",
-                              "matched_job_id": "@body('Parse_extract_response')?['matched_job_id']",
-                              "source": "@coalesce(body('Parse_extract_response')?['source'], 'Careers')",
-                              "linkedin": "@body('Parse_extract_response')?['linkedin']",
-                              "portfolio_url": "@body('Parse_extract_response')?['portfolio_url']",
-                              "current_location": "@body('Parse_extract_response')?['current_location']",
-                              "dob": "@body('Parse_extract_response')?['dob']",
-                              "last_role": "@body('Parse_extract_response')?['last_role']",
-                              "last_company": "@body('Parse_extract_response')?['last_company']",
-                              "total_experience_years": "@body('Parse_extract_response')?['total_experience_years']",
-                              "skills": "@body('Parse_extract_response')?['skills']",
-                              "notice_period": "@body('Parse_extract_response')?['notice_period']",
-                              "expected_salary": "@body('Parse_extract_response')?['expected_salary']",
-                              "current_salary": "@body('Parse_extract_response')?['current_salary']",
-                              "experience_json": "@string(coalesce(body('Parse_extract_response')?['experience'], json('[]')))",
-                              "education_json": "@string(coalesce(body('Parse_extract_response')?['education'], json('[]')))"
-                            },
-                            "host": {
-                              "connection": {
-                                "name": "@parameters('$connections')['sql']['connectionId']"
-                              }
-                            },
-                            "method": "post",
-                            "path": "/v2/datasets/@{encodeURIComponent(encodeURIComponent('default'))},@{encodeURIComponent(encodeURIComponent('default'))}/procedures/@{encodeURIComponent(encodeURIComponent('[dbo].[sp_intake_add_candidate]'))}"
-                          },
-                          "type": "ApiConnection"
-                        }
-                      }
-                    },
-                    "expression": {
-                      "and": [
-                        {
-                          "greater": [
-                            "@length(body('Filter_array'))",
-                            0
-                          ]
-                        }
-                      ]
-                    },
-                    "runAfter": {
-                      "Create_blob": [
-                        "Succeeded",
-                        "Failed",
-                        "TimedOut",
-                        "Skipped"
-                      ],
-                      "Filter_array": [
-                        "Succeeded"
-                      ]
-                    },
-                    "type": "If"
                   },
                   "Create_file_1": {
                     "inputs": {
@@ -365,7 +298,7 @@
                       "path": "/datasets/default/files",
                       "queries": {
                         "folderPath": "/candidate-cvs",
-                        "name": "@body('Get_Attachment_(V2)')?['name']",
+                        "name": "@{outputs('Blob_name')}",
                         "queryParametersSingleEncoded": true
                       }
                     },
@@ -375,6 +308,9 @@
                         "Failed",
                         "TimedOut",
                         "Skipped"
+                      ],
+                      "Blob_name": [
+                        "Succeeded"
                       ]
                     },
                     "runtimeConfiguration": {
@@ -439,58 +375,174 @@
                       ]
                     },
                     "type": "ApiConnection"
+                  },
+                  "Blob_name": {
+                    "type": "Compose",
+                    "runAfter": {},
+                    "inputs": "@{formatDateTime(utcNow(), 'yyyyMMddHHmmss')}-@{substring(guid(), 0, 8)}-@{body('Get_Attachment_(V2)')?['name']}"
+                  },
+                  "Condition_Is_CV": {
+                    "type": "If",
+                    "runAfter": {
+                      "Create_blob": [
+                        "Succeeded",
+                        "Failed",
+                        "TimedOut",
+                        "Skipped"
+                      ],
+                      "Filter_array": [
+                        "Succeeded"
+                      ]
+                    },
+                    "expression": {
+                      "and": [
+                        {
+                          "equals": [
+                            "@if(empty(body('Parse_extract_response')?['document_type']), not(contains(toLower(body('Get_Attachment_(V2)')?['name']), 'cover')), equals(body('Parse_extract_response')?['document_type'], 'cv'))",
+                            true
+                          ]
+                        }
+                      ]
+                    },
+                    "actions": {
+                      "Condition_2": {
+                        "actions": {
+                          "Execute_stored_procedure_(V2)": {
+                            "inputs": {
+                              "body": {
+                                "cv_link": "@if(equals(actions('Create_blob')?['status'], 'Succeeded'), concat('https://hirebcvfiles.blob.core.windows.net/candidate-cvs/', encodeURIComponent(outputs('Blob_name'))), body('Create_sharing_link_for_a_file_or_folder')?['link']?['webUrl'])",
+                                "cv_summary": "@coalesce(body('Parse_extract_response')?['cv_summary'], '')",
+                                "education": "@body('Parse_extract_response')?['qualification']",
+                                "email": "@coalesce(body('Parse_extract_response')?['email'], concat('pending-', guid(), '@placeholder.local'))",
+                                "full_name": "@coalesce(body('Parse_extract_response')?['full_name'], body('Get_Attachment_(V2)')?['name'], 'Unnamed Candidate')",
+                                "mail_date": "@triggerOutputs()?['body/receivedDateTime']",
+                                "phone": "@body('Parse_extract_response')?['phone']",
+                                "role_applied": "@body('Parse_extract_response')?['role_applied']",
+                                "matched_job_id": "@body('Parse_extract_response')?['matched_job_id']",
+                                "source": "@first(body('Filter_array'))?['Agency Name']",
+                                "linkedin": "@body('Parse_extract_response')?['linkedin']",
+                                "portfolio_url": "@body('Parse_extract_response')?['portfolio_url']",
+                                "current_location": "@body('Parse_extract_response')?['current_location']",
+                                "dob": "@body('Parse_extract_response')?['dob']",
+                                "last_role": "@body('Parse_extract_response')?['last_role']",
+                                "last_company": "@body('Parse_extract_response')?['last_company']",
+                                "total_experience_years": "@body('Parse_extract_response')?['total_experience_years']",
+                                "skills": "@body('Parse_extract_response')?['skills']",
+                                "notice_period": "@body('Parse_extract_response')?['notice_period']",
+                                "expected_salary": "@body('Parse_extract_response')?['expected_salary']",
+                                "current_salary": "@body('Parse_extract_response')?['current_salary']",
+                                "experience_json": "@string(coalesce(body('Parse_extract_response')?['experience'], json('[]')))",
+                                "education_json": "@string(coalesce(body('Parse_extract_response')?['education'], json('[]')))",
+                                "source_message_id": "@variables('MessageId')"
+                              },
+                              "host": {
+                                "connection": {
+                                  "name": "@parameters('$connections')['sql']['connectionId']"
+                                }
+                              },
+                              "method": "post",
+                              "path": "/v2/datasets/@{encodeURIComponent(encodeURIComponent('default'))},@{encodeURIComponent(encodeURIComponent('default'))}/procedures/@{encodeURIComponent(encodeURIComponent('[dbo].[sp_intake_add_candidate]'))}"
+                            },
+                            "type": "ApiConnection"
+                          }
+                        },
+                        "else": {
+                          "actions": {
+                            "Execute_stored_procedure_(V2)_1": {
+                              "inputs": {
+                                "body": {
+                                  "cv_link": "@if(equals(actions('Create_blob')?['status'], 'Succeeded'), concat('https://hirebcvfiles.blob.core.windows.net/candidate-cvs/', encodeURIComponent(outputs('Blob_name'))), body('Create_sharing_link_for_a_file_or_folder')?['link']?['webUrl'])",
+                                  "cv_summary": "@coalesce(body('Parse_extract_response')?['cv_summary'], '')",
+                                  "education": "@body('Parse_extract_response')?['qualification']",
+                                  "email": "@coalesce(body('Parse_extract_response')?['email'], concat('pending-', guid(), '@placeholder.local'))",
+                                  "full_name": "@coalesce(body('Parse_extract_response')?['full_name'], body('Get_Attachment_(V2)')?['name'], 'Unnamed Candidate')",
+                                  "mail_date": "@triggerOutputs()?['body/receivedDateTime']",
+                                  "phone": "@body('Parse_extract_response')?['phone']",
+                                  "role_applied": "@body('Parse_extract_response')?['role_applied']",
+                                  "matched_job_id": "@body('Parse_extract_response')?['matched_job_id']",
+                                  "source": "@coalesce(body('Parse_extract_response')?['source'], 'Careers')",
+                                  "linkedin": "@body('Parse_extract_response')?['linkedin']",
+                                  "portfolio_url": "@body('Parse_extract_response')?['portfolio_url']",
+                                  "current_location": "@body('Parse_extract_response')?['current_location']",
+                                  "dob": "@body('Parse_extract_response')?['dob']",
+                                  "last_role": "@body('Parse_extract_response')?['last_role']",
+                                  "last_company": "@body('Parse_extract_response')?['last_company']",
+                                  "total_experience_years": "@body('Parse_extract_response')?['total_experience_years']",
+                                  "skills": "@body('Parse_extract_response')?['skills']",
+                                  "notice_period": "@body('Parse_extract_response')?['notice_period']",
+                                  "expected_salary": "@body('Parse_extract_response')?['expected_salary']",
+                                  "current_salary": "@body('Parse_extract_response')?['current_salary']",
+                                  "experience_json": "@string(coalesce(body('Parse_extract_response')?['experience'], json('[]')))",
+                                  "education_json": "@string(coalesce(body('Parse_extract_response')?['education'], json('[]')))",
+                                  "source_message_id": "@variables('MessageId')"
+                                },
+                                "host": {
+                                  "connection": {
+                                    "name": "@parameters('$connections')['sql']['connectionId']"
+                                  }
+                                },
+                                "method": "post",
+                                "path": "/v2/datasets/@{encodeURIComponent(encodeURIComponent('default'))},@{encodeURIComponent(encodeURIComponent('default'))}/procedures/@{encodeURIComponent(encodeURIComponent('[dbo].[sp_intake_add_candidate]'))}"
+                              },
+                              "type": "ApiConnection"
+                            }
+                          }
+                        },
+                        "expression": {
+                          "and": [
+                            {
+                              "greater": [
+                                "@length(body('Filter_array'))",
+                                0
+                              ]
+                            }
+                          ]
+                        },
+                        "type": "If",
+                        "runAfter": {}
+                      }
+                    },
+                    "else": {
+                      "actions": {
+                        "Append_extra_doc": {
+                          "type": "AppendToArrayVariable",
+                          "runAfter": {},
+                          "inputs": {
+                            "name": "ExtraDocs",
+                            "value": {
+                              "name": "@body('Get_Attachment_(V2)')?['name']",
+                              "url": "@if(equals(actions('Create_blob')?['status'], 'Succeeded'), concat('https://hirebcvfiles.blob.core.windows.net/candidate-cvs/', encodeURIComponent(outputs('Blob_name'))), body('Create_sharing_link_for_a_file_or_folder')?['link']?['webUrl'])",
+                              "document_type": "@coalesce(body('Parse_extract_response')?['document_type'], 'cover_letter')",
+                              "email": "@body('Parse_extract_response')?['email']"
+                            }
+                          }
+                        }
+                      }
+                    }
                   }
                 },
                 "else": {
                   "actions": {}
                 },
                 "expression": {
-                  "and": [
+                  "or": [
                     {
-                      "or": [
-                        {
-                          "endsWith": [
-                            "@body('Get_Attachment_(V2)')?['name']",
-                            ".pdf"
-                          ]
-                        },
-                        {
-                          "endsWith": [
-                            "@body('Get_Attachment_(V2)')?['name']",
-                            ".docx"
-                          ]
-                        },
-                        {
-                          "endsWith": [
-                            "@body('Get_Attachment_(V2)')?['name']",
-                            ".doc"
-                          ]
-                        }
+                      "endsWith": [
+                        "@toLower(body('Get_Attachment_(V2)')?['name'])",
+                        ".pdf"
                       ]
                     },
                     {
-                      "not": {
-                        "startsWith": [
-                          "@body('Get_Attachment_(V2)')?['name']",
-                          "Cover letter"
-                        ]
-                      }
+                      "endsWith": [
+                        "@toLower(body('Get_Attachment_(V2)')?['name'])",
+                        ".docx"
+                      ]
                     },
                     {
-                      "not": {
-                        "startsWith": [
-                          "@body('Get_Attachment_(V2)')?['name']",
-                          "cover letter"
-                        ]
-                      }
-                    },
-                    {
-                      "not": {
-                        "endsWith": [
-                          "@body('Get_Attachment_(V2)')?['name']",
-                          "cover letter.docx"
-                        ]
-                      }
+                      "endsWith": [
+                        "@toLower(body('Get_Attachment_(V2)')?['name'])",
+                        ".doc"
+                      ]
                     }
                   ]
                 },
@@ -539,6 +591,45 @@
               "path": "/html2text"
             },
             "type": "ApiConnection"
+          },
+          "Condition_Has_ExtraDocs": {
+            "type": "If",
+            "runAfter": {
+              "For_each": [
+                "Succeeded"
+              ]
+            },
+            "expression": {
+              "and": [
+                {
+                  "greater": [
+                    "@length(variables('ExtraDocs'))",
+                    0
+                  ]
+                }
+              ]
+            },
+            "actions": {
+              "Execute_attachments_procedure": {
+                "inputs": {
+                  "body": {
+                    "source_message_id": "@variables('MessageId')",
+                    "attachments_json": "@{string(variables('ExtraDocs'))}"
+                  },
+                  "host": {
+                    "connection": {
+                      "name": "@parameters('$connections')['sql']['connectionId']"
+                    }
+                  },
+                  "method": "post",
+                  "path": "/v2/datasets/@{encodeURIComponent(encodeURIComponent('default'))},@{encodeURIComponent(encodeURIComponent('default'))}/procedures/@{encodeURIComponent(encodeURIComponent('[dbo].[sp_intake_add_attachments]'))}"
+                },
+                "type": "ApiConnection"
+              }
+            },
+            "else": {
+              "actions": {}
+            }
           }
         },
         "else": {
@@ -564,7 +655,11 @@
             }
           ]
         },
-        "runAfter": {},
+        "runAfter": {
+          "Initialize_ExtraDocs": [
+            "Succeeded"
+          ]
+        },
         "type": "If"
       }
     },

@@ -17,6 +17,15 @@ def response_json_schema(open_job_titles):
         'schema': {
             'type': 'object',
             'properties': {
+                'document_type': {
+                    'type': 'string',
+                    'enum': ['cv', 'cover_letter', 'other'],
+                    'description': (
+                        "What this file is: 'cv' for a resume/CV of one person, 'cover_letter' for a "
+                        "cover/application letter, 'other' for anything else (certificate, mark sheet, "
+                        "brochure, ID proof, report, portfolio, ...). See rule 12."
+                    ),
+                },
                 'matched_job_title': {
                     'type': ['string', 'null'],
                     'enum': [*open_job_titles, None],
@@ -81,7 +90,7 @@ def response_json_schema(open_job_titles):
                     },
                 },
             },
-            'required': ['matched_job_title', 'name', 'email', 'mobile', 'dob', 'current_location', 'linkedin',
+            'required': ['document_type', 'matched_job_title', 'name', 'email', 'mobile', 'dob', 'current_location', 'linkedin',
                          'portfolio_url', 'qualification', 'last_role', 'last_company', 'total_experience_years',
                          'skills', 'notice_period', 'expected_salary', 'current_salary', 'role_applied', 'source',
                          'summary', 'experience', 'education'],
@@ -121,6 +130,12 @@ SYSTEM_PROMPT = (
     "not a made-up combination). Return null if nothing on the list is clearly the same role, or if no list is "
     "given at all - a wrong match is worse than leaving this null, so when genuinely unsure, return null rather "
     "than guessing from superficial keyword overlap (e.g. 'Accountant' is NOT a match for 'Analytics "
-    "Consultant' just because both contain similar letters).\n\n"
+    "Consultant' just because both contain similar letters).\n"
+    "12. document_type: not every file sent in is a CV. 'cv' only if the document is a resume/CV describing "
+    "one person's own education/experience/skills. 'cover_letter' if it is a letter addressed to an employer "
+    "about an application (even if it mentions experience). 'other' for everything else - certificates, mark "
+    "sheets, college/course brochures, placement reports, ID documents, offer letters, portfolios. For a "
+    "cover_letter, still fill name/email/mobile if the letter states them; for 'other', leave every field "
+    "null/empty except document_type.\n\n"
     "Return ONLY the JSON object described by the schema. No markdown formatting, no commentary."
 )

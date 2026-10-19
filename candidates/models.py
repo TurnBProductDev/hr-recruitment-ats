@@ -136,6 +136,12 @@ class Candidate(models.Model):
     resume_blob_url = models.FileField('Resume', upload_to=candidate_resume_path, blank=True, null=True)
     resume_url = models.URLField('Resume Link', max_length=1000, blank=True, null=True,
                                  help_text='External link to the resume (e.g. SharePoint/Drive).')
+    # The careers-mailbox email this candidate came from (its Internet
+    # Message-ID), set by sp_intake_add_candidate. Lets the intake skip a
+    # second row for the same person from the same email (a CV sent as both
+    # .pdf and .docx) and find the candidate to attach that email's cover
+    # letter to (sp_intake_add_attachments). Null for every other source.
+    source_message_id = models.CharField(max_length=255, blank=True, null=True, db_index=True)
 
     is_duplicate = models.BooleanField(default=False)
     is_blacklisted = models.BooleanField(default=False)
@@ -417,9 +423,15 @@ class CommunicationLog(models.Model):
 
 
 class Attachment(models.Model):
-    """Extra documents beyond the resume (ID proof, certificates, etc.)."""
+    """Extra documents beyond the resume (ID proof, certificates, etc.).
+
+    Either an uploaded `file`, or a `url` - a document the careers-mailbox
+    intake already filed to blob storage/SharePoint (a cover letter sent with
+    the CV, see sp_intake_add_attachments). Open it via `candidate_attachment`,
+    never `url` directly: a blob URL needs signing."""
     candidate = models.ForeignKey(Candidate, on_delete=models.CASCADE, related_name='attachments')
-    file = models.FileField(upload_to='attachments/')
+    file = models.FileField(upload_to='attachments/', blank=True)
+    url = models.URLField(max_length=1000, blank=True, null=True)
     label = models.CharField(max_length=255, blank=True, null=True)
     uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
     uploaded_at = models.DateTimeField(auto_now_add=True)
