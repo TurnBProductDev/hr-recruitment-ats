@@ -363,7 +363,7 @@ html { scroll-behavior: smooth; }
       <div class="col-lg-6">
         <div class="card app-card p-4 h-100">
           <div class="card-head-row">
-            <div class="section-eyebrow"><i class="bi bi-bullseye"></i> Match Score</div>
+            <div class="section-eyebrow"><i class="bi bi-bullseye"></i> CV Score</div>
             <form method="post" action="{% url 'candidate_rescore' candidate.pk %}">
               {% csrf_token %}
               {% if candidate.match_state == 'SCORING' %}
@@ -483,15 +483,15 @@ html { scroll-behavior: smooth; }
               {% csrf_token %}
               <input type="hidden" name="next" value="{{ request.get_full_path }}">
               <input type="hidden" name="performed_by" value="{{ user.get_full_name|default:user.get_username }}">
-              <textarea name="reason" class="form-control form-control-sm mb-2 js-stage-reason" rows="2" placeholder="Remarks / reason…"></textarea>
+              <textarea name="reason" class="form-control form-control-sm mb-2 js-stage-reason" rows="2" placeholder="Remarks (required)…"></textarea>
               <div class="stage-action-row">
                 <button type="button" class="stage-action-btn stage-tone-reject"
                         data-bs-toggle="modal" data-bs-target="#rejectionModal"
-                        data-load-url="{% url 'candidate_rejection_draft' candidate.pk %}">Reject</button>
+                        data-load-url="{% url 'candidate_rejection_draft' candidate.pk %}" data-require-reason="1" disabled>Reject</button>
                 {# A no-show/cancelled candidate usually doesn't need the "thank you for interviewing" email. #}
-                <button type="submit" formaction="{% url 'candidate_reject' candidate.pk %}" class="stage-action-btn stage-tone-reject"
+                <button type="submit" formaction="{% url 'candidate_reject' candidate.pk %}" class="stage-action-btn stage-tone-reject" data-require-reason="1" disabled
                         onclick="return confirm('Reject {{ candidate.full_name|escapejs }} without sending an email?');">Reject (No Email)</button>
-                <button type="submit" formaction="{% url 'candidate_screening_hold' candidate.pk %}" class="stage-action-btn stage-tone-hold">Hold</button>
+                <button type="submit" formaction="{% url 'candidate_screening_hold' candidate.pk %}" class="stage-action-btn stage-tone-hold" data-require-reason="1" disabled>Hold</button>
               </div>
             </form>
           </div>
@@ -571,19 +571,19 @@ html { scroll-behavior: smooth; }
             {% csrf_token %}
             <input type="hidden" name="next" value="{{ request.get_full_path }}">
             <input type="hidden" name="performed_by" value="{{ user.get_full_name|default:user.get_username }}">
-            <textarea name="reason" class="form-control form-control-sm mb-2 js-stage-reason" rows="2" placeholder="Remarks / reason…"></textarea>
+            <textarea name="reason" class="form-control form-control-sm mb-2 js-stage-reason" rows="2" placeholder="Remarks (required)…"></textarea>
             <div class="stage-action-row">
               {% for action in stage.actions %}
               {% if action.tone == 'reject' %}
               <button type="button" class="stage-action-btn stage-tone-reject"
                       data-bs-toggle="modal" data-bs-target="#rejectionModal"
-                      data-load-url="{% url 'candidate_rejection_draft' candidate.pk %}">
+                      data-load-url="{% url 'candidate_rejection_draft' candidate.pk %}" data-require-reason="1" disabled>
                 {{ action.label }}
               </button>
               {% else %}
               <button type="submit" formaction="{% url action.url candidate.pk %}"
                       class="stage-action-btn stage-tone-{{ action.tone }}"
-                      {% if action.require_reason %}data-require-reason="1" disabled{% endif %}>
+                      data-require-reason="1" disabled>
                 {{ action.label }}
               </button>
               {% endif %}
@@ -624,7 +624,7 @@ html { scroll-behavior: smooth; }
             <input type="hidden" name="performed_by" value="{{ user.get_full_name|default:user.get_username }}">
 
             <div class="stage-subsection-title">Remarks</div>
-            <textarea name="reason" class="form-control form-control-sm mb-2 js-stage-reason" rows="2" placeholder="Remarks…"></textarea>
+            <textarea name="reason" class="form-control form-control-sm mb-2 js-stage-reason" rows="2" placeholder="Remarks (required to update status)…"></textarea>
 
             <div class="stage-subsection-title">Update {{ stage.label }} Status</div>
             <div class="stage-action-row">
@@ -633,7 +633,7 @@ html { scroll-behavior: smooth; }
               {% for action in stage.actions %}
               <button type="submit" formaction="{% url action.url candidate.pk %}"
                       class="stage-action-btn stage-tone-{{ action.tone }}"
-                      {% if action.require_reason %}data-require-reason="1" disabled{% endif %}>
+                      data-require-reason="1" disabled>
                 {{ action.label }}
               </button>
               {% endfor %}
@@ -687,7 +687,7 @@ html { scroll-behavior: smooth; }
               so HR/Recruiter sees it right where they make the actual call.
             {% endcomment %}
             <textarea name="reason" class="form-control form-control-sm mb-2 js-stage-reason" rows="2"
-                      placeholder="Remarks / reason…">{{ stage.done_interview.feedback|default:"" }}</textarea>
+                      placeholder="Remarks (required)…">{{ stage.done_interview.feedback|default:"" }}</textarea>
             <div class="stage-action-row">
               {% for action in stage.actions %}
               {% if action.tone == 'reject' and stage.key != 'open' %}
@@ -701,13 +701,13 @@ html { scroll-behavior: smooth; }
               {% endcomment %}
               <button type="button" class="stage-action-btn stage-tone-reject"
                       data-bs-toggle="modal" data-bs-target="#rejectionModal"
-                      data-load-url="{% url 'candidate_rejection_draft' candidate.pk %}">
+                      data-load-url="{% url 'candidate_rejection_draft' candidate.pk %}" data-require-reason="1" disabled>
                 {{ action.label }}
               </button>
               {% else %}
               <button type="submit" formaction="{% url action.url candidate.pk %}"
                       class="stage-action-btn stage-tone-{{ action.tone }}"
-                      {% if action.require_reason %}data-require-reason="1" disabled{% endif %}>
+                      data-require-reason="1" disabled>
                 {{ action.label }}
               </button>
               {% endif %}
@@ -730,7 +730,7 @@ html { scroll-behavior: smooth; }
           {% csrf_token %}
           <input type="hidden" name="next" value="{{ request.get_full_path }}">
           <input type="hidden" name="performed_by" value="{{ user.get_full_name|default:user.get_username }}">
-          <textarea name="reason" hidden class="form-control form-control-sm mb-2 js-stage-reason" rows="2" placeholder="Remarks / reason…"></textarea>
+          <textarea name="reason" hidden class="form-control form-control-sm mb-2 js-stage-reason" rows="2" placeholder="Remarks (required)…"></textarea>
           <div class="stage-action-row justify-content-center final-status-actions">
             <button type="submit" formaction="{% url candidate.resume_action.url_name candidate.pk %}" class="stage-action-btn stage-tone-advance">{{ candidate.resume_action.label }}</button>
             <button type="submit" formaction="{% url 'candidate_reject' candidate.pk %}" class="stage-action-btn stage-tone-reject">Reject</button>
@@ -911,8 +911,8 @@ html { scroll-behavior: smooth; }
                    placeholder="Type the suggested role…" maxlength="255" hidden>
           </div>
           <div class="mb-1">
-            <label class="form-label">Remarks / Reason</label>
-            <textarea name="reason" class="form-control" rows="3"></textarea>
+            <label class="form-label">Remarks / Reason <span class="text-danger">*</span></label>
+            <textarea name="reason" class="form-control" rows="3" required></textarea>
           </div>
         </div>
         <div class="modal-footer">
@@ -998,9 +998,9 @@ document.querySelectorAll('.js-autosave').forEach(function (form) {
   form.addEventListener('change', show);
 });
 
-// Hiring stage cards: Blacklist requires a reason (matches the app-wide rule
-// enforced server-side by CandidateStatusActionView(require_reason=True)) -
-// keep its button disabled until the shared remarks box has real content.
+// Hiring stage cards: every decision needs remarks (enforced server-side
+// too - see candidates.views.REMARKS_REQUIRED) - keep the decision buttons
+// disabled until the shared remarks box has real content.
 document.querySelectorAll('.js-stage-form').forEach(function (form) {
   var reason = form.querySelector('.js-stage-reason');
   var gated = form.querySelectorAll('[data-require-reason]');
@@ -1028,6 +1028,9 @@ document.querySelectorAll('.js-confirm-reason-form').forEach(function (form) {
     if (reason.hidden) {
       event.preventDefault();
       reason.hidden = false;
+      // Only now - a required field that's still hidden would block the
+      // submit with no visible message.
+      reason.required = true;
       reason.focus();
     }
   });

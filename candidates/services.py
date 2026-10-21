@@ -11,6 +11,7 @@ from .models import (
     CandidateEducation,
     CandidateExperience,
     CandidateStatusHistory,
+    INTERVIEW_HOLD_STAGES,
     EmailRegistry,
 )
 
@@ -59,18 +60,41 @@ def record_creation(candidate, user=None, remarks=None, performed_by=None):
     )
 
 
+def hold_kind_for(candidate, from_status):
+    """Candidate.HoldKind for a hold taken at `from_status` right now: for
+    Round 1/Round 2, RESULT if that round's latest interview has taken place
+    (marked Done, or completed by Mark Result - which saves it as Completed
+    before putting the candidate on hold), else INTERVIEW (none booked yet,
+    still scheduled, cancelled/no-show). None for every other stage."""
+    from interviews.models import Interview  # local: interviews.models imports candidates.models
+    if from_status not in INTERVIEW_HOLD_STAGES:
+        return None
+    interviews = candidate.interviews.all()
+    if from_status == STATUS.ROUND1:
+        interviews = interviews.filter(round_type=Interview.RoundType.ROUND1)
+    else:
+        interviews = interviews.exclude(round_type=Interview.RoundType.ROUND1)
+    latest = interviews.order_by('-pk').first()
+    if latest is not None and latest.status == Interview.Status.COMPLETED:
+        return Candidate.HoldKind.RESULT
+    return Candidate.HoldKind.INTERVIEW
+
+
 def change_status(candidate, new_status, user=None, remarks=None, performed_by=None):
     old_status = candidate.status
     if old_status == new_status:
         return candidate
     candidate.status = new_status
     # Hold is available from every stage, so remember which one it was taken
-    # from - that is what names it ("Round 2 Hold"). Leaving hold clears it.
-    candidate.hold_from_status = old_status if new_status == STATUS.SCREENING_HOLD else ''
-    candidate.save(update_fields=['status', 'hold_from_status', 'updated_at'])
+    # from - that is what names it ("Round 2 Hold") - and, for Round 1/2,
+    # whether the interview had happened yet. Leaving hold clears both.
+    entering_hold = new_status == STATUS.SCREENING_HOLD
+    candidate.hold_from_status = old_status if entering_hold else ''
+    candidate.hold_kind = hold_kind_for(candidate, old_status) if entering_hold else None
+    candidate.save(update_fields=['status', 'hold_from_status', 'hold_kind', 'updated_at'])
     CandidateStatusHistory.objects.create(
         candidate=candidate, old_status=old_status, new_status=new_status,
-        changed_by=user, performed_by=performed_by, remarks=remarks,
+        changed_by=user, performed_by=performed_by, remarks=remarks, hold_kind=candidate.hold_kind,
     )
     return candidate
 
@@ -93,9 +117,11 @@ def move_to_future_prospects(candidate, user=None, remarks=None, performed_by=No
     if candidate.status != STATUS.SCREENING_HOLD:
         return candidate
     candidate.hold_from_status = STATUS.OPEN
+    candidate.hold_kind = None
     candidate.suggested_role = suggested_role
     candidate.suggested_role_text = '' if suggested_role else (suggested_role_text or '').strip()[:255]
-    candidate.save(update_fields=['hold_from_status', 'suggested_role', 'suggested_role_text', 'updated_at'])
+    candidate.save(update_fields=['hold_from_status', 'hold_kind', 'suggested_role', 'suggested_role_text',
+                                  'updated_at'])
     CandidateStatusHistory.objects.create(
         candidate=candidate, old_status=STATUS.SCREENING_HOLD, new_status=STATUS.SCREENING_HOLD,
         changed_by=user, performed_by=performed_by,
@@ -109,9 +135,23 @@ def hold_source_from_history(candidate):
     history. Used when a status is restored rather than changed (undo)."""
     if candidate.status != STATUS.SCREENING_HOLD:
         return ''
-    last_hold = (candidate.history.filter(new_status=STATUS.SCREENING_HOLD)
-                 .order_by('-changed_at', '-id').first())
+    last_hold = _last_hold_row(candidate)
     return last_hold.old_status if last_hold else ''
+
+
+def hold_kind_from_history(candidate):
+    """The Candidate.HoldKind of the candidate's current hold, read back from
+    history the same way as hold_source_from_history (undo)."""
+    if candidate.status != STATUS.SCREENING_HOLD:
+        return None
+    last_hold = _last_hold_row(candidate)
+    return last_hold.hold_kind if last_hold else None
+
+
+def _last_hold_row(candidate):
+    # Skip undone rows - the hold being restored is the last one still in force.
+    return (candidate.history.filter(new_status=STATUS.SCREENING_HOLD, is_undone=False)
+            .order_by('-changed_at', '-id').first())
 
 
 def blacklist_candidate(candidate, reason, user=None, performed_by=None):

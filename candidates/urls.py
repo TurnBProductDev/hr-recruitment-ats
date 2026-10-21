@@ -64,13 +64,13 @@ urlpatterns = [
     path('hr/candidates/<int:pk>/hire/', views.CandidateStatusActionView.as_view(
         target_status=STATUS.HIRED), name='candidate_hire'),
     path('hr/candidates/<int:pk>/reject/', views.CandidateStatusActionView.as_view(
-        target_status=STATUS.REJECTED, require_reason=False), name='candidate_reject'),
+        target_status=STATUS.REJECTED), name='candidate_reject'),
     path('hr/candidates/<int:pk>/reject/draft/', views.CandidateRejectionDraftView.as_view(),
          name='candidate_rejection_draft'),
     path('hr/candidates/<int:pk>/reject/send/', views.CandidateSendRejectionView.as_view(),
          name='candidate_send_rejection'),
     path('hr/candidates/<int:pk>/blacklist/', views.CandidateStatusActionView.as_view(
-        target_status=STATUS.BLACKLISTED, require_reason=True), name='candidate_blacklist'),
+        target_status=STATUS.BLACKLISTED), name='candidate_blacklist'),
     path('hr/candidates/<int:pk>/screening-hold/', views.CandidateStatusActionView.as_view(
         target_status=STATUS.SCREENING_HOLD), name='candidate_screening_hold'),
     path('hr/candidates/<int:pk>/move-to-future/', views.CandidateMoveToFutureView.as_view(),

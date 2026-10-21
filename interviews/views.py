@@ -575,14 +575,18 @@ class InterviewResultView(GroupRequiredMixin, UpdateView):
             return response
         performed_by = self.request.user.get_full_name() or self.request.user.get_username()
         round_label = interview.get_round_type_display()
+        feedback = (interview.feedback or '').strip()
+
+        def remark(text):
+            return f'{text} {feedback}'.strip()
         if interview.result == Interview.Result.PASS_:
             next_status = self.PASS_NEXT.get(candidate.status, Candidate.Status.HIRED)
             services.change_status(candidate, next_status, user=self.request.user,
-                                   remarks=f'{round_label} interview passed.', performed_by=performed_by)
+                                   remarks=remark(f'{round_label} interview passed.'), performed_by=performed_by)
             messages.success(self.request, f'{candidate.full_name} passed — moved to "{candidate.status_label}".')
         elif interview.result == Interview.Result.FAIL:
             services.change_status(candidate, Candidate.Status.REJECTED, user=self.request.user,
-                                   remarks=f'{round_label} interview failed.', performed_by=performed_by)
+                                   remarks=remark(f'{round_label} interview failed.'), performed_by=performed_by)
             messages.success(self.request, f'{candidate.full_name} failed and was moved to Rejected.')
         elif interview.result == Interview.Result.HOLD:
             # Hold pauses the candidate - it doesn't decide the interview, so
@@ -594,7 +598,7 @@ class InterviewResultView(GroupRequiredMixin, UpdateView):
             interview.result = Interview.Result.PENDING
             interview.save(update_fields=['result'])
             services.change_status(candidate, Candidate.Status.SCREENING_HOLD, user=self.request.user,
-                                   remarks=f'{round_label} interview put on hold.', performed_by=performed_by)
+                                   remarks=remark(f'{round_label} interview put on hold.'), performed_by=performed_by)
             messages.success(self.request, f'{candidate.full_name} moved to Hold.')
         else:
             messages.success(self.request, 'Interview result recorded.')

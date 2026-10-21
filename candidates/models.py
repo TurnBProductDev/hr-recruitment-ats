@@ -90,6 +90,13 @@ class Candidate(models.Model):
         # at - "Interview Hold", "Round 1 Hold" - see hold_label().
         SCREENING_HOLD = 'SCREENING_HOLD', 'Hold'
 
+    class HoldKind(models.TextChoices):
+        # Only meaningful for a hold taken at Round 1/Round 2 - whether the
+        # round's interview had actually taken place yet. See
+        # services.hold_kind_for and hold_label().
+        INTERVIEW = 'INTERVIEW', 'Interview Hold'
+        RESULT = 'RESULT', 'Interview Result Hold'
+
     candidate_code = models.CharField(max_length=20, unique=True, blank=True)
     job = models.ForeignKey(Job, on_delete=models.SET_NULL, null=True, blank=True, related_name='candidates')
 
@@ -117,6 +124,12 @@ class Candidate(models.Model):
     # named after it. Blank for anyone not on hold. Kept on the row (the same
     # thing is derivable from history) so candidate lists need no extra query.
     hold_from_status = models.CharField(max_length=30, blank=True, default='')
+    # For a Round 1/Round 2 hold: held before the interview took place
+    # (INTERVIEW - not scheduled yet, cancelled, no-show) or after it
+    # (RESULT - Hold picked as the result, or after the interview was marked
+    # Done). Null for every other hold and anyone not on hold. Nullable, not
+    # default='', so sp_intake_add_candidate's INSERT needn't list it.
+    hold_kind = models.CharField(max_length=20, choices=HoldKind.choices, blank=True, null=True)
     # Which role HR thinks might suit this candidate later, set when moving
     # them to Future Prospects (services.move_to_future_prospects) - distinct
     # from `job` (the vacancy they actually applied to), so Future Prospects
@@ -194,7 +207,7 @@ class Candidate(models.Model):
         (HR still has to Clear/Reject), and if it was cancelled, "Interview
         Cancelled" - the same latest-row rule the timeline's stage card uses."""
         if self.status == self.Status.SCREENING_HOLD:
-            return hold_label(self.hold_from_status)
+            return hold_label(self.hold_from_status, self.hold_kind)
         if self.status in (self.Status.ROUND1, self.Status.INTERVIEW):
             from interviews.models import Interview  # local: interviews.models imports Candidate
             round_types = (
@@ -282,14 +295,22 @@ HOLD_RESUME_ACTIONS = {
 HOLD_STAGES = tuple(HOLD_RESUME_ACTIONS)
 
 
-def hold_label(from_status):
-    """Name a hold after the stage it was taken at: held after an interview
-    reads "Interview Hold". Plain "Hold" when the stage was never recorded."""
+# Stages whose hold is further split by Candidate.HoldKind.
+INTERVIEW_HOLD_STAGES = (Candidate.Status.ROUND1, Candidate.Status.INTERVIEW)
+
+
+def hold_label(from_status, kind=None):
+    """Name a hold after the stage it was taken at - "Final Selection Hold".
+    A Round 1/Round 2 hold also says whether the interview had happened:
+    "Round 1 Interview Hold" (before) vs "Round 1 Interview Result Hold"
+    (after). Plain "Hold" when the stage was never recorded."""
     plain = Candidate.Status.SCREENING_HOLD.label
     if not from_status or from_status == Candidate.Status.SCREENING_HOLD:
         return plain
     stage = (HOLD_STAGE_NAMES.get(from_status)
              or dict(Candidate.Status.choices).get(from_status, from_status))
+    if from_status in INTERVIEW_HOLD_STAGES and kind in Candidate.HoldKind.values:
+        return f'{stage} {Candidate.HoldKind(kind).label}'
     return f'{stage} {plain}'
 
 
@@ -340,6 +361,10 @@ class CandidateStatusHistory(models.Model):
     # decisions/dates (see candidates.views._build_hiring_stages) so an
     # undone "Cleared"/"Reject"/etc. doesn't keep showing as if it still held.
     is_undone = models.BooleanField(default=False)
+    # Candidate.HoldKind for a row that put a Round 1/Round 2 candidate on
+    # hold, so the Activity History and Undo name that hold the same way the
+    # candidate's own badge did. Null otherwise.
+    hold_kind = models.CharField(max_length=20, blank=True, null=True)
 
     class Meta:
         ordering = ['-changed_at']

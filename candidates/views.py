@@ -6,7 +6,9 @@ import openpyxl
 import requests
 from django.conf import settings
 from django.contrib import messages
-from django.db.models import Count, Exists, F, Max, OuterRef, Q, Subquery
+from django.contrib.auth import get_user_model
+from django.db.models import Case, CharField, Count, Exists, F, Max, OuterRef, Q, Subquery, Value, When
+from django.db.models.functions import Coalesce, Concat, NullIf, Trim
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -56,6 +58,12 @@ logger = logging.getLogger(__name__)
 
 def _is_ajax(request):
     return request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
+
+# Every stage decision (advance, Hold, Reject, Blacklist, Move to Future,
+# resume from Hold - one candidate or a ticked batch) must carry remarks, so
+# the history always says why. Enforced in each view below, not just the page.
+REMARKS_REQUIRED = 'Remarks are required for every stage decision.'
 
 
 def _performed_by(request):
@@ -294,6 +302,103 @@ SCORE_BANDS = [
     ('gt80', 'Above 80', {'match_score__gt': 80}),
 ]
 SCORE_BAND_FILTERS = {key: lookup for key, _, lookup in SCORE_BANDS}
+
+# The Hold tab's "Hold Stage" filter: one option per named hold (see
+# hold_label), as "<hold_from_status>" or, for Round 1/Round 2,
+# "<hold_from_status>:<hold_kind>". Screening holds live on Future Prospects.
+HOLD_STAGE_OPTIONS = [
+    (STATUS.SHORTLISTED, None),
+    (STATUS.ROUND1, Candidate.HoldKind.INTERVIEW), (STATUS.ROUND1, Candidate.HoldKind.RESULT),
+    (STATUS.INTERVIEW, Candidate.HoldKind.INTERVIEW), (STATUS.INTERVIEW, Candidate.HoldKind.RESULT),
+    (STATUS.FINAL_SELECTION, None),
+]
+HOLD_STAGE_FILTERS = [(f'{stage}:{kind}' if kind else stage, hold_label(stage, kind))
+                      for stage, kind in HOLD_STAGE_OPTIONS]
+
+# Tabs showing the Interviewer / Interview Score columns and Interviewer filter.
+INTERVIEW_TABS = ('round1', 'interview', HOLD_TAB)
+REJECTED_TAB = 'rejected'
+
+# What the Rejected tab calls the stage someone was rejected at - the Hiring
+# block's own stage names, not the raw status labels ("Tele Screening", not
+# "Qualified").
+REJECTION_STAGE_NAMES = {
+    STATUS.OPEN: 'CV Screening', STATUS.SHORTLISTED: 'Tele Screening', STATUS.ROUND1: 'Round 1',
+    STATUS.INTERVIEW: 'Round 2', STATUS.FINAL_SELECTION: 'Final Decision',
+}
+
+
+def _user_display_name(user_ref):
+    """Subquery: full name of the user whose pk is `user_ref` (an OuterRef),
+    falling back to their username - same as get_full_name() or username."""
+    full = Trim(Concat('first_name', Value(' '), 'last_name', output_field=CharField()))
+    return Subquery(get_user_model().objects.filter(pk=user_ref)
+                    .annotate(display=Coalesce(NullIf(full, Value('')), 'username', output_field=CharField()))
+                    .values('display')[:1])
+
+
+def _with_interview_info(qs):
+    """Annotate iv_interviewer_id / iv_interviewer / iv_score: the
+    interviewer and score of the interview relevant to the row - the latest
+    Round 1 interview for a Round 1 candidate (or a Round 1 hold), the latest
+    Round 2 one for Round 2, the latest of any round otherwise. Before any
+    interview is booked, the interviewer comes from the open allocation
+    (InterviewRequest) instead, so a just-allocated candidate isn't blank."""
+    def latest(model, field, round_types=None, extra=None):
+        rows = model.objects.filter(candidate=OuterRef('pk'))
+        if round_types is not None:
+            rows = rows.filter(round_type__in=round_types)
+        if extra:
+            rows = rows.filter(**extra)
+        return Subquery(rows.order_by('-pk').values(field)[:1])
+
+    def per_stage(model, field, extra=None):
+        r1 = latest(model, field, ROUND1_TYPES, extra)
+        r2 = latest(model, field, ROUND2_TYPES, extra)
+        return Case(
+            When(Q(status=STATUS.ROUND1) | Q(status=STATUS.SCREENING_HOLD, hold_from_status=STATUS.ROUND1), then=r1),
+            When(Q(status=STATUS.INTERVIEW) | Q(status=STATUS.SCREENING_HOLD, hold_from_status=STATUS.INTERVIEW),
+                 then=r2),
+            default=latest(model, field, None, extra))
+
+    qs = qs.annotate(
+        iv_interviewer_id=Coalesce(
+            per_stage(Interview, 'interviewer_id'),
+            per_stage(InterviewRequest, 'interviewer_id', {'status__in': InterviewRequest.OPEN_STATUSES})),
+        iv_score=per_stage(Interview, 'score'),
+    )
+    return qs.annotate(iv_interviewer=_user_display_name(OuterRef('iv_interviewer_id')))
+
+
+def _with_rejection_info(qs):
+    """Annotate what the latest (not undone) Rejected history row says: the
+    status the candidate was rejected from, its remarks, and - for a rejection
+    taken while on Hold - which hold that was. See rejection_stage()."""
+    rejected = (CandidateStatusHistory.objects
+                .filter(candidate=OuterRef('pk'), new_status=STATUS.REJECTED, is_undone=False)
+                .order_by('-changed_at', '-id'))
+    held = (CandidateStatusHistory.objects
+            .filter(candidate=OuterRef('pk'), new_status=STATUS.SCREENING_HOLD, is_undone=False)
+            .order_by('-changed_at', '-id'))
+    return qs.annotate(
+        rej_from=Subquery(rejected.values('old_status')[:1]),
+        rej_remarks=Subquery(rejected.values('remarks')[:1]),
+        rej_hold_from=Subquery(held.values('old_status')[:1]),
+        rej_hold_kind=Subquery(held.values('hold_kind')[:1]),
+    )
+
+
+def rejection_stage(candidate):
+    """'Round 1', 'Tele Screening', 'Round 1 Interview Hold', ... for a row
+    annotated by _with_rejection_info; '' when there's no record of it."""
+    came_from = getattr(candidate, 'rej_from', None)
+    if not came_from:
+        return ''
+    if came_from == STATUS.SCREENING_HOLD:
+        if candidate.rej_hold_from == STATUS.OPEN:
+            return 'Future Prospects'
+        return hold_label(candidate.rej_hold_from, candidate.rej_hold_kind)
+    return REJECTION_STAGE_NAMES.get(came_from) or dict(Candidate.Status.choices).get(came_from, came_from)
 
 
 def _querystring_without_page(request):
@@ -543,9 +648,22 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
         status_filter = self.request.GET.get('status')
         if status_filter:
             if self.get_tab() == HOLD_TAB and not flow:
-                qs = qs.filter(hold_from_status=status_filter)
+                # "ROUND1:RESULT" = a Round 1 Interview Result Hold; a bare
+                # stage matches every hold taken there.
+                stage, _, kind = status_filter.partition(':')
+                qs = qs.filter(hold_from_status=stage)
+                if kind:
+                    qs = qs.filter(hold_kind=kind)
             else:
                 qs = qs.filter(status=status_filter)
+
+        if self.get_tab() in INTERVIEW_TABS and not flow:
+            qs = _with_interview_info(qs)
+            interviewer = self.request.GET.get('interviewer')
+            if interviewer:
+                qs = qs.filter(iv_interviewer_id=interviewer)
+        elif self.get_tab() == REJECTED_TAB and not flow:
+            qs = _with_rejection_info(qs)
 
         # Tab-specific switches: hide reapplicants (Open list) / hide already-called (Shortlisted)
         if self.request.GET.get('hide_reapply'):
@@ -588,14 +706,28 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
         # instead; every other tab offers the pipeline statuses.
         if ctx['tab'] == HOLD_TAB:
             # Screening-stage holds live on Future Prospects now, not this tab.
-            ctx['status_options'] = [(s, hold_label(s)) for s in HOLD_STAGES if s != STATUS.OPEN]
+            ctx['status_options'] = HOLD_STAGE_FILTERS
         else:
             ctx['status_options'] = list(Candidate.Status.choices)
+        ctx['status_filter'] = self.request.GET.get('status', '')
+        ctx['show_interview_cols'] = ctx['tab'] in INTERVIEW_TABS
+        ctx['show_rejection_cols'] = ctx['tab'] == REJECTED_TAB
+        if ctx['show_interview_cols']:
+            # Anyone who has interviewed, or been allocated to interview, a candidate.
+            ids = (set(Interview.objects.exclude(interviewer=None).values_list('interviewer_id', flat=True))
+                   | set(InterviewRequest.objects.values_list('interviewer_id', flat=True)))
+            ctx['interviewer_options'] = sorted(
+                ((u.pk, u.get_full_name() or u.get_username()) for u in get_user_model().objects.filter(pk__in=ids)),
+                key=lambda o: o[1].lower())
+            ctx['interviewer_filter'] = self.request.GET.get('interviewer', '')
+        if ctx['show_rejection_cols']:
+            for c in ctx['candidates']:
+                c.rejection_stage = rejection_stage(c)
         # every current filter except the tab, so switching tabs keeps the vacancy/scope/search
         # (the tab-specific switches are dropped so they reset when you leave their tab;
         # so is the status, which means a different thing on the Hold tab)
         params = self.request.GET.copy()
-        for key in ('tab', 'hide_reapply', 'hide_called', 'status'):
+        for key in ('tab', 'hide_reapply', 'hide_called', 'status', 'interviewer'):
             params.pop(key, None)
         ctx['preserved_qs'] = params.urlencode()
         ctx['querystring'] = _querystring_without_page(self.request)
@@ -771,13 +903,17 @@ class CandidateRepositoryExportView(GroupRequiredMixin, _ExcelExportMixin, View)
     columns = (
         ('Name', 'full_name'), ('Email', 'email'), ('Candidate Code', 'candidate_code'),
         ('Role', lambda c: c.job.title if c.job else ''),
-        ('Score', lambda c: c.match_score if c.match_score is not None else ''),
+        ('CV Score', lambda c: c.match_score if c.match_score is not None else ''),
         ('Experience (yrs)', 'total_experience_years'),
         ('Applied', lambda c: c.created_at.strftime('%Y-%m-%d') if c.created_at else ''),
         ('Round 1 Date', lambda c: (timezone.localtime(c.round1_at).strftime('%Y-%m-%d %H:%M')
                                     if c.round1_at else '')),
         ('Round 2 Date', lambda c: (timezone.localtime(c.round2_at).strftime('%Y-%m-%d %H:%M')
                                     if c.round2_at else '')),
+        ('Interviewer', lambda c: getattr(c, 'iv_interviewer', None) or ''),
+        ('Interview Score', lambda c: getattr(c, 'iv_score', None)),
+        ('Rejected At', rejection_stage),
+        ('Rejection Remarks', lambda c: getattr(c, 'rej_remarks', None) or ''),
         ('Status', 'status_label'),
     )
 
@@ -848,21 +984,21 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
         # A hold is named after the stage it was taken at ("Interview Hold"), so
         # walk history oldest-first to note which stage each hold came from -
         # a row that *leaves* a hold has to name it the same way it was entered.
-        held_from, hold_source = '', {}
+        held_from, hold_source = ('', None), {}
         for h in sorted(ctx['history'], key=lambda h: (h.changed_at, h.id)):
             hold_source[h.id] = held_from
             if h.new_status == STATUS.SCREENING_HOLD:
-                held_from = h.old_status
+                held_from = (h.old_status, h.hold_kind)
 
-        def status_label(status, came_from=''):
+        def status_label(status, came_from='', kind=None):
             if status == STATUS.SCREENING_HOLD:
-                return hold_label(came_from)
+                return hold_label(came_from, kind)
             return labels.get(status, status)
 
         events = []
         for h in ctx['history']:
-            was = status_label(h.old_status, hold_source[h.id]) if h.old_status else '—'
-            title = f"Status: {was} → {status_label(h.new_status, h.old_status)}"
+            was = status_label(h.old_status, *hold_source[h.id]) if h.old_status else '—'
+            title = f"Status: {was} → {status_label(h.new_status, h.old_status, h.hold_kind)}"
             if h.is_undone:
                 title += ' (Undone)'
             events.append({
@@ -902,7 +1038,7 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
         # Skips undone rows - one of those no longer reflects candidate.status.
         last = next((h for h in ctx['history'] if not h.is_undone), None)
         ctx['last_status'] = last
-        ctx['last_status_label'] = status_label(last.new_status, last.old_status) if last else ''
+        ctx['last_status_label'] = status_label(last.new_status, last.old_status, last.hold_kind) if last else ''
 
         u = self.request.user
         ctx['is_hr_admin'] = u.is_superuser or u.groups.filter(name=HR_ADMIN).exists()
@@ -1269,6 +1405,9 @@ class CandidateSetStatusView(GroupRequiredMixin, View):
             return redirect('candidate_timeline', pk=pk)
         reason = request.POST.get('reason', '').strip()
         performed_by = _performed_by(request)
+        if not reason:
+            messages.error(request, REMARKS_REQUIRED)
+            return redirect('candidate_timeline', pk=pk)
 
         _settle_round_interview(candidate, target)
 
@@ -1384,15 +1523,14 @@ class CandidateStatusActionView(GroupRequiredMixin, View):
     workflow (Open -> Shortlisted -> Round1 -> Interview -> FinalSelection
     -> Hired, with Reject/Blacklist available from any stage)."""
     target_status = None
-    require_reason = False
     allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
 
     def post(self, request, pk):
         candidate = get_object_or_404(Candidate, pk=pk)
         reason = request.POST.get('reason', '').strip()
         performed_by = _performed_by(request)
-        if self.require_reason and not reason:
-            messages.error(request, 'A reason is required.')
+        if not reason:
+            messages.error(request, REMARKS_REQUIRED)
             return redirect(request.POST.get('next') or reverse('candidate_timeline', args=[pk]))
 
         source_status = candidate.hold_from_status if candidate.status == STATUS.SCREENING_HOLD else candidate.status
@@ -1450,6 +1588,12 @@ class CandidateSendRejectionView(GroupRequiredMixin, View):
         performed_by = _performed_by(request)
         next_url = request.POST.get('next') or reverse('candidate_timeline', args=[pk])
 
+        if not reason:
+            if is_ajax:
+                return JsonResponse({'ok': False, 'error': REMARKS_REQUIRED}, status=400)
+            messages.error(request, REMARKS_REQUIRED)
+            return redirect(next_url)
+
         if skip_email:
             _settle_round_interview(candidate, STATUS.REJECTED)
             services.change_status(candidate, STATUS.REJECTED, user=request.user,
@@ -1505,6 +1649,9 @@ class CandidateMoveToFutureView(GroupRequiredMixin, View):
     def post(self, request, pk):
         candidate = get_object_or_404(Candidate, pk=pk)
         reason = request.POST.get('reason', '').strip()
+        if not reason:
+            messages.error(request, REMARKS_REQUIRED)
+            return redirect(request.POST.get('next') or reverse('candidate_timeline', args=[pk]))
         role_id = request.POST.get('suggested_role', '').strip()
         suggested_role = None
         suggested_role_text = ''
@@ -1604,7 +1751,8 @@ class CandidateRevertLastActionView(GroupRequiredMixin, View):
             ).update(status=InterviewRequest.Status.CANCELLED)
         candidate.status = prev_status
         candidate.hold_from_status = services.hold_source_from_history(candidate)
-        candidate.save(update_fields=['status', 'hold_from_status', 'is_blacklisted', 'updated_at'])
+        candidate.hold_kind = services.hold_kind_from_history(candidate)
+        candidate.save(update_fields=['status', 'hold_from_status', 'hold_kind', 'is_blacklisted', 'updated_at'])
         last.is_undone = True
         last.save(update_fields=['is_undone'])
         messages.success(request, f'Last action undone — {candidate.full_name} is back to "{candidate.status_label}".')
@@ -1661,6 +1809,10 @@ class CandidateBulkRejectView(GroupRequiredMixin, View):
         ids = request.POST.getlist('ids')
         reason = request.POST.get('reason', '').strip()
         performed_by = _performed_by(request)
+        if not reason:
+            messages.error(request, REMARKS_REQUIRED)
+            return redirect(request.POST.get('next') or _remembered_list_url(request)
+                            or reverse('candidate_repository'))
         candidates = Candidate.objects.filter(pk__in=ids).exclude(
             status__in=[STATUS.REJECTED, STATUS.BLACKLISTED])
 
@@ -1694,6 +1846,10 @@ class CandidateBulkStatusActionView(GroupRequiredMixin, View):
         ids = request.POST.getlist('ids')
         reason = request.POST.get('reason', '').strip()
         performed_by = _performed_by(request)
+        if not reason:
+            messages.error(request, REMARKS_REQUIRED)
+            return redirect(request.POST.get('next') or _remembered_list_url(request)
+                            or reverse('candidate_repository'))
         candidates = Candidate.objects.filter(pk__in=ids).exclude(
             status__in=[STATUS.REJECTED, STATUS.BLACKLISTED, STATUS.HIRED, self.target_status])
 
@@ -1726,7 +1882,7 @@ class CandidateBulkBlacklistView(GroupRequiredMixin, View):
         reason = request.POST.get('reason', '').strip()
         performed_by = _performed_by(request)
         if not reason:
-            messages.error(request, 'A reason is required.')
+            messages.error(request, REMARKS_REQUIRED)
             return redirect(request.POST.get('next') or reverse('candidate_repository'))
 
         candidates = Candidate.objects.filter(pk__in=ids).exclude(status=STATUS.BLACKLISTED)

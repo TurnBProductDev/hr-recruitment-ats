@@ -1140,20 +1140,20 @@ class HoldNamingTests(TestCase):
 
     def _hold(self):
         return self.client.post(reverse('candidate_set_status', args=[self.candidate.pk]),
-                                {'status': Candidate.Status.SCREENING_HOLD})
+                                {'reason': 'Test remarks.', 'status': Candidate.Status.SCREENING_HOLD})
 
     def test_hold_after_round_2_is_called_round_2_hold(self):
         services.change_status(self.candidate, Candidate.Status.INTERVIEW)
         self._hold()
         self.candidate.refresh_from_db()
         self.assertEqual(self.candidate.hold_from_status, Candidate.Status.INTERVIEW)
-        self.assertEqual(self.candidate.status_label, 'Round 2 Hold')
+        self.assertEqual(self.candidate.status_label, 'Round 2 Interview Hold')
 
     def test_hold_at_round1_is_called_round_1_hold(self):
         services.change_status(self.candidate, Candidate.Status.ROUND1)
         self._hold()
         self.candidate.refresh_from_db()
-        self.assertEqual(self.candidate.status_label, 'Round 1 Hold')
+        self.assertEqual(self.candidate.status_label, 'Round 1 Interview Hold')
 
     def test_hold_during_screening_keeps_the_name_screening_hold(self):
         self._hold()
@@ -1177,8 +1177,8 @@ class HoldNamingTests(TestCase):
         services.change_status(self.candidate, Candidate.Status.INTERVIEW)
         self._hold()
         response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
-        self.assertContains(response, 'Status: Round 2 → Round 2 Hold')
-        self.assertEqual(response.context['last_status_label'], 'Round 2 Hold')
+        self.assertContains(response, 'Status: Round 2 → Round 2 Interview Hold')
+        self.assertEqual(response.context['last_status_label'], 'Round 2 Interview Hold')
 
     def test_activity_history_names_the_hold_being_left_too(self):
         services.change_status(self.candidate, Candidate.Status.INTERVIEW)
@@ -1186,7 +1186,7 @@ class HoldNamingTests(TestCase):
         self.candidate.refresh_from_db()
         services.change_status(self.candidate, Candidate.Status.FINAL_SELECTION)
         response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
-        self.assertContains(response, 'Status: Round 2 Hold → Final Selection')
+        self.assertContains(response, 'Status: Round 2 Interview Hold → Final Selection')
 
     def test_the_action_is_offered_as_hold(self):
         response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
@@ -1198,7 +1198,7 @@ class HoldNamingTests(TestCase):
         self._hold()
         response = self.client.get(f"{reverse('candidate_repository')}?tab=screening_hold&scoped=1")
         self.assertContains(response, '>Hold</a>')  # the tab itself
-        self.assertContains(response, 'badge-screening_hold">Round 2 Hold')
+        self.assertContains(response, 'badge-screening_hold">Round 2 Interview Hold')
 
     def test_hold_is_offered_on_every_pipeline_stage(self):
         """Hold now happens from the Candidate Details page only - not the
@@ -1224,9 +1224,9 @@ class HoldNamingTests(TestCase):
 
     def test_holding_from_the_repository_names_the_stage(self):
         services.change_status(self.candidate, Candidate.Status.ROUND1)
-        self.client.post(reverse('candidate_screening_hold', args=[self.candidate.pk]))
+        self.client.post(reverse('candidate_screening_hold', args=[self.candidate.pk]), {'reason': 'Test remarks.'})
         self.candidate.refresh_from_db()
-        self.assertEqual(self.candidate.status_label, 'Round 1 Hold')
+        self.assertEqual(self.candidate.status_label, 'Round 1 Interview Hold')
 
     def test_undo_restores_the_hold_stage(self):
         services.change_status(self.candidate, Candidate.Status.INTERVIEW)
@@ -1236,7 +1236,7 @@ class HoldNamingTests(TestCase):
         self.client.post(reverse('candidate_revert', args=[self.candidate.pk]))
         self.candidate.refresh_from_db()
         self.assertEqual(self.candidate.status, Candidate.Status.SCREENING_HOLD)
-        self.assertEqual(self.candidate.status_label, 'Round 2 Hold')
+        self.assertEqual(self.candidate.status_label, 'Round 2 Interview Hold')
 
     def test_undo_cancels_the_interview_scheduled_at_the_undone_stage(self):
         """Advancing to Round 1, scheduling an interview there, then undoing
@@ -1382,7 +1382,7 @@ class SetStatusSettlesTheOpenInterviewTests(TestCase):
             status=Interview.Status.COMPLETED, scheduled_date=timezone.now())
 
     def _set_status(self, status):
-        return self.client.post(reverse('candidate_set_status', args=[self.candidate.pk]), {'status': status})
+        return self.client.post(reverse('candidate_set_status', args=[self.candidate.pk]), {'reason': 'Test remarks.', 'status': status})
 
     def test_moving_to_the_next_round_settles_the_interview_as_pass(self):
         self._set_status(Candidate.Status.INTERVIEW)
@@ -1450,7 +1450,7 @@ class HoldResumeActionTests(TestCase):
 
     def test_the_button_actually_resumes_the_pipeline(self):
         self._hold_at(Candidate.Status.ROUND1)
-        self.client.post(reverse('candidate_interview_stage', args=[self.candidate.pk]))
+        self.client.post(reverse('candidate_interview_stage', args=[self.candidate.pk]), {'reason': 'Test remarks.'})
         self.candidate.refresh_from_db()
         self.assertEqual(self.candidate.status, Candidate.Status.INTERVIEW)
         self.assertEqual(self.candidate.hold_from_status, '')
@@ -1592,7 +1592,7 @@ class FutureProspectsPageTests(TestCase):
         through CV Screening's own Qualify step again."""
         c = self._candidate('Held Early', Candidate.Status.OPEN, held=True)
         self.assertEqual(c.resume_action['url_name'], 'candidate_reopen')
-        self.client.post(reverse('candidate_reopen', args=[c.pk]))
+        self.client.post(reverse('candidate_reopen', args=[c.pk]), {'reason': 'Test remarks.'})
         c.refresh_from_db()
         self.assertEqual(c.status, Candidate.Status.OPEN)
         response = self.client.get(reverse('candidate_future_prospects'))
@@ -1644,7 +1644,7 @@ class MoveToFutureProspectsTests(TestCase):
         response = self.client.get(reverse('candidate_future_prospects'))
         self.assertNotIn(self.candidate, response.context['candidates'])
 
-        self.client.post(reverse('candidate_move_to_future', args=[self.candidate.pk]))
+        self.client.post(reverse('candidate_move_to_future', args=[self.candidate.pk]), {'reason': 'Test remarks.'})
         self.candidate.refresh_from_db()
         self.assertEqual(self.candidate.status, Candidate.Status.SCREENING_HOLD)  # unchanged
         self.assertEqual(self.candidate.hold_from_status, Candidate.Status.OPEN)  # re-tagged
@@ -1657,7 +1657,7 @@ class MoveToFutureProspectsTests(TestCase):
         counts = _summary_counts_qs(Candidate.objects.filter(pk=self.candidate.pk))
         self.assertEqual(counts['shortlisted'], 1)  # later-stage hold = Active Pool today
 
-        self.client.post(reverse('candidate_move_to_future', args=[self.candidate.pk]))
+        self.client.post(reverse('candidate_move_to_future', args=[self.candidate.pk]), {'reason': 'Test remarks.'})
         counts = _summary_counts_qs(Candidate.objects.filter(pk=self.candidate.pk))
         self.assertEqual(counts['rejected'], 1)
         self.assertEqual(counts['shortlisted'], 0)
@@ -1668,7 +1668,7 @@ class MoveToFutureProspectsTests(TestCase):
         Round 1/Round 2 schedule card's own "Move to Future" quick action,
         offered before an interview is even allocated)."""
         services.change_status(self.candidate, Candidate.Status.ROUND1)  # resumed off hold
-        self.client.post(reverse('candidate_move_to_future', args=[self.candidate.pk]))
+        self.client.post(reverse('candidate_move_to_future', args=[self.candidate.pk]), {'reason': 'Test remarks.'})
         self.candidate.refresh_from_db()
         self.assertEqual(self.candidate.status, Candidate.Status.SCREENING_HOLD)
         self.assertEqual(self.candidate.hold_from_status, Candidate.Status.OPEN)
@@ -1680,14 +1680,14 @@ class MoveToFutureProspectsTests(TestCase):
         self.assertContains(response, reverse('candidate_move_to_future', args=[self.candidate.pk]))
 
     def test_final_status_box_hides_move_to_future_once_already_there(self):
-        self.client.post(reverse('candidate_move_to_future', args=[self.candidate.pk]))
+        self.client.post(reverse('candidate_move_to_future', args=[self.candidate.pk]), {'reason': 'Test remarks.'})
         response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
         self.assertNotContains(response, reverse('candidate_move_to_future', args=[self.candidate.pk]))
 
     def test_move_to_future_saves_suggested_role(self):
         job = Job.objects.create(title='Data Analyst')
         self.client.post(reverse('candidate_move_to_future', args=[self.candidate.pk]),
-                         {'suggested_role': job.pk})
+                         {'reason': 'Test remarks.', 'suggested_role': job.pk})
         self.candidate.refresh_from_db()
         self.assertEqual(self.candidate.suggested_role, job)
 
@@ -1695,7 +1695,7 @@ class MoveToFutureProspectsTests(TestCase):
         job = Job.objects.create(title='Data Analyst')
         other_job = Job.objects.create(title='Sales Associate')
         self.client.post(reverse('candidate_move_to_future', args=[self.candidate.pk]),
-                         {'suggested_role': job.pk})
+                         {'reason': 'Test remarks.', 'suggested_role': job.pk})
 
         response = self.client.get(reverse('candidate_future_prospects'), {'role': job.pk})
         self.assertIn(self.candidate, response.context['candidates'])
@@ -1704,7 +1704,7 @@ class MoveToFutureProspectsTests(TestCase):
         self.assertNotIn(self.candidate, response.context['candidates'])
 
     def _move_with_typed_role(self, text='Product Designer'):
-        return self.client.post(reverse('candidate_move_to_future', args=[self.candidate.pk]), {
+        return self.client.post(reverse('candidate_move_to_future', args=[self.candidate.pk]), {'reason': 'Test remarks.', 
             'suggested_role': '__other__', 'suggested_role_other': text})
 
     def test_modal_offers_an_other_option_with_a_text_box(self):
@@ -1731,7 +1731,7 @@ class MoveToFutureProspectsTests(TestCase):
         self._move_with_typed_role('Product Designer')
         job = Job.objects.create(title='Data Analyst')
         self.client.post(reverse('candidate_move_to_future', args=[self.candidate.pk]),
-                         {'suggested_role': job.pk})
+                         {'reason': 'Test remarks.', 'suggested_role': job.pk})
         self.candidate.refresh_from_db()
         self.assertEqual(self.candidate.suggested_role, job)
         self.assertEqual(self.candidate.suggested_role_text, '')
@@ -2092,14 +2092,14 @@ class SlaTrackerFutureProspectTests(TestCase):
 
     def test_resuming_adds_a_second_applied_checkpoint(self):
         services.change_status(self.candidate, Candidate.Status.SCREENING_HOLD)
-        self.client.post(reverse('candidate_reopen', args=[self.candidate.pk]))
+        self.client.post(reverse('candidate_reopen', args=[self.candidate.pk]), {'reason': 'Test remarks.'})
         response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
         self.assertEqual(self._labels(response), ['Applied', 'Future Prospect', 'Applied'])
 
     def test_hold_taken_later_and_moved_to_future_still_shows_the_checkpoint(self):
         services.change_status(self.candidate, Candidate.Status.ROUND1)
         services.change_status(self.candidate, Candidate.Status.SCREENING_HOLD)
-        self.client.post(reverse('candidate_move_to_future', args=[self.candidate.pk]))
+        self.client.post(reverse('candidate_move_to_future', args=[self.candidate.pk]), {'reason': 'Test remarks.'})
         response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
         labels = self._labels(response)
         self.assertIn('Future Prospect', labels)
@@ -2428,14 +2428,14 @@ class RejectionEmailPopupTests(TestCase):
             candidate=self.candidate, round_type=Interview.RoundType.ROUND1,
             status=Interview.Status.COMPLETED, result=Interview.Result.PENDING,
             scheduled_date=timezone.now() - timezone.timedelta(days=1))
-        self.client.post(reverse('candidate_send_rejection', args=[self.candidate.pk]), {
+        self.client.post(reverse('candidate_send_rejection', args=[self.candidate.pk]), {'reason': 'Test remarks.', 
             'to_email': 'rose@example.com', 'subject': 'S', 'body': 'B',
         })
         interview.refresh_from_db()
         self.assertEqual(interview.result, Interview.Result.FAIL)
 
     def test_missing_recipient_email_does_not_reject_the_candidate(self):
-        response = self.client.post(reverse('candidate_send_rejection', args=[self.candidate.pk]), {
+        response = self.client.post(reverse('candidate_send_rejection', args=[self.candidate.pk]), {'reason': 'Test remarks.', 
             'to_email': '', 'subject': 'S', 'body': 'B',
         })
         self.assertRedirects(response, reverse('candidate_timeline', args=[self.candidate.pk]))
@@ -2447,7 +2447,7 @@ class RejectionEmailPopupTests(TestCase):
         """The pipeline decision is the part HR can't easily redo - it should
         stick even if the email send itself blows up."""
         with mock.patch('candidates.views.rejection_emails.send_rejection_email', side_effect=ValueError('boom')):
-            response = self.client.post(reverse('candidate_send_rejection', args=[self.candidate.pk]), {
+            response = self.client.post(reverse('candidate_send_rejection', args=[self.candidate.pk]), {'reason': 'Test remarks.', 
                 'to_email': 'rose@example.com', 'subject': 'S', 'body': 'B',
             })
         self.assertRedirects(response, reverse('candidate_timeline', args=[self.candidate.pk]))
@@ -2458,7 +2458,7 @@ class RejectionEmailPopupTests(TestCase):
         with mock.patch('candidates.views.rejection_emails.send_rejection_email'):
             response = self.client.post(
                 reverse('candidate_send_rejection', args=[self.candidate.pk]),
-                {'to_email': 'rose@example.com', 'subject': 'S', 'body': 'B'},
+                {'reason': 'Test remarks.', 'to_email': 'rose@example.com', 'subject': 'S', 'body': 'B'},
                 HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {'ok': True})
@@ -2469,7 +2469,7 @@ class RejectionEmailPopupTests(TestCase):
         self.client.force_login(interviewer)
         get_response = self.client.get(reverse('candidate_rejection_draft', args=[self.candidate.pk]))
         self.assertEqual(get_response.status_code, 403)
-        post_response = self.client.post(reverse('candidate_send_rejection', args=[self.candidate.pk]), {
+        post_response = self.client.post(reverse('candidate_send_rejection', args=[self.candidate.pk]), {'reason': 'Test remarks.', 
             'to_email': 'rose@example.com', 'subject': 'S', 'body': 'B',
         })
         self.assertEqual(post_response.status_code, 403)

@@ -9,6 +9,7 @@
 .repo-title { font-size:1.5rem; font-weight:700; color:var(--text-primary); margin:0; }
 .repo-title a { color:inherit; text-decoration:none; }
 .repo-title a:hover { color:var(--dark-green); }
+.repo-remarks { max-width:280px; white-space:normal; font-size:.85rem; }
 .repo-subtitle { font-size:.8rem; color:var(--text-muted); margin-top:2px; }
 .repo-filters { display:flex; align-items:flex-end; gap:18px; flex-wrap:wrap; }
 .repo-filters .form-label { font-size:.72rem; text-transform:uppercase; letter-spacing:.4px; color:var(--text-muted); font-weight:600; margin-bottom:3px; }
@@ -177,14 +178,36 @@
         </select>
       </div>
       <div>
-        <label class="form-label mb-0 d-block">Score</label>
+        <label class="form-label mb-0 d-block">CV Score</label>
         <select name="score" class="form-select form-select-sm" onchange="this.form.submit()" style="min-width:120px;">
-          <option value="">All scores</option>
+          <option value="">All CV scores</option>
           {% for value, label, lookup in score_bands %}
           <option value="{{ value }}" {% if score == value %}selected{% endif %}>{{ label }}</option>
           {% endfor %}
         </select>
       </div>
+      {% if tab == 'screening_hold' %}
+      <div>
+        <label class="form-label mb-0 d-block">Hold Stage</label>
+        <select name="status" class="form-select form-select-sm" onchange="this.form.submit()" style="min-width:200px;">
+          <option value="">All holds</option>
+          {% for value, label in status_options %}
+          <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      {% if show_interview_cols %}
+      <div>
+        <label class="form-label mb-0 d-block">Interviewer</label>
+        <select name="interviewer" class="form-select form-select-sm" onchange="this.form.submit()" style="min-width:160px;">
+          <option value="">All interviewers</option>
+          {% for value, label in interviewer_options %}
+          <option value="{{ value }}" {% if interviewer_filter == value|stringformat:"s" %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
       <div>
         <label class="form-label mb-0 d-block">Applied</label>
         <div class="repo-date-group">
@@ -233,8 +256,10 @@
             {% if is_hr_admin or is_recruiter or is_hiring_manager %}<th class="no-export" style="width:2rem">
               <input type="checkbox" class="form-check-input" id="selectAll" title="Select all on this page">
             </th>{% endif %}
-            <th>Candidate</th><th>Role</th><th>Score</th><th>Exp.</th><th>Applied</th>
+            <th>Candidate</th><th>Role</th><th>CV Score</th><th>Exp.</th><th>Applied</th>
             {% if tab == 'round1' %}<th>Round 1 Date</th>{% elif tab == 'interview' %}<th>Round 2 Date</th>{% endif %}
+            {% if show_interview_cols %}<th>Interviewer</th><th>Interview Score</th>{% endif %}
+            {% if show_rejection_cols %}<th>Rejected At</th><th>Remarks</th>{% endif %}
             <th>Status</th><th class="text-end no-export">Actions</th>
           </tr>
         </thead>
@@ -271,6 +296,14 @@
             {% if tab == 'round1' or tab == 'interview' %}
             {% if tab == 'round1' %}{% with at=c.round1_at %}{% include 'candidates/_round_date_cell.html' %}{% endwith %}
             {% else %}{% with at=c.round2_at %}{% include 'candidates/_round_date_cell.html' %}{% endwith %}{% endif %}
+            {% endif %}
+            {% if show_interview_cols %}
+            <td>{{ c.iv_interviewer|default:"-" }}</td>
+            <td data-order="{{ c.iv_score|default_if_none:-1 }}">{% if c.iv_score is not None %}<strong>{{ c.iv_score }}</strong>{% else %}<span class="text-muted small">-</span>{% endif %}</td>
+            {% endif %}
+            {% if show_rejection_cols %}
+            <td>{{ c.rejection_stage|default:"-" }}</td>
+            <td class="repo-remarks" title="{{ c.rej_remarks|default:'' }}">{{ c.rej_remarks|default:"-"|truncatechars:80 }}</td>
             {% endif %}
             <td>
               <span class="{{ c.status|badge_class }}">{{ c.status_label }}</span>

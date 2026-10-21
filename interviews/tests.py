@@ -742,7 +742,7 @@ class InterviewDoneCancelTests(TestCase):
 
     def test_cleared_settles_the_interview_as_passed(self):
         self.client.post(reverse('interview_mark_done', args=[self.interview.pk]))
-        self.client.post(reverse('candidate_interview_stage', args=[self.candidate.pk]))
+        self.client.post(reverse('candidate_interview_stage', args=[self.candidate.pk]), {'reason': 'Test remarks.'})
         self.interview.refresh_from_db()
         self.assertEqual(self.interview.result, Interview.Result.PASS_)
         self.candidate.refresh_from_db()
@@ -750,13 +750,13 @@ class InterviewDoneCancelTests(TestCase):
 
     def test_reject_settles_the_interview_as_failed(self):
         self.client.post(reverse('interview_mark_done', args=[self.interview.pk]))
-        self.client.post(reverse('candidate_reject', args=[self.candidate.pk]))
+        self.client.post(reverse('candidate_reject', args=[self.candidate.pk]), {'reason': 'Test remarks.'})
         self.interview.refresh_from_db()
         self.assertEqual(self.interview.result, Interview.Result.FAIL)
 
     def test_hold_leaves_the_interview_pending(self):
         self.client.post(reverse('interview_mark_done', args=[self.interview.pk]))
-        self.client.post(reverse('candidate_screening_hold', args=[self.candidate.pk]))
+        self.client.post(reverse('candidate_screening_hold', args=[self.candidate.pk]), {'reason': 'Test remarks.'})
         self.interview.refresh_from_db()
         self.assertEqual(self.interview.result, Interview.Result.PENDING)
 
@@ -764,7 +764,7 @@ class InterviewDoneCancelTests(TestCase):
         """HR deciding straight off the Hiring block, without ever clicking
         Done/Cancelled on the interview itself, must not leave it dangling
         Scheduled forever (see the interviewer portal's Result Pending tab)."""
-        self.client.post(reverse('candidate_reject', args=[self.candidate.pk]))
+        self.client.post(reverse('candidate_reject', args=[self.candidate.pk]), {'reason': 'Test remarks.'})
         self.interview.refresh_from_db()
         self.assertEqual(self.interview.status, Interview.Status.COMPLETED)
         self.assertEqual(self.interview.result, Interview.Result.FAIL)
