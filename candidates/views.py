@@ -335,7 +335,7 @@ REJECTED_AT_FILTERS = (
     + [('HOLD:' + STATUS.OPEN, 'Future Prospects')]
 )
 # Tabs where the Applied date range isn't offered (or applied).
-NO_APPLIED_FILTER_TABS = (REJECTED_TAB, HOLD_TAB)
+NO_APPLIED_FILTER_TABS = (REJECTED_TAB, HOLD_TAB, 'round1', 'interview')
 
 
 def _user_display_name(user_ref):

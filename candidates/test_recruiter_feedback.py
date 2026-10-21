@@ -360,9 +360,9 @@ class RejectionListTests(_Base):
         self.assertEqual(listed('HOLD:ROUND1'), [held.pk])
         self.assertEqual(listed('HOLD:ROUND1:RESULT'), [])
 
-    def test_no_applied_date_filter_on_rejected_and_hold(self):
+    def test_no_applied_date_filter_on_rejected_hold_and_rounds(self):
         services.change_status(self.candidate, S.REJECTED, remarks='x')
-        for tab in ('rejected', 'screening_hold'):
+        for tab in ('rejected', 'screening_hold', 'round1', 'interview'):
             with self.subTest(tab):
                 self.assertNotContains(self._tab(tab), 'name="date_from"')
         self.assertContains(self._tab('open'), 'name="date_from"')
