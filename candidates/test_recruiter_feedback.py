@@ -151,13 +151,60 @@ class HoldKindTests(_Base):
 class InterviewColumnsTests(_Base):
     """Point 2 - Interviewer / Interview Score on Round 1, Round 2 and Hold."""
 
-    def test_round1_tab_shows_interviewer_and_score(self):
+    def test_round1_tab_shows_interviewer_but_no_score_or_applied(self):
         services.change_status(self.candidate, S.ROUND1)
         self._interview(self.candidate, status=Interview.Status.COMPLETED, score='8.5')
         response = self._tab('round1')
-        self.assertContains(response, '<th>Interviewer</th><th>Interview Score</th>')
+        self.assertContains(response, '<th>Interviewer</th>')
         self.assertContains(response, 'Asha Menon')
+        self.assertNotContains(response, '<th>Interview Score</th>')
+        self.assertNotContains(response, '<th>Applied</th>')
+
+    def test_hold_tab_keeps_score_and_applied(self):
+        services.change_status(self.candidate, S.ROUND1)
+        self._interview(self.candidate, status=Interview.Status.COMPLETED, score='8.5')
+        services.change_status(self.candidate, S.SCREENING_HOLD)
+        response = self._tab('screening_hold')
+        self.assertContains(response, '<th>Interview Score</th>')
         self.assertContains(response, '<strong>8.5</strong>')
+        self.assertContains(response, '<th>Applied</th>')
+
+    def test_round2_tab_shows_previous_round_remarks(self):
+        services.change_status(self.candidate, S.ROUND1)
+        self._interview(self.candidate, status=Interview.Status.COMPLETED, score='9')
+        Interview.objects.update(feedback='Strong on SQL.')
+        services.change_status(self.candidate, S.INTERVIEW, remarks='Round 1 interview passed.')
+        other = self._candidate('Other', 'other@example.com', S.ROUND1)
+        services.change_status(other, S.INTERVIEW, remarks='Cleared without an interview.')
+        response = self._tab('interview')
+        self.assertContains(response, '<th>Previous Round Remarks</th>')
+        self.assertNotContains(response, '<th>Applied</th>')
+        rows = {c.pk: c.previous_round_remarks for c in response.context['candidates']}
+        self.assertEqual(rows[self.candidate.pk], 'Round 1 interview passed. Strong on SQL.')
+        self.assertEqual(rows[other.pk], 'Cleared without an interview.')
+
+    def test_round_card_shows_interviewer_score_and_feedback(self):
+        # Decided before Mark Result copied feedback into the remark - the
+        # card still shows it, read from the interview itself.
+        services.change_status(self.candidate, S.ROUND1)
+        interview = self._interview(self.candidate, status=Interview.Status.COMPLETED, score='10')
+        interview.result, interview.feedback = Interview.Result.PASS_, 'Okay'
+        interview.save()
+        services.change_status(self.candidate, S.INTERVIEW, remarks='Round 1 interview passed.')
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertContains(response, 'Interviewer: <strong>Asha Menon</strong>')
+        self.assertContains(response, 'Interview Score: <strong>10.0</strong>')
+        self.assertContains(response, '<span class="text-muted">Feedback:</span> Okay')
+
+    def test_round_card_does_not_repeat_feedback_already_in_the_remark(self):
+        services.change_status(self.candidate, S.ROUND1)
+        interview = self._interview(self.candidate)
+        self.client.post(reverse('interview_result', args=[interview.pk]), {
+            'status': Interview.Status.COMPLETED, 'result': Interview.Result.PASS_, 'score': '8',
+            'feedback': 'Clear communicator.'})
+        response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+        self.assertContains(response, 'Round 1 interview passed. Clear communicator.')
+        self.assertNotContains(response, '<span class="text-muted">Feedback:</span>')
 
     def test_round2_tab_shows_the_round2_interview_not_round1(self):
         services.change_status(self.candidate, S.INTERVIEW)
@@ -293,6 +340,35 @@ class RejectionListTests(_Base):
         record = dict(zip(rows[0], rows[1]))
         self.assertEqual(record['Rejected At'], 'Tele Screening')
         self.assertEqual(record['Rejection Remarks'], 'Not interested.')
+
+    def test_rejected_at_filter(self):
+        services.change_status(self.candidate, S.ROUND1)
+        services.change_status(self.candidate, S.REJECTED, remarks='x')
+        tele = self._candidate('Tele', 'tele@example.com', S.SHORTLISTED)
+        services.change_status(tele, S.REJECTED, remarks='x')
+        held = self._candidate('Held', 'held@example.com', S.ROUND1)
+        services.change_status(held, S.SCREENING_HOLD)
+        services.change_status(held, S.REJECTED, remarks='x')
+
+        response = self._tab('rejected')
+        self.assertContains(response, 'Rejected At</label>')
+        self.assertContains(response, '<option value="HOLD:ROUND1:INTERVIEW"')
+        listed = lambda value: [c.pk for c in self._tab('rejected', rejected_at=value).context['candidates']]
+        self.assertEqual(listed('ROUND1'), [self.candidate.pk])
+        self.assertEqual(listed('SHORTLISTED'), [tele.pk])
+        self.assertEqual(listed('HOLD:ROUND1:INTERVIEW'), [held.pk])
+        self.assertEqual(listed('HOLD:ROUND1'), [held.pk])
+        self.assertEqual(listed('HOLD:ROUND1:RESULT'), [])
+
+    def test_no_applied_date_filter_on_rejected_and_hold(self):
+        services.change_status(self.candidate, S.REJECTED, remarks='x')
+        for tab in ('rejected', 'screening_hold'):
+            with self.subTest(tab):
+                self.assertNotContains(self._tab(tab), 'name="date_from"')
+        self.assertContains(self._tab('open'), 'name="date_from"')
+        # A date carried over from another tab doesn't silently filter it.
+        response = self._tab('rejected', date_from='2099-01-01')
+        self.assertEqual([c.pk for c in response.context['candidates']], [self.candidate.pk])
 
     def test_no_history_shows_a_dash(self):
         Candidate.objects.create(full_name='Legacy', email='legacy@example.com', status=S.REJECTED)

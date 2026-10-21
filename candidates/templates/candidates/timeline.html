@@ -448,6 +448,15 @@ html { scroll-behavior: smooth; }
         <div class="pd-meta text-muted mt-2">{{ stage.decision.who|default:"Unknown" }} &middot; {{ stage.decision.when|date:"d M Y H:i" }}</div>
         {% if stage.decision.remarks %}<div class="pd-body mt-1">{{ stage.decision.remarks }}</div>{% endif %}
         {% endif %}
+        {% if stage.decided_interview %}
+        {% with iv=stage.decided_interview %}
+        <div class="pd-meta text-muted mt-2">
+          Interviewer: <strong>{% if iv.interviewer %}{{ iv.interviewer.get_full_name|default:iv.interviewer.username }}{% else %}-{% endif %}</strong>
+          &middot; Interview Score: <strong>{% if iv.score is not None %}{{ iv.score }}{% else %}-{% endif %}</strong>
+        </div>
+        {% if stage.interview_feedback %}<div class="pd-body mt-1"><span class="text-muted">Feedback:</span> {{ stage.interview_feedback }}</div>{% endif %}
+        {% endwith %}
+        {% endif %}
 
       {% else %}
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-1">

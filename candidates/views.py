@@ -317,6 +317,7 @@ HOLD_STAGE_FILTERS = [(f'{stage}:{kind}' if kind else stage, hold_label(stage, k
 
 # Tabs showing the Interviewer / Interview Score columns and Interviewer filter.
 INTERVIEW_TABS = ('round1', 'interview', HOLD_TAB)
+ROUND_TABS = ('round1', 'interview')
 REJECTED_TAB = 'rejected'
 
 # What the Rejected tab calls the stage someone was rejected at - the Hiring
@@ -326,6 +327,15 @@ REJECTION_STAGE_NAMES = {
     STATUS.OPEN: 'CV Screening', STATUS.SHORTLISTED: 'Tele Screening', STATUS.ROUND1: 'Round 1',
     STATUS.INTERVIEW: 'Round 2', STATUS.FINAL_SELECTION: 'Final Decision',
 }
+
+
+REJECTED_AT_FILTERS = (
+    [(status, name) for status, name in REJECTION_STAGE_NAMES.items()]
+    + [('HOLD:' + value, label) for value, label in HOLD_STAGE_FILTERS]
+    + [('HOLD:' + STATUS.OPEN, 'Future Prospects')]
+)
+# Tabs where the Applied date range isn't offered (or applied).
+NO_APPLIED_FILTER_TABS = (REJECTED_TAB, HOLD_TAB)
 
 
 def _user_display_name(user_ref):
@@ -386,6 +396,31 @@ def _with_rejection_info(qs):
         rej_hold_from=Subquery(held.values('old_status')[:1]),
         rej_hold_kind=Subquery(held.values('hold_kind')[:1]),
     )
+
+
+def _with_previous_round_remarks(qs):
+    """Round 2 list: annotate what was said when Round 1 was decided - the
+    remark on the (latest, not undone) Round 1 -> Round 2 move, and the Round
+    1 interview's own feedback. See previous_round_remarks()."""
+    cleared = (CandidateStatusHistory.objects
+               .filter(candidate=OuterRef('pk'), old_status=STATUS.ROUND1, new_status=STATUS.INTERVIEW,
+                       is_undone=False)
+               .order_by('-changed_at', '-id'))
+    r1_interview = (Interview.objects
+                    .filter(candidate=OuterRef('pk'), round_type__in=ROUND1_TYPES, status=Interview.Status.COMPLETED)
+                    .order_by('-pk'))
+    return qs.annotate(r1_remarks=Subquery(cleared.values('remarks')[:1]),
+                       r1_feedback=Subquery(r1_interview.values('feedback')[:1]))
+
+
+def previous_round_remarks(candidate):
+    """The Round 1 decision remark, plus the interviewer's feedback when the
+    remark doesn't already include it; '' when neither was recorded."""
+    remarks = (getattr(candidate, 'r1_remarks', None) or '').strip()
+    feedback = (getattr(candidate, 'r1_feedback', None) or '').strip()
+    if feedback and feedback not in remarks:
+        return f'{remarks} {feedback}'.strip()
+    return remarks
 
 
 def rejection_stage(candidate):
@@ -555,7 +590,7 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
         from .flows import flow_filter
         return flow_filter(qs, flow)
 
-    def _filtered_queryset(self):
+    def _filtered_queryset(self, applied_dates=True):
         """Candidates matching every filter that applies across tabs (vacancy,
         open-vacancies-only, source, applied date range, search) but not the
         tab/status itself. Shared by get_queryset() and the tab-pill counts,
@@ -577,10 +612,10 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
         if score_band:
             qs = qs.filter(**score_band)
 
-        date_from = self.request.GET.get('date_from')
+        date_from = self.request.GET.get('date_from') if applied_dates else None
         if date_from:
             qs = qs.filter(created_at__date__gte=date_from)
-        date_to = self.request.GET.get('date_to')
+        date_to = self.request.GET.get('date_to') if applied_dates else None
         if date_to:
             qs = qs.filter(created_at__date__lte=date_to)
 
@@ -619,7 +654,10 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
         called = CommunicationLog.objects.filter(
             candidate=OuterRef('pk'), channel=CommunicationLog.Channel.PHONE,
             outcome__in=[CommunicationLog.Outcome.UNABLE, CommunicationLog.Outcome.CALLBACK])
-        qs = (self._filtered_queryset().select_related('job')
+        # Rejected/Hold don't offer the Applied range, so a date carried over
+        # from another tab mustn't silently filter them either.
+        applied_dates = self.request.GET.get('flow') or self.get_tab() not in NO_APPLIED_FILTER_TABS
+        qs = (self._filtered_queryset(applied_dates=bool(applied_dates)).select_related('job')
               .annotate(last_action_at=Subquery(last_action),
                         interview_at=Subquery(next_interview),
                         round1_at=round_date(ROUND1_TYPES),
@@ -662,8 +700,18 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
             interviewer = self.request.GET.get('interviewer')
             if interviewer:
                 qs = qs.filter(iv_interviewer_id=interviewer)
+            if self.get_tab() == 'interview':
+                qs = _with_previous_round_remarks(qs)
         elif self.get_tab() == REJECTED_TAB and not flow:
             qs = _with_rejection_info(qs)
+            rejected_at = self.request.GET.get('rejected_at', '')
+            if rejected_at.startswith('HOLD:'):
+                stage, _, kind = rejected_at[len('HOLD:'):].partition(':')
+                qs = qs.filter(rej_from=STATUS.SCREENING_HOLD, rej_hold_from=stage)
+                if kind:
+                    qs = qs.filter(rej_hold_kind=kind)
+            elif rejected_at:
+                qs = qs.filter(rej_from=rejected_at)
 
         # Tab-specific switches: hide reapplicants (Open list) / hide already-called (Shortlisted)
         if self.request.GET.get('hide_reapply'):
@@ -712,6 +760,19 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
         ctx['status_filter'] = self.request.GET.get('status', '')
         ctx['show_interview_cols'] = ctx['tab'] in INTERVIEW_TABS
         ctx['show_rejection_cols'] = ctx['tab'] == REJECTED_TAB
+        ctx['show_applied_filter'] = ctx['tab'] not in NO_APPLIED_FILTER_TABS
+        # Round 1/Round 2 lists are about the interview, not the application -
+        # no Applied column; their Interview Score is shown on the candidate's
+        # own Round card instead (the Hold list keeps both).
+        ctx['show_applied_col'] = ctx['tab'] not in ROUND_TABS
+        ctx['show_interview_score'] = ctx['tab'] == HOLD_TAB
+        ctx['show_previous_round_remarks'] = ctx['tab'] == 'interview' and not ctx['flow']
+        if ctx['show_previous_round_remarks']:
+            for c in ctx['candidates']:
+                c.previous_round_remarks = previous_round_remarks(c)
+        if ctx['show_rejection_cols']:
+            ctx['rejected_at_options'] = REJECTED_AT_FILTERS
+            ctx['rejected_at_filter'] = self.request.GET.get('rejected_at', '')
         if ctx['show_interview_cols']:
             # Anyone who has interviewed, or been allocated to interview, a candidate.
             ids = (set(Interview.objects.exclude(interviewer=None).values_list('interviewer_id', flat=True))
@@ -727,7 +788,7 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
         # (the tab-specific switches are dropped so they reset when you leave their tab;
         # so is the status, which means a different thing on the Hold tab)
         params = self.request.GET.copy()
-        for key in ('tab', 'hide_reapply', 'hide_called', 'status', 'interviewer'):
+        for key in ('tab', 'hide_reapply', 'hide_called', 'status', 'interviewer', 'rejected_at'):
             params.pop(key, None)
         ctx['preserved_qs'] = params.urlencode()
         ctx['querystring'] = _querystring_without_page(self.request)
@@ -912,6 +973,7 @@ class CandidateRepositoryExportView(GroupRequiredMixin, _ExcelExportMixin, View)
                                     if c.round2_at else '')),
         ('Interviewer', lambda c: getattr(c, 'iv_interviewer', None) or ''),
         ('Interview Score', lambda c: getattr(c, 'iv_score', None)),
+        ('Previous Round Remarks', previous_round_remarks),
         ('Rejected At', rejection_stage),
         ('Rejection Remarks', lambda c: getattr(c, 'rej_remarks', None) or ''),
         ('Status', 'status_label'),
@@ -1090,6 +1152,18 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
             done = stage['done_interview']
             stage['attendance_already_logged'] = bool(
                 done and (done.feedback or '').startswith('Recommended:'))
+            # A finished round's card shows who interviewed, the score and
+            # their feedback - read from the interview itself, so it's there
+            # however the round was decided (Mark Result or the stage card).
+            decided = max((i for i in relevant if i.status == Interview.Status.COMPLETED),
+                          key=lambda i: i.pk, default=None)
+            stage['decided_interview'] = decided if stage['is_done'] else None
+            feedback = ((decided.feedback or '').strip() if decided else '')
+            remarks = (stage['decision'] or {}).get('remarks') or ''
+            # Skip it when the decision remark already carries it (Mark Result
+            # copies the feedback into the remark, and HR's stage-card box is
+            # pre-filled with it).
+            stage['interview_feedback'] = feedback if feedback and feedback not in remarks else ''
         ctx['hiring_stages'] = hiring_stages
         ctx['active_stage_index'] = active_stage_index
 

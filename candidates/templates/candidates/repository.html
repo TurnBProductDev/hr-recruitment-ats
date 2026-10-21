@@ -208,6 +208,18 @@
         </select>
       </div>
       {% endif %}
+      {% if show_rejection_cols %}
+      <div>
+        <label class="form-label mb-0 d-block">Rejected At</label>
+        <select name="rejected_at" class="form-select form-select-sm" onchange="this.form.submit()" style="min-width:200px;">
+          <option value="">All stages</option>
+          {% for value, label in rejected_at_options %}
+          <option value="{{ value }}" {% if rejected_at_filter == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      {% if show_applied_filter %}
       <div>
         <label class="form-label mb-0 d-block">Applied</label>
         <div class="repo-date-group">
@@ -216,6 +228,7 @@
           <input type="date" name="date_to" value="{{ request.GET.date_to|default:'' }}" class="form-control form-control-sm" title="Applied to">
         </div>
       </div>
+      {% endif %}
       <button type="submit" class="btn btn-sm btn-outline-app"><i class="bi bi-search"></i> Search</button>
       <a href="{% url 'candidate_repository_export' %}?{{ querystring }}" class="btn btn-sm btn-outline-app repo-export-slot">
         <i class="bi bi-file-earmark-excel"></i> Export to Excel
@@ -256,9 +269,11 @@
             {% if is_hr_admin or is_recruiter or is_hiring_manager %}<th class="no-export" style="width:2rem">
               <input type="checkbox" class="form-check-input" id="selectAll" title="Select all on this page">
             </th>{% endif %}
-            <th>Candidate</th><th>Role</th><th>CV Score</th><th>Exp.</th><th>Applied</th>
+            <th>Candidate</th><th>Role</th><th>CV Score</th><th>Exp.</th>{% if show_applied_col %}<th>Applied</th>{% endif %}
             {% if tab == 'round1' %}<th>Round 1 Date</th>{% elif tab == 'interview' %}<th>Round 2 Date</th>{% endif %}
-            {% if show_interview_cols %}<th>Interviewer</th><th>Interview Score</th>{% endif %}
+            {% if show_interview_cols %}<th>Interviewer</th>{% endif %}
+            {% if show_interview_score %}<th>Interview Score</th>{% endif %}
+            {% if show_previous_round_remarks %}<th>Previous Round Remarks</th>{% endif %}
             {% if show_rejection_cols %}<th>Rejected At</th><th>Remarks</th>{% endif %}
             <th>Status</th><th class="text-end no-export">Actions</th>
           </tr>
@@ -289,17 +304,24 @@
               {% else %}<span class="text-muted small">-</span>{% endif %}
             </td>
             <td data-order="{{ c.total_experience_years|default_if_none:-1 }}">{{ c.total_experience_years|default:"-" }}</td>
+            {% if show_applied_col %}
             <td data-order="{{ c.created_at|date:'U' }}">
               {{ c.created_at|date:"d M Y" }}
               <div class="repo-meta">{{ c.created_at|timesince }} ago</div>
             </td>
+            {% endif %}
             {% if tab == 'round1' or tab == 'interview' %}
             {% if tab == 'round1' %}{% with at=c.round1_at %}{% include 'candidates/_round_date_cell.html' %}{% endwith %}
             {% else %}{% with at=c.round2_at %}{% include 'candidates/_round_date_cell.html' %}{% endwith %}{% endif %}
             {% endif %}
             {% if show_interview_cols %}
             <td>{{ c.iv_interviewer|default:"-" }}</td>
+            {% endif %}
+            {% if show_interview_score %}
             <td data-order="{{ c.iv_score|default_if_none:-1 }}">{% if c.iv_score is not None %}<strong>{{ c.iv_score }}</strong>{% else %}<span class="text-muted small">-</span>{% endif %}</td>
+            {% endif %}
+            {% if show_previous_round_remarks %}
+            <td class="repo-remarks" title="{{ c.previous_round_remarks }}">{{ c.previous_round_remarks|default:"-"|truncatechars:80 }}</td>
             {% endif %}
             {% if show_rejection_cols %}
             <td>{{ c.rejection_stage|default:"-" }}</td>
