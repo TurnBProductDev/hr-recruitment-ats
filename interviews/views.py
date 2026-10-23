@@ -218,7 +218,7 @@ class InterviewAllocateView(GroupRequiredMixin, CreateView):
         response = super().form_valid(form)
         notifications.notify(
             self.object.interviewer, title=f'New interview to schedule - {self.candidate.full_name}',
-            message=f'Propose 2-3 one-hour slots for {self.candidate.full_name} '
+            message=f'Propose 2-3 thirty-minute slots for {self.candidate.full_name} '
                     f'({self.object.get_round_type_display()}).',
             url=reverse('interviewer_propose_slots', args=[self.object.pk]))
         try:
@@ -347,7 +347,7 @@ class InterviewRequestRescheduleView(GroupRequiredMixin, UpdateView):
         interviewer_name = request_obj.interviewer.get_full_name() or request_obj.interviewer.get_username()
         notifications.notify(
             request_obj.interviewer, title=f'New interview to schedule - {request_obj.candidate.full_name}',
-            message=f'Propose 2-3 one-hour slots for {request_obj.candidate.full_name} '
+            message=f'Propose 2-3 thirty-minute slots for {request_obj.candidate.full_name} '
                     f'({request_obj.get_round_type_display()}).',
             url=reverse('interviewer_propose_slots', args=[request_obj.pk]))
         try:

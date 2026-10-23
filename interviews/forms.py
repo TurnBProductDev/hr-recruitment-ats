@@ -251,7 +251,7 @@ class SplitDateTimeSlotWidget(forms.SplitDateTimeWidget):
 
 
 class InterviewSlotProposalForm(BootstrapFormMixin, forms.Form):
-    """Step 2: the interviewer proposes 2-3 one-hour slots for an
+    """Step 2: the interviewer proposes 2-3 thirty-minute slots for an
     InterviewRequest. Not a ModelForm - it fans out into several InterviewSlot
     rows rather than editing one model instance."""
     # A separate date input + time input (rather than one combined

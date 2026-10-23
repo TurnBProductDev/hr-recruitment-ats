@@ -164,7 +164,7 @@ class InterviewerCandidateView(GroupRequiredMixin, DetailView):
 
 class InterviewProposeSlotsView(GroupRequiredMixin, View):
     """Step 2 of the interviewer-proposes-slots flow: the interviewer offers
-    2-3 one-hour times for a candidate HR allocated to them. Scoped to their
+    2-3 thirty-minute times for a candidate HR allocated to them. Scoped to their
     own requests only (an Admin using the portal can see every request via
     InterviewerHomeView.next_prospects, but proposing slots on someone else's
     behalf isn't offered here)."""

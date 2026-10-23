@@ -19,7 +19,7 @@ _NEW_REQUEST_SUBJECT = 'New interview to schedule - {candidate_name} ({round_typ
 _NEW_REQUEST_BODY = (
     'Hello {interviewer_name},\n\n'
     'You have been assigned to interview {candidate_name} for {role} ({round_type}).\n\n'
-    'Please sign in to the Interviewer portal and propose 2-3 one-hour slots you are '
+    'Please sign in to the Interviewer portal and propose 2-3 thirty-minute slots you are '
     'available, so HR can pick one and schedule the interview.\n\n'
     '{login_url_line}'
     'Regards,\n'
@@ -55,7 +55,7 @@ _NEW_SLOTS_NEEDED_SUBJECT = 'New slots needed - {candidate_name} ({round_type})'
 _NEW_SLOTS_NEEDED_BODY = (
     'Hello {interviewer_name},\n\n'
     'The slots you proposed for {candidate_name} ({round_type}) '
-    "don't work for HR. Please propose a fresh set of 2-3 one-hour slots.{note_line}\n\n"
+    "don't work for HR. Please propose a fresh set of 2-3 thirty-minute slots.{note_line}\n\n"
     '{login_url_line}'
     'Regards,\n'
     'TurnB ATS'
@@ -92,7 +92,7 @@ def _role_name(candidate):
 
 def notify_interviewer_new_request(interview_request, login_url=''):
     """Sent to the interviewer right after HR allocates them to a
-    candidate - asks them to propose 2-3 one-hour slots."""
+    candidate - asks them to propose 2-3 thirty-minute slots."""
     interviewer = interview_request.interviewer
     if not interviewer.email:
         return

@@ -28,6 +28,12 @@ class EmailTemplateSeedTests(TestCase):
             'hr_interview_result_recorded',
         })
 
+    def test_propose_slot_emails_ask_for_thirty_minute_slots(self):
+        for key in ('interviewer_new_request', 'interviewer_new_slots_needed'):
+            body = EmailTemplate.objects.get(key=key).body
+            self.assertIn('thirty-minute slots', body)
+            self.assertNotIn('one-hour', body)
+
     def test_rejection_seed_matches_todays_wording(self):
         row = EmailTemplate.objects.get(key='rejection')
         self.assertEqual(row.subject, 'Update on your application to TurnB Business Services')

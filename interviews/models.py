@@ -177,7 +177,7 @@ class InterviewReschedule(models.Model):
 class InterviewRequest(models.Model):
     """The interviewer-proposes-slots scheduling flow: HR allocates an
     interviewer to a candidate (no date yet), the interviewer proposes 2-3
-    one-hour slots, the candidate picks one via an emailed link
+    thirty-minute slots, the candidate picks one via an emailed link
     (candidate_token), and HR approves it (or asks for a reschedule) - at
     which point a real Interview row (above) is created with that date. This
     row tracks that in-between state; once approved it just sits there as
@@ -253,7 +253,7 @@ class InterviewRequest(models.Model):
 
 
 class InterviewSlot(models.Model):
-    """One of the 2-3 one-hour times an interviewer proposed for an
+    """One of the 2-3 thirty-minute times an interviewer proposed for an
     InterviewRequest. The candidate picking one (see the public
     candidate_slot_pick view) records it as the request's
     candidate_selected_slot; HR approving that turns it into the actual
