@@ -7,9 +7,9 @@ on:
   workflow_dispatch: {}   # also lets you run it manually from the Actions tab
 
 env:
-  REGISTRY: turnbhrmsacr.azurecr.io
+  REGISTRY: turnbhrmsacr2.azurecr.io
   IMAGE: ats
-  WEBAPP: turnb-hrms-ats
+  WEBAPP: turnb-ats
 
 jobs:
   build-and-deploy:
