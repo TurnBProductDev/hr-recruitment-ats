@@ -26,9 +26,11 @@ duplicates/blacklist, updates the email registry, and writes the initial
    - Logic App → the intake workflow → add/replace an action → search **SQL Server**
      → **Execute stored procedure (V2)** → *Create new connection*:
      - Authentication: **SQL Server Authentication**
-     - Server: `hr-turnb-sql01.database.windows.net`
+     - Server: `hr-turnb-sql02.database.windows.net` (turnb.com tenant, since
+       2026-10-23 - was `hr-turnb-sql01` in the old turnretail tenant)
      - Database: `hr_recruitment`
-     - Username: `CloudSAaf7a4627`   Password: *(the DB password)*
+     - Username: `hrmsadmin`   Password: *(the DB password - same as the web
+       app's `DB_PASSWORD` setting)*
    - Ensure the SQL server firewall allows Azure services (Networking →
      "Allow Azure services and resources to access this server" = Yes).
 
@@ -64,7 +66,7 @@ old Excel actions.)
       "connection": { "name": "@parameters('$connections')['sql']['connectionId']" }
     },
     "method": "post",
-    "path": "/v2/datasets/@{encodeURIComponent(encodeURIComponent('hr-turnb-sql01.database.windows.net'))},@{encodeURIComponent(encodeURIComponent('hr_recruitment'))}/procedures/@{encodeURIComponent(encodeURIComponent('[dbo].[sp_intake_add_candidate]'))}",
+    "path": "/v2/datasets/@{encodeURIComponent(encodeURIComponent('default'))},@{encodeURIComponent(encodeURIComponent('default'))}/procedures/@{encodeURIComponent(encodeURIComponent('[dbo].[sp_intake_add_candidate]'))}",
     "body": {
       "full_name": "@body('Parse_JSON')?['Name']",
       "email": "@body('Parse_JSON')?['Email']",
@@ -87,12 +89,15 @@ Add the connection to the workflow's `$connections` parameters, e.g.:
 
 ```json
 "sql": {
-  "id": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/providers/Microsoft.Web/locations/centralindia/managedApis/sql",
-  "connectionId": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/resourceGroups/HRMS/providers/Microsoft.Web/connections/sql",
+  "id": "/subscriptions/32ea51d0-6a7d-4a16-ab91-4f5f80f708c7/providers/Microsoft.Web/locations/centralindia/managedApis/sql",
+  "connectionId": "/subscriptions/32ea51d0-6a7d-4a16-ab91-4f5f80f708c7/resourceGroups/HRMS/providers/Microsoft.Web/connections/sql",
   "connectionName": "sql"
 }
 ```
-(The exact `connectionId` is filled in for you when you create the connection in the designer.)
+(The exact `connectionId` is filled in for you when you create the connection in the designer.
+The `default`,`default` dataset in the path above means "the server and database
+stored on the connection" - which is what the live workflow uses, so moving the
+database only means editing the `sql` connection, not the workflow.)
 
 ## Applied position (2026-08-10)
 

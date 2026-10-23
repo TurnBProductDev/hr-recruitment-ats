@@ -114,10 +114,10 @@
     "$connections": {
       "value": {
         "office365": {
-          "connectionId": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/resourceGroups/HRMS/providers/Microsoft.Web/connections/office365-3",
-          "connectionName": "office365-3",
+          "connectionId": "/subscriptions/32ea51d0-6a7d-4a16-ab91-4f5f80f708c7/resourceGroups/HRMS/providers/Microsoft.Web/connections/office365",
+          "connectionName": "office365",
           "connectionProperties": {},
-          "id": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/providers/Microsoft.Web/locations/centralindia/managedApis/office365"
+          "id": "/subscriptions/32ea51d0-6a7d-4a16-ab91-4f5f80f708c7/providers/Microsoft.Web/locations/centralindia/managedApis/office365"
         }
       }
     }

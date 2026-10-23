@@ -211,15 +211,15 @@
             "type": "Object",
             "value": {
                 "sharepointonline-1": {
-                    "id": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/providers/Microsoft.Web/locations/centralindia/managedApis/sharepointonline",
-                    "connectionId": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/resourceGroups/HRMS/providers/Microsoft.Web/connections/sharepointonline-2",
-                    "connectionName": "sharepointonline-2",
+                    "id": "/subscriptions/32ea51d0-6a7d-4a16-ab91-4f5f80f708c7/providers/Microsoft.Web/locations/centralindia/managedApis/sharepointonline",
+                    "connectionId": "/subscriptions/32ea51d0-6a7d-4a16-ab91-4f5f80f708c7/resourceGroups/HRMS/providers/Microsoft.Web/connections/sharepointonline",
+                    "connectionName": "sharepointonline",
                     "connectionProperties": {}
                 },
                 "sharepointonline": {
-                    "id": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/providers/Microsoft.Web/locations/centralindia/managedApis/sharepointonline",
-                    "connectionId": "/subscriptions/0300da4d-3a63-4241-a129-42b4f8b0c5cc/resourceGroups/HRMS/providers/Microsoft.Web/connections/sharepointonline-2",
-                    "connectionName": "sharepointonline-2",
+                    "id": "/subscriptions/32ea51d0-6a7d-4a16-ab91-4f5f80f708c7/providers/Microsoft.Web/locations/centralindia/managedApis/sharepointonline",
+                    "connectionId": "/subscriptions/32ea51d0-6a7d-4a16-ab91-4f5f80f708c7/resourceGroups/HRMS/providers/Microsoft.Web/connections/sharepointonline",
+                    "connectionName": "sharepointonline",
                     "connectionProperties": {}
                 }
             }

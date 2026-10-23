@@ -2,14 +2,36 @@
 
 Workflows in the **HRMS** resource group, tracked here so the config live in
 Azure can be diffed against git instead of trusted from memory. Most feed
-candidates into the ATS; one (`Send-Email-Notifier`) is the opposite
-direction - every outbound email the app sends.
+candidates into the ATS; `Send-Email-Notifier` and `Interview-Calendar` go the
+opposite direction - every outbound email, and every interview put on an
+interviewer's calendar.
+
+All of them live in the **turnb.com** tenant, subscription **HR and Admin Team**
+(`32ea51d0-6a7d-4a16-ab91-4f5f80f708c7`), resource group `HRMS`, Central India -
+moved there from the old turnretail tenant on 2026-10-23 (that tenant's HRMS
+group, with the legacy workflows below, was deleted the same day). Their
+API connections, all in the same group:
+
+| Connection | Used by | Signs in as |
+|---|---|---|
+| `office365` | `CV-Automation-Flow-Final`, `Send-Email-Notifier`, `Interview-Calendar` | careers@turnb.com |
+| `sharepointonline` | `CV-Automation-Flow-Final`, `cv-parse-single` | careers@turnb.com |
+| `excelonlinebusiness` | `CV-Automation-Flow-Final` (agency source lookup) | careers@turnb.com |
+| `sql` | `CV-Automation-Flow-Final` | SQL login on `hr-turnb-sql02` |
+| `azureblob` | `CV-Automation-Flow-Final` | key of storage account `turnbhrmscvs` |
+| `conversionservice` | `CV-Automation-Flow-Final` | - |
+
+If a careers@turnb.com password change breaks the three Microsoft 365
+connections: Portal → the connection → **Edit API connection** → **Authorize**
+→ sign in as careers@turnb.com → **Save** (the Save is easy to miss).
 
 | Workflow (Azure name) | File | Trigger | Writes candidates via | Status |
 |---|---|---|---|---|
 | `CV-Automation-Flow-Final` | [`cv_automation_flow_final.json`](cv_automation_flow_final.json) | New email in the careers inbox | `sp_intake_add_candidate`, extended params | **Live** (cut over 2026-09-10) |
 | `cv-parse-single` | [`cv_parse_single.json`](cv_parse_single.json) | HTTP POST from the ATS **Bulk Upload CV** screen | Django writes the row itself | **Live** (SharePoint filing only - see below) |
-| `CV-Automation-Flow` | [`mailbox_intake.json`](mailbox_intake.json) | New email in the careers inbox (same mailbox) | `sp_intake_add_candidate` (stored proc) | **Disabled** - retired in favour of `CV-Automation-Flow-Final`; kept here/in Azure for reference and rollback, not deleted |
+| `Send-Email-Notifier` | [`send_email_notifier.json`](send_email_notifier.json) | HTTP POST from the ATS | - | **Live** |
+| `Interview-Calendar` | [`interview_calendar.json`](interview_calendar.json) | HTTP POST from the ATS | - | **Live** (2026-10-23) |
+| `CV-Automation-Flow` | [`mailbox_intake.json`](mailbox_intake.json) | New email in the careers inbox (same mailbox) | `sp_intake_add_candidate` (stored proc) | **Gone** - retired in favour of `CV-Automation-Flow-Final`, not migrated to turnb.com; this file is the only copy |
 
 Both intake paths now read CVs the same way - Form Recognizer has no callers
 left in either one.
@@ -224,7 +246,8 @@ failed upload - CV reading and CV filing are independent now.
    time. Open each action (`AnalyzeCV`, `Extract_completion`,
    `Summary_completion`, `Create_file_1`, `Create_sharing_link…`) and pick the
    existing connection from the dropdown — they are the same ones the intake
-   flow uses (`formrecognizer`, `azureopenai`, `sharepointonline-2`). Save again.
+   flow uses (today only `sharepointonline` is still needed - the Form
+   Recognizer/OpenAI actions are gone). Save again.
 5. Open the trigger **When a HTTP request is received** and copy the
    **HTTP POST URL**. It contains a SAS signature — treat it as a password.
 

@@ -60,9 +60,9 @@ Repository status actions allow HR Admin/Recruiter/Hiring Manager; interview res
 
 ## Bulk Upload CV (CV parsing)
 
-Bulk-uploaded CVs are read by the **`cv-parse-single` Azure Logic App** — the same
-Form Recognizer (`MyCVModel`) + Azure OpenAI (`cv-data-agent`) extraction the careers-mailbox
-intake flow uses — so they arrive with name, email, phone, education and an AI summary
+Bulk-uploaded CVs are read by `candidates/cv_extraction.py` (Azure OpenAI, the same reading the
+careers-mailbox intake flow uses), and the **`cv-parse-single` Azure Logic App** files each one in
+SharePoint — so they arrive with name, email, phone, education, experience and an AI summary
 instead of a name guessed from the filename.
 
 ```
@@ -83,6 +83,13 @@ one-time Azure setup. Without it the app runs normally; bulk uploads just report
 is not configured.
 
 Tests: `DB_ENGINE=sqlite python manage.py test candidates` (never runs against the Azure DB).
+
+## Hosting
+
+Production runs on Azure App Service in the turnb.com tenant at
+https://turnb-ats.azurewebsites.net and deploys on every push to `main`. Where every
+resource lives, the app settings, local setup and diagnostics:
+**[deploy/azure_app_service.md](deploy/azure_app_service.md)**.
 
 ## Switching to PostgreSQL / Azure SQL
 
