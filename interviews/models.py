@@ -70,7 +70,12 @@ class Interview(models.Model):
     )
     scheduled_date = models.DateTimeField()
     mode = models.CharField(max_length=20, choices=Mode.choices, default=Mode.VIDEO)
-    meeting_link = models.URLField(blank=True, null=True)
+    # Teams join URLs routinely run past URLField's default 200 characters.
+    meeting_link = models.URLField(max_length=1000, blank=True, null=True)
+    # The Teams meeting on the interviewer's calendar (organized by
+    # careers@turnb.com - see interviews/calendar_sync.py), so a reschedule
+    # can move it and a cancel can withdraw it. Blank when none was created.
+    calendar_event_id = models.CharField(max_length=512, blank=True, default='')
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.SCHEDULED)
     result = models.CharField(max_length=20, choices=Result.choices, default=Result.PENDING)
     feedback = models.TextField(blank=True, null=True)
@@ -212,6 +217,12 @@ class InterviewRequest(models.Model):
     candidate_selected_slot = models.ForeignKey(
         'InterviewSlot', on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
     candidate_selected_at = models.DateTimeField(null=True, blank=True)
+    # The Teams meeting blocking the interviewer's calendar from the moment
+    # the candidate picks a slot (see interviews/calendar_sync.py) - carried
+    # over to the Interview on HR's approval, withdrawn if the request is
+    # cancelled or sent back for new slots.
+    calendar_event_id = models.CharField(max_length=512, blank=True, default='')
+    calendar_join_url = models.URLField(max_length=1000, blank=True, default='')
 
     class Meta:
         ordering = ['-created_at']

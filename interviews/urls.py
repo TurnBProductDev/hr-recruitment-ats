@@ -16,6 +16,7 @@ urlpatterns = [
     path('hr/interview-requests/<int:pk>/approve/', views.InterviewRequestApproveView.as_view(), name='interview_request_approve'),
     path('hr/interview-requests/<int:pk>/reschedule/', views.InterviewRequestRescheduleView.as_view(), name='interview_request_reschedule'),
     path('hr/interview-requests/<int:pk>/new-slots/', views.InterviewRequestNewSlotsView.as_view(), name='interview_request_new_slots'),
+    path('hr/interview-requests/<int:pk>/cancel/', views.InterviewRequestCancelView.as_view(), name='interview_request_cancel'),
 
     path('interviewer/login/', portal_views.InterviewerLoginView.as_view(), name='interviewer_login'),
     path('interviewer/', portal_views.InterviewerHomeView.as_view(), name='interviewer_home'),

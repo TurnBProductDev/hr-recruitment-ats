@@ -19,6 +19,7 @@ from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import DetailView, ListView, UpdateView
 
+from interviews import calendar_sync
 from interviews.models import Interview, InterviewReschedule, InterviewRequest
 from jobs.models import Job
 
@@ -1817,12 +1818,17 @@ class CandidateRevertLastActionView(GroupRequiredMixin, View):
         # longer holds, so it shouldn't keep sitting open for the interviewer.
         round_types = ROUND_INTERVIEW_TYPES.get(undone)
         if round_types:
-            candidate.interviews.filter(
-                round_type__in=round_types, status__in=Interview.OPEN_STATUSES,
-            ).update(status=Interview.Status.CANCELLED)
-            candidate.interview_requests.filter(
-                round_type__in=round_types, status__in=InterviewRequest.OPEN_STATUSES,
-            ).update(status=InterviewRequest.Status.CANCELLED)
+            open_interviews = candidate.interviews.filter(
+                round_type__in=round_types, status__in=Interview.OPEN_STATUSES)
+            open_requests = candidate.interview_requests.filter(
+                round_type__in=round_types, status__in=InterviewRequest.OPEN_STATUSES)
+            # ...nor keep sitting on the interviewer's calendar.
+            for interview in open_interviews.exclude(calendar_event_id=''):
+                calendar_sync.cancel_interview_event(interview, 'This interview was withdrawn by HR.')
+            for interview_request in open_requests.exclude(calendar_event_id=''):
+                calendar_sync.cancel_request_event(interview_request, 'This interview was withdrawn by HR.')
+            open_interviews.update(status=Interview.Status.CANCELLED)
+            open_requests.update(status=InterviewRequest.Status.CANCELLED)
         candidate.status = prev_status
         candidate.hold_from_status = services.hold_source_from_history(candidate)
         candidate.hold_kind = services.hold_kind_from_history(candidate)
@@ -1840,13 +1846,18 @@ class CandidateRevertLastActionView(GroupRequiredMixin, View):
         # that's about to stop existing.
         req = InterviewRequest.objects.filter(interview=interview).first()
         if req:
+            # The calendar block made at the candidate's pick stays with the
+            # request, which is still waiting on HR to approve that pick.
             req.status = InterviewRequest.Status.AWAITING_HR_APPROVAL
             req.interview = None
             req.save(update_fields=['status', 'interview'])
+        else:
+            calendar_sync.cancel_interview_event(interview, 'This interview was withdrawn by HR.')
         interview.delete()
         messages.success(request, f'Interview schedule undone for {candidate.full_name}.')
 
     def _undo_request_created(self, request, candidate, interview_request):
+        calendar_sync.cancel_request_event(interview_request, 'This interview was withdrawn by HR.')
         interview_request.delete()
         messages.success(request, f'Interviewer allocation undone for {candidate.full_name}.')
 
@@ -1854,6 +1865,9 @@ class CandidateRevertLastActionView(GroupRequiredMixin, View):
         interview.status = Interview.Status.SCHEDULED
         interview.cancelled_at = None
         interview.save(update_fields=['status', 'cancelled_at'])
+        # Cancelling withdrew the meeting; put a fresh one back on the calendar.
+        calendar_sync.sync_interview(interview, request.build_absolute_uri(
+            reverse('interviewer_candidate', args=[candidate.pk])))
         messages.success(request, f'Interview cancellation undone for {candidate.full_name}.')
 
 

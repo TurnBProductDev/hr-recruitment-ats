@@ -183,6 +183,15 @@ BULK_UPLOAD_MAX_FILES = int(os.environ.get("BULK_UPLOAD_MAX_FILES", "25"))
 # above. Unset = interview invites/rejections/interviewer notifications are
 # not sent (see candidates/logic_app_mail.py).
 LOGIC_APP_EMAIL_SENDER_URL = os.environ.get("LOGIC_APP_EMAIL_SENDER_URL", "")
+
+# --- Interviewer calendar -> `Interview-Calendar` Logic App ------------------
+# HTTP POST URL of a Logic App that creates/moves/cancels a Teams meeting on
+# careers@turnb.com's calendar with the interviewer as attendee, through the
+# same authorized Office 365 connection (its "Send an HTTP request" action ->
+# Microsoft Graph /me/events) - no admin-consented Graph app needed. Contains
+# a SAS signature, same handling as the URLs above. Unset = no calendar
+# blocking (see interviews/calendar_sync.py).
+LOGIC_APP_CALENDAR_URL = os.environ.get("LOGIC_APP_CALENDAR_URL", "")
 BULK_UPLOAD_MAX_MB = int(os.environ.get("BULK_UPLOAD_MAX_MB", "10"))
 
 # --- Score Candidates -> Azure OpenAI (direct) ------------------------------

@@ -523,47 +523,66 @@ html { scroll-behavior: smooth; }
                     data-load-url="{% url 'interview_reschedule' stage.open_interview.pk %}" data-modal-title="Reschedule Interview">
               <i class="bi bi-calendar-event"></i> Reschedule
             </button>
-            <form method="post" action="{% url 'interview_cancel' stage.open_interview.pk %}">
+            <form method="post" action="{% url 'interview_cancel' stage.open_interview.pk %}"
+                  onsubmit="return confirm('Mark this interview as cancelled? If it has not happened yet, the interviewer will be told and the calendar invite withdrawn.');">
               {% csrf_token %}
               <button type="submit" class="btn btn-sm btn-outline-danger">Cancelled</button>
             </form>
           </div>
           {% elif stage.interview_request %}
-            {% if stage.interview_request.status == 'AWAITING_SLOTS' %}
-            <div class="alert alert-info py-2 px-3 mb-0 small">
-              <i class="bi bi-hourglass-split"></i> Waiting on
-              {{ stage.interview_request.interviewer.get_full_name|default:stage.interview_request.interviewer.username }}
-              to propose available slots.
+            {% with ir=stage.interview_request %}
+            {% with interviewer_name=ir.interviewer.get_full_name|default:ir.interviewer.username %}
+            {% if ir.status == 'AWAITING_SLOTS' %}
+            <div class="alert alert-info py-2 px-3 mb-2 small">
+              <i class="bi bi-hourglass-split"></i> Waiting on {{ interviewer_name }} to propose available slots.
             </div>
-            {% elif stage.interview_request.status == 'AWAITING_SELECTION' %}
+            {% elif ir.status == 'AWAITING_SELECTION' %}
             <div class="alert alert-info py-2 px-3 mb-2 small">
               <i class="bi bi-hourglass-split"></i>
-              {{ stage.interview_request.slots.all|length }} slot(s) proposed -
-              waiting on {{ candidate.full_name }} to pick a time (link emailed to them, valid 48 hours).
+              {{ interviewer_name }} proposed {{ ir.slots.all|length }} slot{{ ir.slots.all|length|pluralize }} -
+              waiting on {{ candidate.full_name }} to pick one (link emailed to them, valid 48 hours):
+              <ul class="mb-0 mt-1 ps-3">
+                {% for slot in ir.slots.all %}
+                <li><strong>{{ slot.start_datetime|date:"D, d M Y, H:i" }}</strong></li>
+                {% endfor %}
+              </ul>
             </div>
-            <form method="post" action="{% url 'interview_request_new_slots' stage.interview_request.pk %}">
-              {% csrf_token %}
-              <button type="submit" class="btn btn-sm btn-outline-app">Request Different Slots</button>
-            </form>
-            {% elif stage.interview_request.status == 'AWAITING_HR_APPROVAL' %}
+            {% elif ir.status == 'AWAITING_HR_APPROVAL' %}
             <div class="alert alert-info py-2 px-3 mb-2 small">
               <i class="bi bi-calendar-check"></i>
-              {{ candidate.full_name }} selected
-              <strong>{{ stage.interview_request.candidate_selected_slot.start_datetime|date:"d M Y, H:i" }}</strong> -
+              Interview date selected by {{ candidate.full_name }}:
+              <strong>{{ ir.candidate_selected_slot.start_datetime|date:"D, d M Y, H:i" }}</strong> -
               approve to schedule the interview.
+              {% if ir.calendar_event_id %}
+              <div class="mt-1"><i class="bi bi-microsoft-teams"></i> Blocked on {{ interviewer_name }}'s calendar (Teams invite sent).</div>
+              {% endif %}
             </div>
+            {% endif %}
             <div class="d-flex flex-wrap gap-2">
-              <form method="post" action="{% url 'interview_request_approve' stage.interview_request.pk %}">
+              {% if ir.status == 'AWAITING_SELECTION' %}
+              <form method="post" action="{% url 'interview_request_new_slots' ir.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-app">Request Different Slots</button>
+              </form>
+              {% elif ir.status == 'AWAITING_HR_APPROVAL' %}
+              <form method="post" action="{% url 'interview_request_approve' ir.pk %}">
                 {% csrf_token %}
                 <button type="submit" class="btn btn-sm btn-fill-app"><i class="bi bi-check2-circle"></i> Approve &amp; Mail Send</button>
               </form>
               <button type="button" class="btn btn-sm btn-outline-app"
                       data-bs-toggle="modal" data-bs-target="#allocateModal"
-                      data-load-url="{% url 'interview_request_reschedule' stage.interview_request.pk %}" data-modal-title="Reschedule Interview">
+                      data-load-url="{% url 'interview_request_reschedule' ir.pk %}" data-modal-title="Reschedule Interview">
                 Reschedule
               </button>
+              {% endif %}
+              <form method="post" action="{% url 'interview_request_cancel' ir.pk %}"
+                    onsubmit="return confirm('Cancel the {{ ir.get_round_type_display|escapejs }} interview for {{ candidate.full_name|escapejs }}? {{ interviewer_name|escapejs }} will be told{% if ir.calendar_event_id %} and the calendar invite withdrawn{% endif %}.');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-x-circle"></i> Cancel Interview</button>
+              </form>
             </div>
-            {% endif %}
+            {% endwith %}
+            {% endwith %}
           {% else %}
           <button type="button" class="btn btn-sm btn-outline-app"
                   data-bs-toggle="modal" data-bs-target="#allocateModal"

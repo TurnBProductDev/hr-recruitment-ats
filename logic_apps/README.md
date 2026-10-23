@@ -14,6 +14,37 @@ direction - every outbound email the app sends.
 Both intake paths now read CVs the same way - Form Recognizer has no callers
 left in either one.
 
+## `Interview-Calendar` - blocks the interviewer's calendar
+
+[`interview_calendar.json`](interview_calendar.json), HTTP trigger, called only by
+[`interviews/calendar_sync.py`](../interviews/calendar_sync.py) through app setting
+`LOGIC_APP_CALENDAR_URL` (contains a SAS signature - treat it as a password).
+
+It forwards one Microsoft Graph call per request through the **office365**
+connection (signed in as careers@turnb.com), using that connector's
+**Send an HTTP request** action (`/codeless/httprequest`):
+
+| `op` | Graph call | Returns |
+|---|---|---|
+| `create` | `POST /me/events` with the ATS-built event | `{id, join_url}` |
+| `update` | `PATCH /me/events/{event_id}` | `{id, join_url}` |
+| `cancel` | `POST /me/events/{event_id}/cancel` with `{comment}` | `{ok: true}` |
+
+So every interview is a meeting organized by careers@turnb.com with the
+interviewer as attendee - on their calendar immediately (Tentative until they
+accept), a Teams link for video interviews, and Outlook sends the update or
+cancellation when HR reschedules or cancels. No admin-consented Graph app
+registration is needed (that is what `graph_api/README.md` describes, and it
+stays unused). When the ATS calls it:
+
+- candidate picks a slot → `create` (stored on the InterviewRequest)
+- HR approves the pick → the same meeting carries over to the Interview
+- HR reschedules → `update`; HR cancels, asks for new slots, or undoes → `cancel`
+
+Live-tested 2026-10-23 (create → update → cancel). Redeploy with the CLI
+(`az rest --method put` on the workflow with this file's `definition` and
+`parameters`), not Code View.
+
 ## `Send-Email-Notifier` - every outbound email
 
 `candidates/logic_app_mail.py::send_email()` is the one function every email

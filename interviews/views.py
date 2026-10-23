@@ -19,7 +19,7 @@ from candidates.permissions import (
 
 from notifications import services as notifications
 
-from . import graph_client, invites, slot_emails
+from . import calendar_sync, graph_client, invites, slot_emails
 from .forms import InterviewAllocationForm, InterviewForm, InterviewResultForm
 from .models import (
     INTERVIEW_DURATION, Interview, InterviewReschedule, InterviewRequest,
@@ -31,6 +31,31 @@ logger = logging.getLogger(__name__)
 
 def _is_ajax(request):
     return request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
+
+def _portal_url(request, candidate_id):
+    """The interviewer portal's view of this candidate - linked from the
+    calendar meeting, since interviewers don't use the HR profile page."""
+    return request.build_absolute_uri(reverse('interviewer_candidate', args=[candidate_id]))
+
+
+def _tell_interviewer_cancelled(interviewer, candidate, round_label, when=None, note=''):
+    """In-app notification + email to the interviewer whose interview HR just
+    cancelled. Best-effort: a failed email never blocks the cancel."""
+    if interviewer is None:
+        return
+    when_text = f' on {timezone.localtime(when):%d %b %Y, %H:%M}' if when else ''
+    notifications.notify(
+        interviewer, title=f'Interview cancelled - {candidate.full_name}',
+        message=f'HR cancelled the {round_label} interview with {candidate.full_name}{when_text}.'
+                + (f' Note: {note}' if note else ''),
+        url=reverse('interviewer_home'))
+    try:
+        slot_emails.notify_interviewer_cancelled(
+            interviewer=interviewer, candidate=candidate, round_type=round_label, when=when, note=note)
+    except logic_app_mail.EmailSendError as exc:
+        logger.warning('Could not email the cancellation for %s to %s: %s',
+                       candidate.pk, interviewer.get_username(), exc)
 
 
 class InterviewSchedulerListView(GroupRequiredMixin, ListView):
@@ -123,6 +148,10 @@ class InterviewScheduleView(GroupRequiredMixin, CreateView):
             self.interview_request.status = InterviewRequest.Status.SCHEDULED
             self.interview_request.interview = self.object
             self.interview_request.save(update_fields=['status', 'interview'])
+            # HR set the time by hand, so the slot the candidate may have
+            # picked (and blocked) no longer applies.
+            calendar_sync.cancel_request_event(self.interview_request, 'HR scheduled this interview directly.')
+        calendar_sync.sync_interview(self.object, _portal_url(self.request, self.candidate.pk))
         _maybe_create_teams_meeting(self.object)
         if _is_ajax(self.request):
             return _invite_draft_response(self.request, self.object, form.cleaned_data.get('candidate_email'))
@@ -242,6 +271,10 @@ class InterviewRequestApproveView(GroupRequiredMixin, View):
         request_obj.status = InterviewRequest.Status.SCHEDULED
         request_obj.interview = interview
         request_obj.save(update_fields=['status', 'interview'])
+        # The meeting blocked when the candidate picked is reused as-is; only
+        # if that never happened (calendar off/failed then) is one made now.
+        if not calendar_sync.adopt_request_event(interview, request_obj):
+            calendar_sync.sync_interview(interview, _portal_url(request, request_obj.candidate_id))
         _maybe_create_teams_meeting(interview)
         if _is_ajax(request):
             return _invite_draft_response(request, interview, None)
@@ -286,6 +319,7 @@ class InterviewRequestRescheduleView(GroupRequiredMixin, UpdateView):
     def form_valid(self, form):
         super().form_valid(form)
         request_obj = self.object
+        calendar_sync.cancel_request_event(request_obj, 'HR is rescheduling this interview.')
         request_obj.slots.all().delete()
         request_obj.status = InterviewRequest.Status.AWAITING_SLOTS
         request_obj.candidate_token = None
@@ -333,6 +367,7 @@ class InterviewRequestNewSlotsView(GroupRequiredMixin, View):
         request_obj = get_object_or_404(
             InterviewRequest, pk=pk,
             status__in=(InterviewRequest.Status.AWAITING_SELECTION, InterviewRequest.Status.AWAITING_HR_APPROVAL))
+        calendar_sync.cancel_request_event(request_obj, 'HR asked for a different time.')
         request_obj.slots.all().delete()
         request_obj.status = InterviewRequest.Status.AWAITING_SLOTS
         request_obj.candidate_token = None
@@ -353,6 +388,34 @@ class InterviewRequestNewSlotsView(GroupRequiredMixin, View):
             logger.warning('Could not email the new-slots-needed notice for request %s: %s', request_obj.pk, exc)
         messages.success(request, 'Asked the interviewer to propose new slots.')
         return redirect('candidate_timeline', pk=request_obj.candidate_id)
+
+
+class InterviewRequestCancelView(GroupRequiredMixin, View):
+    """Cancels an interview that HR allocated but hasn't scheduled yet - while
+    waiting on the interviewer's slots, the candidate's pick, or HR's own
+    approval. The candidate's pick link stops working, any calendar block is
+    withdrawn, and the interviewer is told. The round's card then offers
+    Allocate Interviewer again, as if nothing had been allocated. (An
+    already-scheduled interview is cancelled by InterviewCancelView.)"""
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
+
+    def post(self, request, pk):
+        request_obj = get_object_or_404(
+            InterviewRequest.objects.select_related('candidate', 'interviewer', 'candidate_selected_slot'),
+            pk=pk, status__in=InterviewRequest.OPEN_STATUSES)
+        candidate = request_obj.candidate
+        slot = request_obj.candidate_selected_slot
+        calendar_sync.cancel_request_event(request_obj, 'This interview was cancelled by HR.')
+        request_obj.status = InterviewRequest.Status.CANCELLED
+        request_obj.candidate_token = None
+        request_obj.save(update_fields=['status', 'candidate_token'])
+        note = (request.POST.get('note') or '').strip()
+        _tell_interviewer_cancelled(
+            request_obj.interviewer, candidate, request_obj.get_round_type_display(),
+            when=slot.start_datetime if slot else None, note=note)
+        messages.success(request, f'{request_obj.get_round_type_display()} interview cancelled for '
+                                  f'{candidate.full_name} - the interviewer has been told.')
+        return redirect('candidate_timeline', pk=candidate.pk)
 
 
 def _maybe_create_teams_meeting(interview):
@@ -436,6 +499,7 @@ class InterviewRescheduleView(GroupRequiredMixin, UpdateView):
                 previous_interviewer_id=self.before['interviewer_id'],
                 new_interviewer_id=self.object.interviewer_id,
                 changed_by=self.request.user)
+            calendar_sync.sync_interview(self.object, _portal_url(self.request, self.object.candidate_id))
         _maybe_create_teams_meeting(self.object)
         if _is_ajax(self.request):
             return _invite_draft_response(self.request, self.object, form.cleaned_data.get('candidate_email'))
@@ -470,14 +534,24 @@ class InterviewMarkDoneView(GroupRequiredMixin, View):
 class InterviewCancelView(GroupRequiredMixin, View):
     """Marks an interview cancelled/no-show. Not a result (pass/fail) - the
     Hiring block prompts for Reject or Hold once an interview is cancelled,
-    rather than silently leaving the candidate stuck at this stage."""
+    rather than silently leaving the candidate stuck at this stage.
+
+    Cancelling one that hasn't happened yet also withdraws the meeting from
+    the interviewer's calendar and tells them; a past one is just a no-show
+    being recorded, so the interviewer isn't messaged about it."""
     allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
 
     def post(self, request, pk):
-        interview = get_object_or_404(Interview, pk=pk)
+        interview = get_object_or_404(Interview.objects.select_related('candidate', 'interviewer'), pk=pk)
+        upcoming = interview.scheduled_date > timezone.now()
         interview.status = Interview.Status.CANCELLED
         interview.cancelled_at = timezone.now()
         interview.save(update_fields=['status', 'cancelled_at'])
+        if upcoming:
+            calendar_sync.cancel_interview_event(interview, 'This interview was cancelled by HR.')
+            _tell_interviewer_cancelled(
+                interview.interviewer, interview.candidate, interview.get_round_type_display(),
+                when=interview.scheduled_date, note=(request.POST.get('note') or '').strip())
         return redirect('candidate_timeline', pk=interview.candidate_id)
 
 

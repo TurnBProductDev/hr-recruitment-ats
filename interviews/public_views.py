@@ -14,7 +14,7 @@ from django.views import View
 
 from candidates import logic_app_mail
 
-from . import slot_emails
+from . import calendar_sync, slot_emails
 from .forms import CandidateSlotPickForm
 from .models import Interview, InterviewRequest, candidate_round_label
 
@@ -75,6 +75,11 @@ class CandidateSlotPickView(View):
         request_obj.candidate_selected_at = timezone.now()
         request_obj.status = InterviewRequest.Status.AWAITING_HR_APPROVAL
         request_obj.save(update_fields=['candidate_selected_slot', 'candidate_selected_at', 'status'])
+
+        # Hold the interviewer's real calendar from this moment, not only once
+        # HR approves - see interviews/calendar_sync.py.
+        calendar_sync.block_request_slot(request_obj, portal_url=request.build_absolute_uri(
+            reverse('interviewer_candidate', args=[request_obj.candidate_id])))
 
         if request_obj.created_by and request_obj.created_by.email:
             profile_url = request.build_absolute_uri(

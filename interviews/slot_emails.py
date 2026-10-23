@@ -60,6 +60,15 @@ _NEW_SLOTS_NEEDED_BODY = (
     'Regards,\n'
     'TurnB ATS'
 )
+_INTERVIEW_CANCELLED_SUBJECT = 'Interview cancelled - {candidate_name} ({round_type})'
+_INTERVIEW_CANCELLED_BODY = (
+    'Hello {interviewer_name},\n\n'
+    'The {round_type} interview with {candidate_name} for {role}{when_line} has been cancelled by HR.'
+    '{note_line}\n\n'
+    'If it was on your calendar, the meeting has been withdrawn. No action is needed from you.\n\n'
+    'Regards,\n'
+    'TurnB ATS'
+)
 
 
 def _role_name(candidate):
@@ -135,5 +144,23 @@ def notify_interviewer_new_slots_needed(interview_request, note='', login_url=''
         interviewer_name=interviewer.get_full_name() or interviewer.get_username(),
         candidate_name=candidate.full_name, round_type=interview_request.get_round_type_display(),
         note_line=note_line, login_url_line=login_url_line)
+    logic_app_mail.send_email(
+        to_email=interviewer.email, cc_emails=logic_app_mail.default_cc_list(), subject=subject, body=body)
+
+
+def notify_interviewer_cancelled(*, interviewer, candidate, round_type, when=None, note=''):
+    """Sent to the interviewer when HR cancels an interview - at any stage,
+    from a fresh allocation to an approved, scheduled interview. `round_type`
+    is the HR-side label ("Round 1"); `when` the interview's time, if one was
+    ever fixed."""
+    if not (interviewer and interviewer.email):
+        return
+    when_line = f' on {timezone.localtime(when):%d %b %Y, %H:%M} IST' if when else ''
+    note_line = f'\n\nNote from HR: {note}' if note else ''
+    subject, body = render_email(
+        'interviewer_interview_cancelled', _INTERVIEW_CANCELLED_SUBJECT, _INTERVIEW_CANCELLED_BODY,
+        interviewer_name=interviewer.get_full_name() or interviewer.get_username(),
+        candidate_name=candidate.full_name, role=_role_name(candidate), round_type=round_type,
+        when_line=when_line, note_line=note_line)
     logic_app_mail.send_email(
         to_email=interviewer.email, cc_emails=logic_app_mail.default_cc_list(), subject=subject, body=body)

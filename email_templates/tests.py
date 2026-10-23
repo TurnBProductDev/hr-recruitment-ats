@@ -19,12 +19,12 @@ from .store import render_email
 
 
 class EmailTemplateSeedTests(TestCase):
-    def test_all_eight_are_seeded(self):
+    def test_all_nine_are_seeded(self):
         keys = set(EmailTemplate.objects.values_list('key', flat=True))
         self.assertEqual(keys, {
             'rejection', 'interview_invite', 'interviewer_new_request',
             'hr_slots_proposed', 'interviewer_new_slots_needed', 'password_reset',
-            'candidate_select_slot', 'hr_candidate_selected_slot',
+            'candidate_select_slot', 'hr_candidate_selected_slot', 'interviewer_interview_cancelled',
         })
 
     def test_rejection_seed_matches_todays_wording(self):

@@ -1,0 +1,208 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "$connections": {
+        "defaultValue": {},
+        "type": "Object"
+      }
+    },
+    "triggers": {
+      "manual": {
+        "type": "Request",
+        "kind": "Http",
+        "inputs": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "op": {
+                "type": "string"
+              },
+              "event_id": {
+                "type": "string"
+              },
+              "event": {
+                "type": "object"
+              },
+              "comment": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "op"
+            ]
+          }
+        }
+      }
+    },
+    "actions": {
+      "Switch_on_op": {
+        "type": "Switch",
+        "expression": "@triggerBody()?['op']",
+        "cases": {
+          "Create": {
+            "case": "create",
+            "actions": {
+              "Create_event": {
+                "type": "ApiConnection",
+                "inputs": {
+                  "host": {
+                    "connection": {
+                      "name": "@parameters('$connections')['office365']['connectionId']"
+                    }
+                  },
+                  "method": "post",
+                  "path": "/codeless/httprequest",
+                  "headers": {
+                    "Uri": "https://graph.microsoft.com/v1.0/me/events",
+                    "Method": "POST",
+                    "ContentType": "application/json"
+                  },
+                  "body": "@triggerBody()?['event']"
+                }
+              },
+              "Response_created": {
+                "type": "Response",
+                "kind": "Http",
+                "runAfter": {
+                  "Create_event": [
+                    "Succeeded"
+                  ]
+                },
+                "inputs": {
+                  "statusCode": 200,
+                  "body": {
+                    "id": "@body('Create_event')?['id']",
+                    "join_url": "@body('Create_event')?['onlineMeeting']?['joinUrl']"
+                  }
+                }
+              }
+            }
+          },
+          "Update": {
+            "case": "update",
+            "actions": {
+              "Update_event": {
+                "type": "ApiConnection",
+                "inputs": {
+                  "host": {
+                    "connection": {
+                      "name": "@parameters('$connections')['office365']['connectionId']"
+                    }
+                  },
+                  "method": "post",
+                  "path": "/codeless/httprequest",
+                  "headers": {
+                    "Uri": "@{concat('https://graph.microsoft.com/v1.0/me/events/', encodeUriComponent(triggerBody()?['event_id']))}",
+                    "Method": "PATCH",
+                    "ContentType": "application/json"
+                  },
+                  "body": "@triggerBody()?['event']"
+                }
+              },
+              "Response_updated": {
+                "type": "Response",
+                "kind": "Http",
+                "runAfter": {
+                  "Update_event": [
+                    "Succeeded"
+                  ]
+                },
+                "inputs": {
+                  "statusCode": 200,
+                  "body": {
+                    "id": "@body('Update_event')?['id']",
+                    "join_url": "@body('Update_event')?['onlineMeeting']?['joinUrl']"
+                  }
+                }
+              }
+            }
+          },
+          "Cancel": {
+            "case": "cancel",
+            "actions": {
+              "Cancel_event": {
+                "type": "ApiConnection",
+                "inputs": {
+                  "host": {
+                    "connection": {
+                      "name": "@parameters('$connections')['office365']['connectionId']"
+                    }
+                  },
+                  "method": "post",
+                  "path": "/codeless/httprequest",
+                  "headers": {
+                    "Uri": "@{concat('https://graph.microsoft.com/v1.0/me/events/', encodeUriComponent(triggerBody()?['event_id']), '/cancel')}",
+                    "Method": "POST",
+                    "ContentType": "application/json"
+                  },
+                  "body": {
+                    "comment": "@{coalesce(triggerBody()?['comment'], '')}"
+                  }
+                }
+              },
+              "Response_cancelled": {
+                "type": "Response",
+                "kind": "Http",
+                "runAfter": {
+                  "Cancel_event": [
+                    "Succeeded"
+                  ]
+                },
+                "inputs": {
+                  "statusCode": 200,
+                  "body": {
+                    "ok": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "default": {
+          "actions": {
+            "Response_unknown_op": {
+              "type": "Response",
+              "kind": "Http",
+              "inputs": {
+                "statusCode": 400,
+                "body": {
+                  "error": "op must be create, update or cancel"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Response_failed": {
+        "type": "Response",
+        "kind": "Http",
+        "runAfter": {
+          "Switch_on_op": [
+            "Failed",
+            "TimedOut"
+          ]
+        },
+        "inputs": {
+          "statusCode": 502,
+          "body": {
+            "error": "The Microsoft Graph calendar call failed - see this workflow's run history."
+          }
+        }
+      }
+    },
+    "outputs": {}
+  },
+  "parameters": {
+    "$connections": {
+      "value": {
+        "office365": {
+          "connectionName": "office365",
+          "connectionId": "/subscriptions/32ea51d0-6a7d-4a16-ab91-4f5f80f708c7/resourceGroups/HRMS/providers/Microsoft.Web/connections/office365",
+          "id": "/subscriptions/32ea51d0-6a7d-4a16-ab91-4f5f80f708c7/providers/Microsoft.Web/locations/centralindia/managedApis/office365"
+        }
+      }
+    }
+  }
+}
