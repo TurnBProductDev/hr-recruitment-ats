@@ -2,11 +2,17 @@
 <div class="split-datetime-row">
   <div class="split-dt-col split-dt-date">
     <span class="split-dt-label">Date</span>
-    {% with widget=widget.subwidgets.0 %}{% include widget.template_name %}{% endwith %}
+    <div class="split-dt-input">
+      {% with widget=widget.subwidgets.0 %}{% include widget.template_name %}{% endwith %}
+      <i class="bi bi-calendar3 split-dt-icon" aria-hidden="true"></i>
+    </div>
   </div>
   <div class="split-dt-col split-dt-time">
     <span class="split-dt-label">Time</span>
-    {% with widget=widget.subwidgets.1 %}{% include widget.template_name %}{% endwith %}
+    <div class="split-dt-input">
+      {% with widget=widget.subwidgets.1 %}{% include widget.template_name %}{% endwith %}
+      <i class="bi bi-clock split-dt-icon" aria-hidden="true"></i>
+    </div>
   </div>
 </div>
 {% endspaceless %}
