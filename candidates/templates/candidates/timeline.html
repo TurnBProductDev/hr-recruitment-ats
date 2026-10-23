@@ -452,7 +452,7 @@ html { scroll-behavior: smooth; }
         {% with iv=stage.decided_interview %}
         <div class="pd-meta text-muted mt-2">
           Interviewer: <strong>{% if iv.interviewer %}{{ iv.interviewer.get_full_name|default:iv.interviewer.username }}{% else %}-{% endif %}</strong>
-          &middot; Interview Score: <strong>{% if iv.score is not None %}{{ iv.score }}{% else %}-{% endif %}</strong>
+          &middot; Interview Score: <strong>{% if iv.score is not None %}{{ iv.score|floatformat:"-1" }}</strong><span class="text-muted"> / 10</span>{% else %}-</strong>{% endif %}
         </div>
         {% if stage.interview_feedback %}<div class="pd-body mt-1"><span class="text-muted">Feedback:</span> {{ stage.interview_feedback }}</div>{% endif %}
         {% endwith %}
@@ -565,10 +565,11 @@ html { scroll-behavior: smooth; }
                 <button type="submit" class="btn btn-sm btn-outline-app">Request Different Slots</button>
               </form>
               {% elif ir.status == 'AWAITING_HR_APPROVAL' %}
-              <form method="post" action="{% url 'interview_request_approve' ir.pk %}">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-sm btn-fill-app"><i class="bi bi-check2-circle"></i> Approve &amp; Mail Send</button>
-              </form>
+              <button type="button" class="btn btn-sm btn-fill-app"
+                      data-bs-toggle="modal" data-bs-target="#interviewModal"
+                      data-load-url="{% url 'interview_request_approve' ir.pk %}" data-modal-title="Approve Interview">
+                <i class="bi bi-check2-circle"></i> Approve &amp; Mail Send
+              </button>
               <button type="button" class="btn btn-sm btn-outline-app"
                       data-bs-toggle="modal" data-bs-target="#allocateModal"
                       data-load-url="{% url 'interview_request_reschedule' ir.pk %}" data-modal-title="Reschedule Interview">

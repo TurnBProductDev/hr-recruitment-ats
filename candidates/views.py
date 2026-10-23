@@ -973,7 +973,7 @@ class CandidateRepositoryExportView(GroupRequiredMixin, _ExcelExportMixin, View)
         ('Round 2 Date', lambda c: (timezone.localtime(c.round2_at).strftime('%Y-%m-%d %H:%M')
                                     if c.round2_at else '')),
         ('Interviewer', lambda c: getattr(c, 'iv_interviewer', None) or ''),
-        ('Interview Score', lambda c: getattr(c, 'iv_score', None)),
+        ('Interview Score (/10)', lambda c: getattr(c, 'iv_score', None)),
         ('Previous Round Remarks', previous_round_remarks),
         ('Rejected At', rejection_stage),
         ('Rejection Remarks', lambda c: getattr(c, 'rej_remarks', None) or ''),

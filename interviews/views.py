@@ -3,11 +3,12 @@ import logging
 from django.contrib import messages
 from django.db.models import BooleanField, Case, Value, When
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
 from django.views.generic import CreateView, ListView, UpdateView
 
@@ -245,10 +246,22 @@ class InterviewAllocateView(GroupRequiredMixin, CreateView):
 class InterviewRequestApproveView(GroupRequiredMixin, View):
     """HR approves the slot the candidate picked. This is what actually
     creates the Interview row - everything after this point (invite
-    review/send, results, reschedule) is the existing flow, untouched. No
-    invite is auto-sent (the popup's Send button is already paused - see
-    _invite_draft_response); HR sends it manually for now."""
+    review/send, results, reschedule) is the existing flow, untouched.
+
+    The stage card opens this in the interview popup: GET is a one-step
+    confirmation, and the AJAX POST answers with the editable invite draft
+    (_invite_draft_response) - so HR always reviews the candidate's email
+    before it goes, and nothing is sent until they press Send Invite."""
     allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
+
+    def get(self, request, pk):
+        request_obj = get_object_or_404(
+            InterviewRequest.objects.select_related('candidate', 'interviewer', 'candidate_selected_slot'),
+            pk=pk, status=InterviewRequest.Status.AWAITING_HR_APPROVAL)
+        if not _is_ajax(request):
+            return redirect('candidate_timeline', pk=request_obj.candidate_id)
+        return HttpResponse(render_to_string(
+            'interviews/_approve_confirm.html', {'interview_request': request_obj}, request=request))
 
     def post(self, request, pk):
         request_obj = get_object_or_404(
@@ -260,6 +273,9 @@ class InterviewRequestApproveView(GroupRequiredMixin, View):
 
         clash = Interview.conflicts_for(request_obj.interviewer, slot.start_datetime).first()
         if clash:
+            if _is_ajax(request):
+                return HttpResponse(format_html(
+                    '<div class="alert alert-danger mb-0">{}</div>', interviewer_conflict_message(clash)), status=400)
             messages.error(request, interviewer_conflict_message(clash))
             return redirect('candidate_timeline', pk=request_obj.candidate_id)
 
@@ -645,6 +661,8 @@ class InterviewResultView(GroupRequiredMixin, UpdateView):
             candidate=candidate, channel=CommunicationLog.Channel.INTERVIEW,
             outcome=CommunicationLog.Outcome.ATTENDED, logged_by=self.request.user)
         if not can_decide_pipeline:
+            self._tell_hr_result_recorded(interview, form.cleaned_data.get('result'),
+                                          (form.cleaned_data.get('feedback') or '').strip())
             messages.success(self.request, 'Result recorded - HR/Recruiter will confirm the next step.')
             return response
         performed_by = self.request.user.get_full_name() or self.request.user.get_username()
@@ -678,6 +696,30 @@ class InterviewResultView(GroupRequiredMixin, UpdateView):
             messages.success(self.request, 'Interview result recorded.')
         return response
 
+    def _tell_hr_result_recorded(self, interview, picked, feedback):
+        """An Interviewer's result is a recommendation HR has to confirm -
+        tell whoever allocated the interviewer and whoever scheduled the
+        interview (in-app + email). Best-effort: a failed email never
+        blocks recording the result."""
+        allocation = InterviewRequest.objects.filter(interview=interview).select_related('created_by').first()
+        hr_users = [u for u in dict.fromkeys(
+            (allocation.created_by if allocation else None, interview.created_by)) if u]
+        recommendation = Interview.Result(picked).label if picked else 'No recommendation'
+        candidate = interview.candidate
+        profile_url = self.request.build_absolute_uri(reverse('candidate_timeline', args=[candidate.pk]))
+        for user in hr_users:
+            notifications.notify(
+                user, title=f'Interview result - {candidate.full_name}',
+                message=f'{interview.get_round_type_display()}: {recommendation}. '
+                        f'Confirm the next step on the candidate\'s profile.',
+                url=reverse('candidate_timeline', args=[candidate.pk]))
+        try:
+            slot_emails.notify_hr_result_recorded(
+                hr_users=hr_users, interview=interview, recommendation=recommendation,
+                feedback=feedback, profile_url=profile_url)
+        except logic_app_mail.EmailSendError as exc:
+            logger.warning('Could not email HR the result of interview %s: %s', interview.pk, exc)
+
     def get_success_url(self):
         if in_interviewer_portal(self.request):
             return reverse('interviewer_home')
@@ -692,8 +734,27 @@ class InterviewSendInviteView(GroupRequiredMixin, View):
     lands in Outlook as a real meeting, not just a plain email.
 
     Console backend in dev (see settings.EMAIL_BACKEND) - invites print to
-    the log instead of sending until real SMTP credentials are configured."""
+    the log instead of sending until real SMTP credentials are configured.
+
+    GET is the same review form as a full page - what the Interview
+    Scheduler list links to - so an invite is never sent unseen."""
     allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
+
+    def get(self, request, pk):
+        interview = get_object_or_404(Interview.objects.select_related('candidate', 'interviewer'), pk=pk)
+        back_url = request.GET.get('next') or reverse('interview_scheduler')
+        if not url_has_allowed_host_and_scheme(back_url, allowed_hosts={request.get_host()}):
+            back_url = reverse('interview_scheduler')
+        draft = {
+            'to_email': (interview.candidate.email or '').strip(),
+            'cc_list': invites.default_cc_list(interview),
+            'subject': invites.default_subject(interview),
+            'body': invites.default_body(interview, request.user),
+        }
+        return render(request, 'interviews/invite_review.html', {
+            'interview': interview, 'draft': draft, 'standalone': True,
+            'back_url': back_url, 'back_label': 'Interview Scheduler',
+        })
 
     def post(self, request, pk):
         interview = get_object_or_404(Interview, pk=pk)

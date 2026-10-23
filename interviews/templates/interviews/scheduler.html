@@ -86,11 +86,7 @@
                 <button class="btn btn-sm btn-outline-app kebab-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">&#8942;</button>
                 <ul class="dropdown-menu dropdown-menu-end">
                   <li><a class="dropdown-item" href="{% url 'interview_reschedule' iv.pk %}" title="Change the date, time or interviewer">Reschedule</a></li>
-                  <li>
-                    <form method="post" action="{% url 'interview_send_invite' iv.pk %}">
-                      {% csrf_token %}<button type="submit" class="dropdown-item">Send Invite</button>
-                    </form>
-                  </li>
+                  <li><a class="dropdown-item" href="{% url 'interview_send_invite' iv.pk %}?next={{ request.get_full_path|urlencode }}">Review &amp; Send Invite</a></li>
                 </ul>
               </div>
             </td>

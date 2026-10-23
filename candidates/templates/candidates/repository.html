@@ -272,7 +272,7 @@
             <th>Candidate</th><th>Role</th><th>CV Score</th><th>Exp.</th>{% if show_applied_col %}<th>Applied</th>{% endif %}
             {% if tab == 'round1' %}<th>Round 1 Date</th>{% elif tab == 'interview' %}<th>Round 2 Date</th>{% endif %}
             {% if show_interview_cols %}<th>Interviewer</th>{% endif %}
-            {% if show_interview_score %}<th>Interview Score</th>{% endif %}
+            {% if show_interview_score %}<th>Interview Score <span class="text-muted fw-normal">(/10)</span></th>{% endif %}
             {% if show_previous_round_remarks %}<th>Previous Round Remarks</th>{% endif %}
             {% if show_rejection_cols %}<th>Rejected At</th><th>Remarks</th>{% endif %}
             <th>Status</th><th class="text-end no-export">Actions</th>
@@ -318,7 +318,7 @@
             <td>{{ c.iv_interviewer|default:"-" }}</td>
             {% endif %}
             {% if show_interview_score %}
-            <td data-order="{{ c.iv_score|default_if_none:-1 }}">{% if c.iv_score is not None %}<strong>{{ c.iv_score }}</strong>{% else %}<span class="text-muted small">-</span>{% endif %}</td>
+            <td data-order="{{ c.iv_score|default_if_none:-1 }}">{% if c.iv_score is not None %}<strong>{{ c.iv_score|floatformat:"-1" }}</strong><span class="text-muted">/10</span>{% else %}<span class="text-muted small">-</span>{% endif %}</td>
             {% endif %}
             {% if show_previous_round_remarks %}
             <td class="repo-remarks" title="{{ c.previous_round_remarks }}">{{ c.previous_round_remarks|default:"-"|truncatechars:80 }}</td>

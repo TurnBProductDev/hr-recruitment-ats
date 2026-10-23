@@ -69,6 +69,19 @@ _INTERVIEW_CANCELLED_BODY = (
     'Regards,\n'
     'TurnB ATS'
 )
+_RESULT_RECORDED_SUBJECT = 'Interview result - {candidate_name} ({round_type}): {recommendation}'
+_RESULT_RECORDED_BODY = (
+    'Hello {hr_name},\n\n'
+    '{interviewer_name} has recorded the result of the {round_type} interview with {candidate_name} '
+    'for {role}.\n\n'
+    'Recommendation: {recommendation}\n'
+    'Interview score: {score}\n'
+    'Feedback: {feedback}\n\n'
+    "Please confirm the next step (Cleared / Hold / Reject) from the candidate's profile:\n"
+    '{profile_url}\n\n'
+    'Regards,\n'
+    'TurnB ATS'
+)
 
 
 def _role_name(candidate):
@@ -146,6 +159,31 @@ def notify_interviewer_new_slots_needed(interview_request, note='', login_url=''
         note_line=note_line, login_url_line=login_url_line)
     logic_app_mail.send_email(
         to_email=interviewer.email, cc_emails=logic_app_mail.default_cc_list(), subject=subject, body=body)
+
+
+def notify_hr_result_recorded(*, hr_users, interview, recommendation, feedback, profile_url):
+    """Sent when an interviewer marks a result in the portal - their pick is
+    only a recommendation, so HR/the recruiter who scheduled the interview
+    is asked to confirm the next step. Goes to `hr_users` (whoever allocated/
+    scheduled it), or to the standing HR address when none has an email."""
+    emails = list(dict.fromkeys(u.email for u in hr_users if u and u.email))
+    cc = logic_app_mail.default_cc_list()
+    if emails:
+        to_email, cc = emails[0], emails[1:] + [c for c in cc if c not in emails]
+        first = next(u for u in hr_users if u and u.email == to_email)
+        hr_name = first.get_full_name() or first.get_username()
+    else:
+        to_email, cc, hr_name = cc[-1], cc[:-1], 'HR'
+    candidate, interviewer = interview.candidate, interview.interviewer
+    score = f'{interview.score:g} / 10' if interview.score is not None else 'Not given'
+    subject, body = render_email(
+        'hr_interview_result_recorded', _RESULT_RECORDED_SUBJECT, _RESULT_RECORDED_BODY,
+        hr_name=hr_name, interviewer_name=(interviewer.get_full_name() or interviewer.get_username())
+        if interviewer else 'The interviewer',
+        candidate_name=candidate.full_name, role=_role_name(candidate),
+        round_type=interview.get_round_type_display(), recommendation=recommendation,
+        score=score, feedback=feedback or '-', profile_url=profile_url)
+    logic_app_mail.send_email(to_email=to_email, cc_emails=cc, subject=subject, body=body)
 
 
 def notify_interviewer_cancelled(*, interviewer, candidate, round_type, when=None, note=''):

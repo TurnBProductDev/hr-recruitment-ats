@@ -157,7 +157,7 @@ class InterviewColumnsTests(_Base):
         response = self._tab('round1')
         self.assertContains(response, '<th>Interviewer</th>')
         self.assertContains(response, 'Asha Menon')
-        self.assertNotContains(response, '<th>Interview Score</th>')
+        self.assertNotContains(response, '<th>Interview Score')
         self.assertNotContains(response, '<th>Applied</th>')
 
     def test_hold_tab_keeps_score_and_applied(self):
@@ -165,8 +165,8 @@ class InterviewColumnsTests(_Base):
         self._interview(self.candidate, status=Interview.Status.COMPLETED, score='8.5')
         services.change_status(self.candidate, S.SCREENING_HOLD)
         response = self._tab('screening_hold')
-        self.assertContains(response, '<th>Interview Score</th>')
-        self.assertContains(response, '<strong>8.5</strong>')
+        self.assertContains(response, '<th>Interview Score <span class="text-muted fw-normal">(/10)</span></th>')
+        self.assertContains(response, '<strong>8.5</strong><span class="text-muted">/10</span>')
         self.assertContains(response, '<th>Applied</th>')
 
     def test_round2_tab_shows_previous_round_remarks(self):
@@ -193,7 +193,7 @@ class InterviewColumnsTests(_Base):
         services.change_status(self.candidate, S.INTERVIEW, remarks='Round 1 interview passed.')
         response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
         self.assertContains(response, 'Interviewer: <strong>Asha Menon</strong>')
-        self.assertContains(response, 'Interview Score: <strong>10.0</strong>')
+        self.assertContains(response, 'Interview Score: <strong>10</strong><span class="text-muted"> / 10</span>')
         self.assertContains(response, '<span class="text-muted">Feedback:</span> Okay')
 
     def test_round_card_does_not_repeat_feedback_already_in_the_remark(self):

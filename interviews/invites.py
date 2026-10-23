@@ -134,9 +134,15 @@ def send_invite(interview, *, to_email, cc_emails, subject, body, sender):
     """Send the invite. Raises on failure - the caller decides how to
     surface that (never silently swallowed, unlike the old placeholder)."""
     from_email = getattr(settings, 'INTERVIEW_INVITE_FROM_EMAIL', None) or settings.DEFAULT_FROM_EMAIL
+    attendees = [to_email] + list(cc_emails)
+    if interview.calendar_event_id and interview.interviewer and interview.interviewer.email:
+        # The interviewer already has the Teams meeting on their calendar
+        # (interviews/calendar_sync.py) - they stay on CC for the email, but
+        # aren't put on this .ics too, or Outlook would show a second copy.
+        attendees = [a for a in attendees if a.lower() != interview.interviewer.email.lower()]
     ics_bytes = _build_ics(
         interview, organizer_email=from_email,
-        attendee_emails=[to_email] + list(cc_emails),
+        attendee_emails=attendees,
         summary=subject, description=body,
     )
     logic_app_mail.send_email(

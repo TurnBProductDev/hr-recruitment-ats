@@ -176,7 +176,15 @@ class InterviewResultForm(BootstrapFormMixin, forms.ModelForm):
         if self.instance.result == Interview.Result.PENDING:
             self.initial['result'] = ''
         self.fields['feedback'].required = True
+        # Interviewers score out of 10 (shown as "x / 10" everywhere else).
+        self.fields['score'].widget.attrs.update(min='0', max='10', step='0.5', placeholder='0 - 10')
         self._add_bootstrap_classes()
+
+    def clean_score(self):
+        score = self.cleaned_data.get('score')
+        if score is not None and not 0 <= score <= 10:
+            raise forms.ValidationError('Enter a score from 0 to 10.')
+        return score
 
 
 class InterviewAllocationForm(BootstrapFormMixin, forms.ModelForm):

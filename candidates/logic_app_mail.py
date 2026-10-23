@@ -9,11 +9,29 @@ style as candidates/cv_parser.py's LOGIC_APP_CV_PARSER_URL client.
 """
 import html
 import logging
+import re
 
 import requests
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
+
+# A web address in already-escaped text: runs to the next whitespace or tag,
+# minus trailing punctuation that ends the sentence rather than the URL.
+_URL_RE = re.compile(r'https?://[^\s<]+')
+_URL_TRAILING = '.,;:!?)\']"'
+
+
+def _linkify(escaped_text):
+    """Turn every web address in HTML-escaped text into a clickable link -
+    the body is sent as HTML, where a bare URL is just text."""
+    def link(match):
+        url = match.group(0)
+        trail = ''
+        while url and url[-1] in _URL_TRAILING:
+            url, trail = url[:-1], url[-1] + trail
+        return f'<a href="{url}">{url}</a>{trail}'
+    return _URL_RE.sub(link, escaped_text)
 
 
 class EmailSendError(Exception):
@@ -64,8 +82,9 @@ def send_email(*, to_email, subject, body, cc_emails=None, attachments=None):
         # report). Escape first so any literal &/</>/quotes in a name or note
         # render as themselves rather than being interpreted as markup, then
         # turn newlines into <br> so the template's own line breaks actually
-        # show up.
-        'body': html.escape(body).replace('\n', '<br>'),
+        # show up, and web addresses into links (a bare URL in HTML is just
+        # text - the portal/slot-pick links weren't clickable).
+        'body': _linkify(html.escape(body)).replace('\n', '<br>'),
     }
     if attachments:
         payload['attachments'] = attachments

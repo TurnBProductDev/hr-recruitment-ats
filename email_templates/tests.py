@@ -19,12 +19,13 @@ from .store import render_email
 
 
 class EmailTemplateSeedTests(TestCase):
-    def test_all_nine_are_seeded(self):
+    def test_all_ten_are_seeded(self):
         keys = set(EmailTemplate.objects.values_list('key', flat=True))
         self.assertEqual(keys, {
             'rejection', 'interview_invite', 'interviewer_new_request',
             'hr_slots_proposed', 'interviewer_new_slots_needed', 'password_reset',
             'candidate_select_slot', 'hr_candidate_selected_slot', 'interviewer_interview_cancelled',
+            'hr_interview_result_recorded',
         })
 
     def test_rejection_seed_matches_todays_wording(self):
@@ -97,7 +98,8 @@ class EmailCallSiteWiringTests(TestCase):
             notify_candidate_select_slot(request_obj, 'https://ats.example/interview-slots/tok123/')
         payload = post.call_args.kwargs['json']
         self.assertEqual(payload['to'], self.candidate.email)
-        self.assertIn('CUSTOM MARKER, pick here: https://ats.example/interview-slots/tok123/', payload['body'])
+        url = 'https://ats.example/interview-slots/tok123/'
+        self.assertIn(f'CUSTOM MARKER, pick here: <a href="{url}">{url}</a>', payload['body'])
 
     def test_editing_hr_candidate_selected_slot_body_reaches_the_sent_email(self):
         hr_user = get_user_model().objects.create_user('hr', 'hr@turnb.com', 'pw')

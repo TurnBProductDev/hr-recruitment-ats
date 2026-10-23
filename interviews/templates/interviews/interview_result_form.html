@@ -11,7 +11,10 @@
         <div class="row g-3">
           <div class="col-md-6"><label class="form-label">Status</label>{{ form.status }}</div>
           <div class="col-md-6"><label class="form-label">Result <span class="text-danger">*</span></label>{{ form.result }}</div>
-          <div class="col-md-6"><label class="form-label">Interview Score</label>{{ form.score }}</div>
+          <div class="col-md-6">
+            <label class="form-label">Interview Score <span class="text-muted">(out of 10)</span></label>{{ form.score }}
+            {% for error in form.score.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+          </div>
           <div class="col-12"><label class="form-label">Feedback <span class="text-danger">*</span></label>{{ form.feedback }}</div>
         </div>
         <div class="mt-4 d-flex gap-2">

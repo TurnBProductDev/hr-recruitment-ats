@@ -1,0 +1,19 @@
+{% with ir=interview_request %}
+<p class="mb-2">
+  Schedule the {{ ir.get_round_type_display }} interview for <strong>{{ ir.candidate.full_name }}</strong>
+  at the time they selected:
+</p>
+<div class="alert alert-info py-2 px-3 mb-3">
+  <i class="bi bi-calendar-check"></i>
+  <strong>{{ ir.candidate_selected_slot.start_datetime|date:"D, d M Y, H:i" }}</strong>
+  &middot; {{ ir.interviewer.get_full_name|default:ir.interviewer.username }} &middot; {{ ir.get_mode_display }}
+</div>
+<p class="small text-muted mb-3">Next you'll see the invite email to the candidate - review and edit it before sending.</p>
+<form method="post" action="{% url 'interview_request_approve' ir.pk %}">
+  {% csrf_token %}
+  <div class="d-flex justify-content-end gap-2">
+    <button type="button" class="btn btn-outline-app" data-bs-dismiss="modal">Cancel</button>
+    <button type="submit" class="btn btn-fill-app"><i class="bi bi-check2-circle"></i> Approve &amp; Review Email</button>
+  </div>
+</form>
+{% endwith %}
