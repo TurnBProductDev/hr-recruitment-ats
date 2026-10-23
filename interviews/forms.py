@@ -2,6 +2,7 @@ import logging
 
 from django import forms
 from django.contrib.auth import get_user_model
+from django.db import models
 from django.utils import timezone
 
 from candidates.permissions import HIRING_MANAGER, INTERVIEWER
@@ -55,6 +56,23 @@ def _simplified_round_type_choices(current_value):
     return choices
 
 
+def _setup_interviewer_field(field, current_id=None):
+    """Who can be picked as interviewer: active accounts in the Interviewer
+    or Hiring Manager group - plus `current_id`, so editing an interview
+    whose interviewer has since been deactivated doesn't fail validation.
+    Each is labelled "Name (email)": two accounts can share a name (an old
+    and a new login for the same person), and the email is what decides who
+    actually gets the notification."""
+    active = models.Q(is_active=True)
+    if current_id:
+        active |= models.Q(pk=current_id)
+    field.queryset = (get_user_model().objects
+                      .filter(active, groups__name__in=(INTERVIEWER, HIRING_MANAGER))
+                      .order_by('first_name', 'last_name').distinct())
+    field.label_from_instance = lambda u: (
+        f'{u.get_full_name() or u.username} ({u.email})' if u.email else (u.get_full_name() or u.username))
+
+
 class InterviewForm(BootstrapFormMixin, forms.ModelForm):
     # Not a model field - just where the invite email goes. Kept separate
     # from Candidate.email so editing it here (e.g. a typo, or a personal
@@ -95,12 +113,7 @@ class InterviewForm(BootstrapFormMixin, forms.ModelForm):
         # see interviews/portal_views.py's _is_admin), not an assignee.
         # distinct() since groups__name__in joins per matching group, and an
         # account in both groups would otherwise list twice.
-        User = get_user_model()
-        self.fields['interviewer'].queryset = (
-            User.objects.filter(groups__name__in=(INTERVIEWER, HIRING_MANAGER))
-            .order_by('first_name', 'last_name').distinct())
-        self.fields['interviewer'].label_from_instance = (
-            lambda u: u.get_full_name() or u.username)
+        _setup_interviewer_field(self.fields['interviewer'], self.instance.interviewer_id)
         self.fields['interviewer'].empty_label = 'Unassigned'
         self._add_bootstrap_classes()
 
@@ -204,12 +217,7 @@ class InterviewAllocationForm(BootstrapFormMixin, forms.ModelForm):
         self.fields['round_type'].choices = _simplified_round_type_choices(
             self.instance.round_type if self.instance.pk else None)
         # Interviewer group + Hiring Manager - see InterviewForm's __init__ above.
-        User = get_user_model()
-        self.fields['interviewer'].queryset = (
-            User.objects.filter(groups__name__in=(INTERVIEWER, HIRING_MANAGER))
-            .order_by('first_name', 'last_name').distinct())
-        self.fields['interviewer'].label_from_instance = (
-            lambda u: u.get_full_name() or u.username)
+        _setup_interviewer_field(self.fields['interviewer'], self.instance.interviewer_id)
         self._add_bootstrap_classes()
 
     def clean(self):

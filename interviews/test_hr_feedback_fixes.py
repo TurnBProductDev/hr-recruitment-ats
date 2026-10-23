@@ -170,6 +170,33 @@ class InterviewerResultEmailsHrTests(_People):
         self.assertEqual(send.call_args.kwargs['to_email'], logic_app_mail.default_cc_list()[-1])
 
 
+class InterviewerDropdownTests(_People):
+    """Two accounts named DILSHAD M N - an old, deactivated one and the live
+    one - made the allocation go to the wrong (old) mailbox."""
+
+    def setUp(self):
+        super().setUp()
+        self.old = get_user_model().objects.create_user(
+            'Dillu', 'old@gmail.com', 'pw', first_name='DILSHAD', last_name='M N', is_active=False)
+        self.old.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
+
+    def _choices(self, form):
+        return {label for value, label in form.fields['interviewer'].choices if value}
+
+    def test_deactivated_accounts_are_not_offered_and_labels_show_the_email(self):
+        from .forms import InterviewAllocationForm
+        labels = self._choices(InterviewAllocationForm(candidate=self.candidate))
+        self.assertIn('Sreejith K R (panel@turnb.com)', labels)
+        self.assertNotIn('DILSHAD M N (old@gmail.com)', labels)
+
+    def test_an_existing_interview_keeps_its_deactivated_interviewer(self):
+        from .forms import InterviewForm
+        interview = Interview.objects.create(candidate=self.candidate, interviewer=self.old,
+                                             scheduled_date=self.start)
+        self.assertIn('DILSHAD M N (old@gmail.com)',
+                      self._choices(InterviewForm(instance=interview, candidate=self.candidate)))
+
+
 class ScoreOutOfTenTests(InterviewerResultEmailsHrTests):
     def test_form_says_out_of_10(self):
         self.client.force_login(self.hr)
