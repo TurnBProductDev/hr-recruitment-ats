@@ -460,6 +460,7 @@ def _invite_draft_response(request, interview, to_email):
     draft = {
         'to_email': (to_email or interview.candidate.email or '').strip(),
         'cc_list': invites.default_cc_list(interview),
+        'as_meeting': calendar_sync.sends_invite_as_meeting(interview),
         'subject': invites.default_subject(interview),
         'body': invites.default_body(interview, request.user),
     }
@@ -727,11 +728,12 @@ class InterviewResultView(GroupRequiredMixin, UpdateView):
 
 
 class InterviewSendInviteView(GroupRequiredMixin, View):
-    """Sends the interview invite - subject/body/recipient come from what HR
-    reviewed and possibly edited in the popup; CC is always derived
-    server-side (fixed HR address + the selected interviewer) so it can't be
-    tampered with or accidentally dropped. Includes a .ics attachment so it
-    lands in Outlook as a real meeting, not just a plain email.
+    """Sends the interview invite - recipient, CC, subject and body all come
+    from what HR reviewed and possibly edited in the popup (CC starts as the
+    standard careers@/HR addresses + the interviewer). A video interview, or
+    any interview already on the calendar, goes out as the Teams meeting
+    itself (interviews/calendar_sync.send_invite); anything else as an email
+    with a .ics attachment - see invites.send_invite.
 
     Console backend in dev (see settings.EMAIL_BACKEND) - invites print to
     the log instead of sending until real SMTP credentials are configured.
@@ -748,6 +750,7 @@ class InterviewSendInviteView(GroupRequiredMixin, View):
         draft = {
             'to_email': (interview.candidate.email or '').strip(),
             'cc_list': invites.default_cc_list(interview),
+            'as_meeting': calendar_sync.sends_invite_as_meeting(interview),
             'subject': invites.default_subject(interview),
             'body': invites.default_body(interview, request.user),
         }
@@ -767,21 +770,31 @@ class InterviewSendInviteView(GroupRequiredMixin, View):
         subject = request.POST.get('subject', '').strip() or invites.default_subject(interview)
         body = request.POST.get('body', '').strip() or invites.default_body(interview, request.user)
 
+        # CC as HR left it in the form; a post without the field (an old
+        # cached page) falls back to the standard list.
+        if 'cc_emails' in request.POST:
+            cc_list, bad_cc = invites.parse_emails(request.POST['cc_emails'])
+        else:
+            cc_list, bad_cc = invites.default_cc_list(interview), []
+
         error = None
         if not to_email:
             error = 'No candidate email to send the invite to.'
+        elif bad_cc:
+            error = f'Not a valid email address in CC: {", ".join(bad_cc)}'
         else:
-            cc_list = invites.default_cc_list(interview)
+            cc_list = [c for c in cc_list if c.lower() != to_email.lower()]
             try:
-                invites.send_invite(interview, to_email=to_email, cc_emails=cc_list,
-                                    subject=subject, body=body, sender=request.user)
+                how = invites.send_invite(interview, to_email=to_email, cc_emails=cc_list,
+                                          subject=subject, body=body, sender=request.user)
             except Exception as exc:  # noqa: BLE001 - surfaced to the HR user, not swallowed
                 logger.exception('Failed to send interview invite for interview %s', interview.pk)
                 error = f'Could not send the invite: {exc}'
             else:
+                sent_as = 'sent as a Teams meeting invite' if how == 'meeting' else 'emailed'
                 Note.objects.create(
                     candidate=candidate, author=request.user,
-                    text=f'Interview invite emailed to {to_email}'
+                    text=f'Interview invite {sent_as} to {to_email}'
                          f'{" (cc: " + ", ".join(cc_list) + ")" if cc_list else ""}.')
 
         if error:

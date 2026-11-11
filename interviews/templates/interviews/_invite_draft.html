@@ -4,6 +4,13 @@
   for {{ interview.scheduled_date|date:"d M Y, H:i" }}.
 </div>
 <p class="small text-muted mb-2">Review the invite to the candidate below, edit if needed, then send. Nothing is emailed until you press Send Invite.</p>
+{% if draft.as_meeting %}
+<div class="alert alert-info py-2 small mb-3">
+  <i class="bi bi-microsoft-teams"></i>
+  Sent as a <strong>Teams meeting invite</strong> from careers@turnb.com: it lands on the candidate's and CC'd people's
+  calendars with the join link, and later reschedules or cancellations update it for everyone.
+</div>
+{% endif %}
 <form method="post" action="{% url 'interview_send_invite' interview.pk %}" data-step="send-invite">
   {% csrf_token %}
   <div class="mb-2">
@@ -11,8 +18,9 @@
     <input type="email" name="to_email" class="form-control form-control-sm" value="{{ draft.to_email }}" required>
   </div>
   <div class="mb-2">
-    <label class="form-label small mb-1">CC <span class="text-muted">(fixed - not editable)</span></label>
-    <input type="text" class="form-control form-control-sm" value="{{ draft.cc_list|join:", "|default:"None" }}" readonly>
+    <label class="form-label small mb-1">CC <span class="text-muted">(separate addresses with commas)</span></label>
+    <input type="text" name="cc_emails" class="form-control form-control-sm" value="{{ draft.cc_list|join:", " }}"
+           placeholder="name@turnb.com, other@turnb.com">
   </div>
   <div class="mb-2">
     <label class="form-label small mb-1">Subject</label>

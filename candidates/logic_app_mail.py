@@ -34,6 +34,13 @@ def _linkify(escaped_text):
     return _URL_RE.sub(link, escaped_text)
 
 
+def to_html(text):
+    """Plain-text template wording -> the HTML actually sent: escaped, web
+    addresses linked, line breaks kept. Shared with the Teams meeting invite
+    (interviews/calendar_sync.py) so both read the same."""
+    return _linkify(html.escape(text)).replace('\n', '<br>')
+
+
 class EmailSendError(Exception):
     """Raised when an email could not be sent. The message is shown to HR."""
 
@@ -84,7 +91,7 @@ def send_email(*, to_email, subject, body, cc_emails=None, attachments=None):
         # turn newlines into <br> so the template's own line breaks actually
         # show up, and web addresses into links (a bare URL in HTML is just
         # text - the portal/slot-pick links weren't clickable).
-        'body': _linkify(html.escape(body)).replace('\n', '<br>'),
+        'body': to_html(body),
     }
     if attachments:
         payload['attachments'] = attachments

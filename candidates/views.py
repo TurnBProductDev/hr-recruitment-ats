@@ -716,7 +716,17 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
 
         # Tab-specific switches: hide reapplicants (Open list) / hide already-called (Shortlisted)
         if self.request.GET.get('hide_reapply'):
-            qs = qs.filter(reapply=False)
+            # One row per applicant: hide an application only when the same
+            # email has a NEWER application in this same list (same status),
+            # so the latest one stays - filtering on `reapply` itself hid
+            # every one of them, since all copies carry that flag. Blank
+            # emails never count as the same person.
+            newer_here = (Candidate.objects
+                          .filter(email=OuterRef('email'), status=OuterRef('status'))
+                          .exclude(email='')
+                          .filter(Q(created_at__gt=OuterRef('created_at'))
+                                  | Q(created_at=OuterRef('created_at'), pk__gt=OuterRef('pk'))))
+            qs = qs.exclude(Exists(newer_here))
         if self.request.GET.get('hide_called'):
             qs = qs.filter(called=False)
 

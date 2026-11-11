@@ -9,8 +9,11 @@ Recipient/CC are always derived server-side (never trusted from the
 client), since who gets CC'd is a fixed business rule, not user input.
 """
 import base64
+import re
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from django.utils import timezone
 from django.utils.dateformat import format as django_date_format
 
@@ -20,6 +23,7 @@ from email_templates.store import render_email
 
 from candidates import logic_app_mail
 
+from . import calendar_sync
 from .models import INTERVIEW_DURATION
 
 MODE_WORDING = {
@@ -80,10 +84,27 @@ def default_body(interview, sender):
     return body
 
 
+def parse_emails(raw):
+    """HR's CC box -> (valid addresses, invalid entries). Accepts commas,
+    semicolons, spaces or new lines between addresses; drops repeats."""
+    valid, invalid, seen = [], [], set()
+    for item in re.split(r'[,;\s]+', raw or ''):
+        if not item or item.lower() in seen:
+            continue
+        seen.add(item.lower())
+        try:
+            validate_email(item)
+        except ValidationError:
+            invalid.append(item)
+        else:
+            valid.append(item)
+    return valid, invalid
+
+
 def default_cc_list(interview):
-    """The standard careers@turnb.com + HR cc (logic_app_mail.default_cc_list)
-    plus the selected interviewer, per the invite policy - not user-editable,
-    so a click can't accidentally drop any of them."""
+    """What the invite's CC box starts with: the standard careers@turnb.com +
+    HR cc (logic_app_mail.default_cc_list) plus the selected interviewer. HR
+    can edit it before sending."""
     cc = logic_app_mail.default_cc_list()
     if interview.interviewer and interview.interviewer.email and interview.interviewer.email not in cc:
         cc.append(interview.interviewer.email)
@@ -131,8 +152,14 @@ def _build_ics(interview, *, organizer_email, attendee_emails, summary, descript
 
 
 def send_invite(interview, *, to_email, cc_emails, subject, body, sender):
-    """Send the invite. Raises on failure - the caller decides how to
+    """Send the invite and return how it went: 'meeting' when it went out as
+    the interview's Teams/calendar meeting (calendar_sync.send_invite - one
+    invite that stays in sync with reschedules and cancels), 'email' for a
+    plain email with a .ics. Raises on failure - the caller decides how to
     surface that (never silently swallowed, unlike the old placeholder)."""
+    if calendar_sync.sends_invite_as_meeting(interview):
+        calendar_sync.send_invite(interview, to_email=to_email, cc_emails=cc_emails, subject=subject, body=body)
+        return 'meeting'
     from_email = getattr(settings, 'INTERVIEW_INVITE_FROM_EMAIL', None) or settings.DEFAULT_FROM_EMAIL
     attendees = [to_email] + list(cc_emails)
     if interview.calendar_event_id and interview.interviewer and interview.interviewer.email:
@@ -153,3 +180,4 @@ def send_invite(interview, *, to_email, cc_emails, subject, body, sender):
             'ContentType': 'text/calendar',
         }],
     )
+    return 'email'

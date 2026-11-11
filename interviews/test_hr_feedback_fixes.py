@@ -104,6 +104,7 @@ class ApproveAndReviewInviteTests(_People):
         self.assertContains(page, f'data-load-url="{self.url}" data-modal-title="Approve Interview"')
 
 
+@override_settings(LOGIC_APP_CALENDAR_URL='')  # the email + .ics path
 class SchedulerReviewPageTests(_People):
     def setUp(self):
         super().setUp()

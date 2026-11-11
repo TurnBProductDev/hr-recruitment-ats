@@ -76,6 +76,12 @@ class Interview(models.Model):
     # careers@turnb.com - see interviews/calendar_sync.py), so a reschedule
     # can move it and a cancel can withdraw it. Blank when none was created.
     calendar_event_id = models.CharField(max_length=512, blank=True, default='')
+    # Who HR's invite added to that meeting besides the interviewer:
+    # semicolon-separated emails - the candidate (required) and the CC list
+    # (optional) - so a reschedule can PATCH the same attendees back instead
+    # of dropping them. Blank until the invite is sent as a meeting.
+    calendar_required = models.TextField(blank=True, default='')
+    calendar_optional = models.TextField(blank=True, default='')
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.SCHEDULED)
     result = models.CharField(max_length=20, choices=Result.choices, default=Result.PENDING)
     feedback = models.TextField(blank=True, null=True)
