@@ -241,13 +241,12 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
         prev_value = shortlisted + screened_out
         for stage in ctx['funnel']:
             label, value, _decided, flow = stage['cleared']
-            stage_total = prev_value  # everyone who reached this stage, cleared or not
-            # The right-side total is everyone who's had *some* action taken
-            # on them at this stage - "Yet to Call"/"Yet to Schedule" haven't,
-            # so they're left out here (same as Screening Pending is left out
-            # of CV Screening's total/bar entirely above).
-            if stage['pending'] and stage['pending'][0] in ('Yet to Call', 'Yet to Schedule'):
-                stage_total -= stage['pending'][1]
+            # The right-side total is the previous stage's green (cleared)
+            # value - everyone who reached this stage, including those still
+            # "Yet to Call"/"Yet to Schedule" - so each row's total reads
+            # straight off the green segment of the row above it. (CV
+            # Screening has no previous stage: its total is everyone screened.)
+            stage_total = prev_value
             breakdown_chips = []
             if stage['pending']:
                 p = stage['pending']
