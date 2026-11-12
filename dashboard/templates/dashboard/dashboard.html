@@ -74,7 +74,35 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
 .fnl-chip .n { font-weight: 700; font-size: 1rem; color: var(--text-primary); }
 .fnl-chip .t { font-size: .66rem; text-transform: uppercase; letter-spacing: .3px; color: var(--text-muted); }
 
+/* Round 1 / Round 2 expanded view: one large "Interview done" card with its
+   outcome tiles, and a narrow column of not-yet-done cards on the right. */
+.fnl-chips.fnl-round { display: grid; grid-template-columns: minmax(0, 1fr) 200px; gap: 12px; align-items: start; }
+.fnl-chips.fnl-round[hidden] { display: none; }
+.rnd-done { grid-column: 1; background: var(--bg-hover); border: 1px solid var(--border-color); border-top: 3px solid #0e6f6b; border-radius: 10px; padding: 14px 18px 18px; }
+.rnd-done:only-child { grid-column: 1 / -1; }
+.rnd-done-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+.rnd-done-head .big { font-size: 2.4rem; font-weight: 700; line-height: 1; color: var(--text-primary); }
+.rnd-done-head .cap { font-size: .7rem; font-weight: 600; letter-spacing: .6px; text-transform: uppercase; color: var(--text-muted); }
+.rnd-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+.rnd-tile, .rnd-side-card {
+  display: block; text-decoration: none; color: inherit; background: var(--bg-surface);
+  border: 1px solid var(--border-color); border-radius: 8px; transition: box-shadow .12s ease, border-color .12s ease;
+}
+.rnd-tile { padding: 9px 12px; }
+.rnd-tile:hover, .rnd-side-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color: #cbd9d9; }
+.rnd-tile .n { font-weight: 700; font-size: 1.1rem; line-height: 1.2; }
+.rnd-tile .t, .rnd-side-card .t { font-size: .62rem; text-transform: uppercase; letter-spacing: .4px; color: var(--text-muted); }
+.rnd-side { grid-column: 2; display: flex; flex-direction: column; gap: 12px; }
+.rnd-side:only-child { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; }
+.rnd-side-card {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: var(--bg-hover); border-top: 3px solid; padding: 16px 16px;
+}
+.rnd-side-card .n { font-weight: 700; font-size: 1.4rem; color: var(--text-primary); line-height: 1; }
+
 @media (max-width: 700px) {
+  .fnl-chips.fnl-round { grid-template-columns: 1fr; padding-left: 2px; }
+  .rnd-done, .rnd-side { grid-column: 1; }
   .fnl-panel-head { flex-direction: column; gap: 10px; }
   .fnl-stats { align-self: flex-start; }
   .fnl-row3 .lbl { flex-basis: 90px; }
@@ -381,6 +409,32 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
             <span class="val">{{ stage.total }}</span>
             <button type="button" class="fnl-toggle" aria-expanded="false" aria-label="List this stage's breakdown below instead">+</button>
           </div>
+          {% if stage.round_panel %}{% with rp=stage.round_panel %}
+          <div class="fnl-chips fnl-round" hidden>
+            {% if rp.done %}
+            <div class="rnd-done">
+              <div class="rnd-done-head"><span class="big">{{ rp.done_total }}</span><span class="cap">Interview done</span></div>
+              <div class="rnd-tiles">
+                {% for t in rp.done %}
+                <a class="rnd-tile" href="{% url 'candidate_repository' %}?flow={{ t.flow }}{% if jobq %}&job={{ jobq }}{% endif %}">
+                  <div class="n" style="color:{{ t.color }}">{{ t.count }}</div><div class="t">{{ t.label }}</div>
+                </a>
+                {% endfor %}
+              </div>
+            </div>
+            {% endif %}
+            {% if rp.side %}
+            <div class="rnd-side">
+              {% for c in rp.side %}
+              <a class="rnd-side-card" style="border-top-color:{{ c.color }}"
+                 href="{% url 'candidate_repository' %}?flow={{ c.flow }}{% if jobq %}&job={{ jobq }}{% endif %}">
+                <span class="t">{{ c.label }}</span><span class="n">{{ c.count }}</span>
+              </a>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+          {% endwith %}{% else %}
           <div class="fnl-chips" hidden>
             {% for chip in stage.chips %}
             <a class="fnl-chip" style="border-left-color:{{ chip.accent }}"
@@ -389,6 +443,7 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
             </a>
             {% endfor %}
           </div>
+          {% endif %}
         </div>
         {% endfor %}
       </div>

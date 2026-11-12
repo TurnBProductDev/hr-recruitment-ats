@@ -77,6 +77,37 @@ SEG_COLORS = {
 }
 
 
+# Round 1 / Round 2 expanded view: outcomes of interviews that actually took
+# place are grouped under one "Interview Done" card; interviews still to
+# happen (or that didn't happen) sit in a narrow column beside it.
+ROUND_DONE_LABELS = ('Rejected', 'Hold', 'Decision Pending')   # after Cleared
+ROUND_SIDE = (  # (label, top-border colour)
+    ('Scheduled', '#3d5f86'),
+    ('Yet to Schedule', '#a07c00'),
+    ('Not Turned Up', SEG_COLORS['orange'][1]),
+)
+ROUND_TILE_COLORS = {'Rejected': SEG_COLORS['red'][1], 'Hold': SEG_COLORS['purple'][1],
+                     'Decision Pending': '#33393c'}
+
+
+def _round_panel(stage, cleared, cleared_flow):
+    """Interview Done card (with its outcome tiles) + side cards for one
+    interview round. Tiles/cards with no candidates are left out."""
+    counts = {d[0]: (d[1], d[2]) for d in stage['drops']}
+    p = stage['pending']
+    counts[p[0]] = (p[1], p[2])
+    done = [{'label': 'Cleared', 'count': cleared, 'flow': cleared_flow, 'color': GREEN}]
+    done += [{'label': lbl, 'count': counts[lbl][0], 'flow': counts[lbl][1], 'color': ROUND_TILE_COLORS[lbl]}
+             for lbl in ROUND_DONE_LABELS]
+    side = [{'label': lbl, 'count': counts[lbl][0], 'flow': counts[lbl][1], 'color': color}
+            for lbl, color in ROUND_SIDE]
+    return {
+        'done_total': sum(t['count'] for t in done),
+        'done': [t for t in done if t['count']],
+        'side': [c for c in side if c['count']],
+    }
+
+
 class HRDashboardView(GroupRequiredMixin, TemplateView):
     template_name = 'dashboard/dashboard.html'
     allowed_groups = ANY_STAFF
@@ -307,6 +338,7 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
                 pct=pct,
                 chips=display_chips,
                 segments=segments,
+                round_panel=_round_panel(stage, value, flow) if stage['name'] in ('Round 1', 'Round 2') else None,
             )
             prev_value = value
 
