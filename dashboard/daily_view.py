@@ -280,9 +280,21 @@ def compute(date_range, job_id=None):
     for key, label in COLUMNS:
         rows = _rows_for(key, date_range, job_id)
         action_counts = Counter(r['action'] for r in rows)
-        breakdown = [{'label': action_label, 'value': action_counts[action_label]}
-                    for _, _, action_label, _ in _sources_for(key, date_range, job_id)]
-        candidate_ids = {r['candidate'].pk for r in rows}
+        # Each breakdown row's `value` is a candidate count: every candidate
+        # is counted once, under their LATEST action in the range (scheduled
+        # then rescheduled = Rescheduled), so the rows add up to
+        # candidate_count. `actions` keeps the raw action count per row; the
+        # column's own `value` (the tooltip header) is still total actions.
+        latest = {}
+        for r in rows:
+            cid = r['candidate'].pk
+            if cid not in latest or r['when'] >= latest[cid]['when']:
+                latest[cid] = r
+        candidate_counts = Counter(r['action'] for r in latest.values())
+        breakdown = [{'label': action_label, 'value': candidate_counts[action_label],
+                      'actions': action_counts[action_label]}
+                     for _, _, action_label, _ in _sources_for(key, date_range, job_id)]
+        candidate_ids = set(latest)
         results.append({
             'key': key, 'label': label, 'value': len(rows), 'breakdown': breakdown,
             'candidate_count': len(candidate_ids),

@@ -74,35 +74,28 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
 .fnl-chip .n { font-weight: 700; font-size: 1rem; color: var(--text-primary); }
 .fnl-chip .t { font-size: .66rem; text-transform: uppercase; letter-spacing: .3px; color: var(--text-muted); }
 
-/* Round 1 / Round 2 expanded view: one large "Interview done" card with its
-   outcome tiles, and a narrow column of not-yet-done cards on the right. */
-.fnl-chips.fnl-round { display: grid; grid-template-columns: minmax(0, 1fr) 200px; gap: 12px; align-items: start; }
-.fnl-chips.fnl-round[hidden] { display: none; }
-.rnd-done { grid-column: 1; background: var(--bg-hover); border: 1px solid var(--border-color); border-top: 3px solid #0e6f6b; border-radius: 10px; padding: 14px 18px 18px; }
-.rnd-done:only-child { grid-column: 1 / -1; }
-.rnd-done-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; }
-.rnd-done-head .big { font-size: 2.4rem; font-weight: 700; line-height: 1; color: var(--text-primary); }
-.rnd-done-head .cap { font-size: .7rem; font-weight: 600; letter-spacing: .6px; text-transform: uppercase; color: var(--text-muted); }
-.rnd-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
-.rnd-tile, .rnd-side-card {
+/* Round 1 / Round 2 expanded view: an "Interview done" card holding its
+   outcome tiles, then one card per not-yet-done bucket beside it - all in
+   the same left-accent style as the other stages' chips. */
+.fnl-chips.fnl-round { align-items: stretch; gap: 12px; }
+.rnd-done, .rnd-side-card {
+  background: var(--bg-hover); border: 1px solid var(--border-color); border-left-width: 3px;
+  border-radius: 8px; padding: 10px 14px 12px;
+}
+.rnd-done { border-left-color: #0e6f6b; }
+.rnd-side-card { display: block; min-width: 130px; text-decoration: none; color: inherit; transition: box-shadow .12s ease, border-color .12s ease; }
+.rnd-done > .n, .rnd-side-card .n { font-weight: 700; font-size: 1.1rem; line-height: 1.3; color: var(--text-primary); }
+.rnd-done > .t, .rnd-side-card .t, .rnd-tile .t { font-size: .66rem; text-transform: uppercase; letter-spacing: .3px; color: var(--text-muted); }
+.rnd-tiles { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.rnd-tile {
   display: block; text-decoration: none; color: inherit; background: var(--bg-surface);
-  border: 1px solid var(--border-color); border-radius: 8px; transition: box-shadow .12s ease, border-color .12s ease;
+  border: 1px solid var(--border-color); border-left-width: 3px; border-radius: 6px; padding: 7px 12px 7px 10px;
+  transition: box-shadow .12s ease, border-color .12s ease;
 }
-.rnd-tile { padding: 9px 12px; }
-.rnd-tile:hover, .rnd-side-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color: #cbd9d9; }
-.rnd-tile .n { font-weight: 700; font-size: 1.1rem; line-height: 1.2; }
-.rnd-tile .t, .rnd-side-card .t { font-size: .62rem; text-transform: uppercase; letter-spacing: .4px; color: var(--text-muted); }
-.rnd-side { grid-column: 2; display: flex; flex-direction: column; gap: 12px; }
-.rnd-side:only-child { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; }
-.rnd-side-card {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  background: var(--bg-hover); border-top: 3px solid; padding: 16px 16px;
-}
-.rnd-side-card .n { font-weight: 700; font-size: 1.4rem; color: var(--text-primary); line-height: 1; }
+.rnd-tile .n { font-weight: 700; font-size: 1rem; color: var(--text-primary); }
+.rnd-tile:hover, .rnd-side-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-top-color: #cbd9d9; border-right-color: #cbd9d9; border-bottom-color: #cbd9d9; }
 
 @media (max-width: 700px) {
-  .fnl-chips.fnl-round { grid-template-columns: 1fr; padding-left: 2px; }
-  .rnd-done, .rnd-side { grid-column: 1; }
   .fnl-panel-head { flex-direction: column; gap: 10px; }
   .fnl-stats { align-self: flex-start; }
   .fnl-row3 .lbl { flex-basis: 90px; }
@@ -212,8 +205,9 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
 .daily-bar { width: 100%; border-radius: 6px 6px 0 0; min-height: 3px; transition: height .2s ease; }
 .daily-lbl { font-size: .66rem; font-weight: 700; letter-spacing: .3px; text-transform: uppercase; color: var(--text-muted); margin-top: 10px; text-align: center; transition: color .12s ease; }
 
-/* Per-bar tooltip: the split of actions that make up that column's total,
-   from the exact same source list the bar itself is summed from. */
+/* Per-bar tooltip: the column's total action count in the title, then each
+   candidate counted once under their latest action in the range - from the
+   exact same source list the bar itself is summed from. */
 .daily-tooltip {
   position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%) translateY(-4px);
   background: #1f2a2a; color: #fff; border-radius: 8px; padding: 10px 14px; min-width: 190px;
@@ -226,6 +220,7 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
   border: 6px solid transparent; border-top-color: #1f2a2a;
 }
 .daily-tooltip-title { font-size: .72rem; font-weight: 700; padding-bottom: 6px; margin-bottom: 6px; border-bottom: 1px solid rgba(255,255,255,.18); }
+.daily-tooltip-sub { font-size: .6rem; text-transform: uppercase; letter-spacing: .4px; opacity: .65; margin-bottom: 4px; }
 .daily-tooltip-row { display: flex; justify-content: space-between; gap: 18px; font-size: .72rem; padding: 2px 0; white-space: nowrap; }
 .daily-tooltip-row span:last-child { font-weight: 700; }
 
@@ -413,26 +408,23 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
           <div class="fnl-chips fnl-round" hidden>
             {% if rp.done %}
             <div class="rnd-done">
-              <div class="rnd-done-head"><span class="big">{{ rp.done_total }}</span><span class="cap">Interview done</span></div>
+              <div class="n">{{ rp.done_total }}</div><div class="t">Interview done</div>
               <div class="rnd-tiles">
                 {% for t in rp.done %}
-                <a class="rnd-tile" href="{% url 'candidate_repository' %}?flow={{ t.flow }}{% if jobq %}&job={{ jobq }}{% endif %}">
-                  <div class="n" style="color:{{ t.color }}">{{ t.count }}</div><div class="t">{{ t.label }}</div>
+                <a class="rnd-tile" style="border-left-color:{{ t.color }}"
+                   href="{% url 'candidate_repository' %}?flow={{ t.flow }}{% if jobq %}&job={{ jobq }}{% endif %}">
+                  <div class="n">{{ t.count }}</div><div class="t">{{ t.label }}</div>
                 </a>
                 {% endfor %}
               </div>
             </div>
             {% endif %}
-            {% if rp.side %}
-            <div class="rnd-side">
-              {% for c in rp.side %}
-              <a class="rnd-side-card" style="border-top-color:{{ c.color }}"
-                 href="{% url 'candidate_repository' %}?flow={{ c.flow }}{% if jobq %}&job={{ jobq }}{% endif %}">
-                <span class="t">{{ c.label }}</span><span class="n">{{ c.count }}</span>
-              </a>
-              {% endfor %}
-            </div>
-            {% endif %}
+            {% for c in rp.side %}
+            <a class="rnd-side-card" style="border-left-color:{{ c.color }}"
+               href="{% url 'candidate_repository' %}?flow={{ c.flow }}{% if jobq %}&job={{ jobq }}{% endif %}">
+              <div class="n">{{ c.count }}</div><div class="t">{{ c.label }}</div>
+            </a>
+            {% endfor %}
           </div>
           {% endwith %}{% else %}
           <div class="fnl-chips" hidden>
@@ -516,6 +508,7 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
             <div class="daily-tooltip-title">
               {{ c.label }} &middot; {{ c.value }} action{{ c.value|pluralize }}
             </div>
+            <div class="daily-tooltip-sub">Candidates, by latest action</div>
             {% for b in c.breakdown %}
             <div class="daily-tooltip-row"><span>{{ b.label }}</span><span>{{ b.value }}</span></div>
             {% endfor %}
