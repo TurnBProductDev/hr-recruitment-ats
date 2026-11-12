@@ -18,9 +18,10 @@ from candidates.permissions import (
     ANY_STAFF, HIRING_MANAGER, HR_ADMIN, INTERVIEWER, RECRUITER, GroupRequiredMixin, in_interviewer_portal,
 )
 
+from jobs.models import Job
 from notifications import services as notifications
 
-from . import calendar_sync, graph_client, invites, slot_emails
+from . import calendar_sync, graph_client, invites, kpis, slot_emails
 from .forms import InterviewAllocationForm, InterviewForm, InterviewResultForm
 from .models import (
     INTERVIEW_DURATION, Interview, InterviewReschedule, InterviewRequest,
@@ -69,16 +70,41 @@ class InterviewSchedulerListView(GroupRequiredMixin, ListView):
     allowed_groups = ANY_STAFF
 
     def get_queryset(self):
-        qs = (Interview.objects.filter(
-                status__in=Interview.OPEN_STATUSES, result=Interview.Result.PENDING)
-              .select_related('candidate', 'candidate__job', 'interviewer')
+        get = self.request.GET
+        self.bucket = get.get('bucket') if get.get('bucket') in kpis.BUCKET_LABELS else None
+        if self.bucket:
+            # Drilled into from a Summary-tab Interview tile / Interviews by
+            # Role cell - exactly the interviews that number counted, with the
+            # dashboard's own filters (open vacancies only, job, role) carried
+            # over. See interviews.kpis.
+            from candidates.views import GENERAL_APPLICATION  # local: avoids an import cycle
+            qs = (kpis.active_interviews().filter(kpis.bucket_q(self.bucket))
+                  .exclude(candidate__job__title__iexact=GENERAL_APPLICATION))
+            if get.get('scope') == 'open':
+                qs = qs.filter(candidate__job__status=Job.Status.OPEN, candidate__job__is_archived=False)
+            if get.get('job', '').isdigit():
+                qs = qs.filter(candidate__job_id=get['job'])
+            if get.get('role'):
+                qs = qs.filter(candidate__job__title=get['role'])
+        else:
+            qs = Interview.objects.filter(status__in=Interview.OPEN_STATUSES, result=Interview.Result.PENDING)
+        qs = (qs.select_related('candidate', 'candidate__job', 'interviewer')
               .annotate(is_upcoming=Case(
                   When(scheduled_date__gt=timezone.now(), then=Value(True)),
                   default=Value(False), output_field=BooleanField())))
-        q = self.request.GET.get('q')
+        q = get.get('q')
         if q:
             qs = qs.filter(candidate__full_name__icontains=q)
         return qs.order_by('scheduled_date')
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx['bucket_label'] = kpis.BUCKET_LABELS.get(self.bucket)
+        ctx['filter_role'] = self.request.GET.get('role', '')
+        ctx['filter_job'] = None
+        if self.bucket and self.request.GET.get('job', '').isdigit():
+            ctx['filter_job'] = Job.objects.filter(pk=self.request.GET['job']).first()
+        return ctx
 
 
 class InterviewScheduleView(GroupRequiredMixin, CreateView):

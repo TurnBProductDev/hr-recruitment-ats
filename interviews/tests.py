@@ -1476,3 +1476,50 @@ class AzureSignInTests(TestCase):
         post.assert_not_called()
         self.assertRedirects(response, reverse('login'))
         self.assertNotIn('_auth_user_id', self.client.session)
+
+
+class InterviewKpiTests(TestCase):
+    """Summary-tab Interview strip / Interviews by Role (interviews.kpis) and
+    the interview list each number drills into must agree."""
+
+    def setUp(self):
+        from datetime import timedelta
+        self.user = get_user_model().objects.create_user('hr', 'hr@example.com', 'pw')
+        self.user.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.client.force_login(self.user)
+        now = timezone.now()
+        job_a = Job.objects.create(job_code='A1', title='Analyst')
+        job_b = Job.objects.create(job_code='B1', title='Analyst')   # same role, 2nd vacancy
+        S, R = Candidate.Status, Interview.RoundType
+
+        def make(name, job, cand_status, round_type, when, **iv):
+            c = Candidate.objects.create(full_name=name, email=f'{name}@example.com', job=job, status=cand_status)
+            return Interview.objects.create(candidate=c, round_type=round_type, scheduled_date=when, **iv)
+
+        make('up', job_a, S.ROUND1, R.ROUND1, now + timedelta(days=3))
+        make('late', job_b, S.ROUND1, R.ROUND1, now - timedelta(days=2))
+        make('done', job_a, S.INTERVIEW, R.ROUND2, now - timedelta(days=1),
+             status=Interview.Status.COMPLETED, result=Interview.Result.PENDING)
+        # Rejected straight from the Hiring block - their open interview is
+        # dangling and must not count anywhere.
+        make('gone', job_a, S.REJECTED, R.ROUND1, now + timedelta(days=1))
+
+    def test_strip_counts_only_interviews_at_the_candidates_current_round(self):
+        from . import kpis
+        strip = {t['key']: t for t in kpis.strip(kpis.active_interviews())}
+        self.assertEqual(strip['upcoming']['total'], 1)
+        self.assertEqual(strip['overdue']['total'], 1)
+        self.assertEqual(strip['result_pending']['total'], 1)
+        self.assertEqual(strip['result_pending']['r2'], 1)
+
+    def test_by_role_nests_each_vacancy_under_its_role(self):
+        from . import kpis
+        roles = kpis.by_role(kpis.active_interviews())
+        self.assertEqual(len(roles), 1)
+        self.assertEqual((roles[0]['upcoming'], roles[0]['overdue'], roles[0]['result_pending']), (1, 1, 1))
+        self.assertEqual(sorted(v['code'] for v in roles[0]['vacancies']), ['A1', 'B1'])
+
+    def test_drilldown_list_matches_each_bucket_count(self):
+        for bucket, expected in (('upcoming', 1), ('overdue', 1), ('result_pending', 1)):
+            resp = self.client.get(reverse('interview_scheduler'), {'bucket': bucket, 'role': 'Analyst'})
+            self.assertEqual(len(resp.context['interviews']), expected, bucket)

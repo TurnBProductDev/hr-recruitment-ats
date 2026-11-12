@@ -40,11 +40,26 @@
 <div class="iv-head">
   <div>
     <h3 class="iv-title mb-0">Interviews</h3>
+    {% if bucket_label %}
+    <div class="iv-subtitle">
+      {{ interviews|length }} &middot; <strong>{{ bucket_label }}</strong>
+      {% if filter_role %} &middot; {{ filter_role }}{% endif %}
+      {% if filter_job %} &middot; {{ filter_job.title }}{% if filter_job.job_code %} ({{ filter_job.job_code }}){% endif %}{% endif %}
+      {% if request.GET.scope == 'open' %} &middot; open vacancies{% endif %}
+      &middot; <a href="{% url 'interview_scheduler' %}">Show all awaiting result</a>
+    </div>
+    {% else %}
     <div class="iv-subtitle">{{ interviews|length }} awaiting result</div>
+    {% endif %}
   </div>
 </div>
 
 <form method="get">
+  {# Keep a drilled-into tile's filters when searching by name #}
+  {% if request.GET.bucket %}<input type="hidden" name="bucket" value="{{ request.GET.bucket }}">{% endif %}
+  {% if request.GET.scope %}<input type="hidden" name="scope" value="{{ request.GET.scope }}">{% endif %}
+  {% if request.GET.job %}<input type="hidden" name="job" value="{{ request.GET.job }}">{% endif %}
+  {% if request.GET.role %}<input type="hidden" name="role" value="{{ request.GET.role }}">{% endif %}
   <div class="app-card">
     <div class="iv-toolbar">
       <div class="iv-search-wrap">
@@ -74,10 +89,12 @@
             <td>{{ iv.scheduled_date|date:"d M Y H:i" }}</td>
             <td>{% if iv.interviewer %}{{ iv.interviewer.get_full_name|default:iv.interviewer.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</td>
             <td>
-              {% if iv.is_upcoming %}
+              {% if iv.status == 'COMPLETED' %}
+                <span class="badge-status badge-final_selection">Result Pending</span>
+              {% elif iv.is_upcoming %}
                 <span class="badge-status badge-round1">Interview Upcoming</span>
               {% else %}
-                <span class="badge-status badge-final_selection">Result Pending</span>
+                <span class="badge-status badge-rejected">Overdue</span>
               {% endif %}
             </td>
             <td class="text-nowrap text-end">

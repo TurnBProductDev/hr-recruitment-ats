@@ -14,6 +14,7 @@ from candidates.flows import flow_count
 from candidates.models import Candidate, CandidateStatusHistory
 from candidates.permissions import ANY_STAFF, GroupRequiredMixin
 from candidates.views import GENERAL_APPLICATION
+from interviews import kpis as iv_kpis
 from interviews.models import Interview
 from jobs.models import Job
 
@@ -168,6 +169,15 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
                          # it out by however many candidates that job has.
                          .annotate(openings=Max('job__openings'), **_grouped_counts())
                          .order_by('-total'))
+        # Interview KPI strip + Interviews by Role (Summary tab) - same
+        # candidate filters as everything above. See interviews.kpis.
+        interviews = iv_kpis.active_interviews(Interview.objects.filter(candidate__in=base))
+        now = timezone.now()
+        ctx['iv_strip'] = iv_kpis.strip(interviews, now)
+        ctx['iv_by_role'] = iv_kpis.by_role(interviews, now)
+        # Carried onto every tile/table link so the drilled-into list shows
+        # exactly the interviews that were counted.
+        ctx['iv_filter_qs'] = ('&scope=open' if scope == 'open' else '') + (f'&job={job_id}' if job_id else '')
         ctx['by_source'] = (base.exclude(source__isnull=True).exclude(source='')
                             .values('source')
                             .annotate(**_grouped_counts())

@@ -1,4 +1,5 @@
 {% extends "hr_base.html" %}
+{% load candidates_extras %}
 {% block title %}Dashboard{% endblock %}
 
 {% block extra_css %}
@@ -167,6 +168,29 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
 }
 .sm-thead .sm-col-name { text-align: left; }
 
+/* ---- Summary tab: Interview KPI strip (left) + Interviews by Role (right) ---- */
+.iv-strip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 8px; }
+.iv-tile {
+  display: block; text-decoration: none; color: inherit; background: var(--bg-hover);
+  border: 1px solid var(--border-color); border-left-width: 3px; border-radius: 8px; padding: 10px 14px;
+  transition: box-shadow .12s ease;
+}
+.iv-tile:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); }
+.iv-tile .lbl { font-size: .66rem; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; color: var(--text-muted); }
+.iv-tile .val { font-size: 1.6rem; font-weight: 700; line-height: 1.2; color: var(--text-primary); }
+.iv-tile .split { font-size: .72rem; font-weight: 600; color: var(--text-primary); }
+.iv-tile .hint { font-size: .64rem; color: var(--text-muted); margin-top: 2px; }
+.sm-thead-iv, .sm-row-iv { grid-template-columns: minmax(0, 1fr) 62px 74px 92px 66px 22px; }
+.iv-role { border-bottom: 1px solid var(--border-color); }
+.iv-role:last-child { border-bottom: none; }
+.iv-role > .sm-row { border-bottom: none; }
+.iv-vac-row { padding: 8px 0 8px 14px; border-bottom: none; background: var(--bg-hover); border-radius: 6px; margin-bottom: 4px; }
+.iv-vac-row .sm-col-name { font-size: .76rem; }
+.iv-loc { color: var(--text-muted); }
+.iv-num { font-weight: 700; color: var(--text-primary); text-decoration: none; }
+.iv-num:hover { color: var(--accent-teal); text-decoration: underline; }
+.iv-zero { color: var(--text-muted); opacity: .6; }
+
 /* ---- Daily View tab: date-range picker + bar chart ---- */
 .daily-range { position: relative; }
 .daily-range-btn {
@@ -307,6 +331,59 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
       </div>
     </div>
     {% endwith %}
+
+    {# ---- Interviews: KPI strip (left) + Interviews by Role (right) ---- #}
+    <div class="row g-3 mb-3">
+      <div class="col-lg-5">
+        <div class="fnl-panel h-100">
+          <div class="fnl-panel-head sm-panel-head"><h5>Interviews</h5></div>
+          <div class="iv-strip">
+            {% for t in iv_strip %}
+            <a class="iv-tile" style="border-left-color:{{ t.accent }}"
+               href="{% url 'interview_scheduler' %}?bucket={{ t.key }}{{ iv_filter_qs }}">
+              <div class="lbl">{{ t.label }}</div>
+              <div class="val">{{ t.total }}</div>
+              <div class="split">R1 {{ t.r1 }} &middot; R2 {{ t.r2 }}</div>
+              <div class="hint">{{ t.hint }}</div>
+            </a>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-7">
+        <div class="fnl-panel h-100">
+          <div class="fnl-panel-head sm-panel-head"><h5>Interviews by Role</h5></div>
+          <div class="sm-thead sm-thead-iv">
+            <span class="sm-col-name">Role / Vacancy</span>
+            {% for t in iv_strip %}<span class="sm-col-plain">{{ t.label }}</span>{% endfor %}
+            <span></span>
+          </div>
+          {% for role in iv_by_role %}
+          <div class="iv-role">
+            <div class="sm-row sm-row-iv">
+              <span class="sm-col-name">{{ role.title }}</span>
+              {% for t in iv_strip %}{% with n=role|dict_get:t.key %}
+              <span class="sm-col-plain">{% if n %}<a class="iv-num" href="{% url 'interview_scheduler' %}?bucket={{ t.key }}&role={{ role.title|urlencode }}{{ iv_filter_qs }}">{{ n }}</a>{% else %}<span class="iv-zero">0</span>{% endif %}</span>
+              {% endwith %}{% endfor %}
+              <button type="button" class="fnl-toggle iv-role-toggle" aria-expanded="false"
+                      aria-label="Show {{ role.title }}'s vacancies">+</button>
+            </div>
+            <div class="iv-vacancies" hidden>
+              {% for v in role.vacancies %}
+              <div class="sm-row sm-row-iv iv-vac-row">
+                <span class="sm-col-name">{{ v.code }}{% if v.location %} <span class="iv-loc">&middot; {{ v.location }}</span>{% endif %}</span>
+                {% for t in iv_strip %}{% with n=v|dict_get:t.key %}
+                <span class="sm-col-plain">{% if n %}<a class="iv-num" href="{% url 'interview_scheduler' %}?bucket={{ t.key }}&job={{ v.job_id }}{% if scope == 'open' %}&scope=open{% endif %}">{{ n }}</a>{% else %}<span class="iv-zero">0</span>{% endif %}</span>
+                {% endwith %}{% endfor %}
+                <span></span>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% empty %}<div class="text-muted text-center py-3">No interviews scheduled or awaiting a result.</div>{% endfor %}
+        </div>
+      </div>
+    </div>
 
     <div class="row g-3">
       <div class="col-lg-6">
@@ -542,6 +619,19 @@ document.querySelectorAll('#dashTabs button[data-bs-toggle="tab"]').forEach(func
     var url = new URL(window.location);
     url.searchParams.set('view', v);
     window.history.replaceState(null, '', url);
+  });
+});
+
+// Interviews by Role: +/- shows/hides that role's vacancy (job code) rows.
+document.querySelectorAll('.iv-role').forEach(function (role) {
+  var btn = role.querySelector('.iv-role-toggle');
+  var rows = role.querySelector('.iv-vacancies');
+  if (!btn || !rows) { return; }
+  btn.addEventListener('click', function () {
+    var open = rows.hidden;
+    rows.hidden = !open;
+    btn.textContent = open ? '−' : '+';
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
   });
 });
 
