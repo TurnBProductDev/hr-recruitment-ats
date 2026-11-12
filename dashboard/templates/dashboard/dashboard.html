@@ -168,6 +168,8 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
 }
 .sm-thead .sm-col-name { text-align: left; }
 
+.sm-section-title { font-size: 1.05rem; font-weight: 700; color: var(--text-primary); margin: 30px 0 12px; }
+
 /* ---- Summary tab: Interview KPI strip (left) + Interviews by Role (right) ---- */
 .iv-strip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 8px; }
 .iv-tile {
@@ -332,59 +334,6 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
     </div>
     {% endwith %}
 
-    {# ---- Interviews: KPI strip (left) + Interviews by Role (right) ---- #}
-    <div class="row g-3 mb-3">
-      <div class="col-lg-5">
-        <div class="fnl-panel h-100">
-          <div class="fnl-panel-head sm-panel-head"><h5>Interviews</h5></div>
-          <div class="iv-strip">
-            {% for t in iv_strip %}
-            <a class="iv-tile" style="border-left-color:{{ t.accent }}"
-               href="{% url 'interview_scheduler' %}?bucket={{ t.key }}{{ iv_filter_qs }}">
-              <div class="lbl">{{ t.label }}</div>
-              <div class="val">{{ t.total }}</div>
-              <div class="split">R1 {{ t.r1 }} &middot; R2 {{ t.r2 }}</div>
-              <div class="hint">{{ t.hint }}</div>
-            </a>
-            {% endfor %}
-          </div>
-        </div>
-      </div>
-      <div class="col-lg-7">
-        <div class="fnl-panel h-100">
-          <div class="fnl-panel-head sm-panel-head"><h5>Interviews by Role</h5></div>
-          <div class="sm-thead sm-thead-iv">
-            <span class="sm-col-name">Role / Vacancy</span>
-            {% for t in iv_strip %}<span class="sm-col-plain">{{ t.label }}</span>{% endfor %}
-            <span></span>
-          </div>
-          {% for role in iv_by_role %}
-          <div class="iv-role">
-            <div class="sm-row sm-row-iv">
-              <span class="sm-col-name">{{ role.title }}</span>
-              {% for t in iv_strip %}{% with n=role|dict_get:t.key %}
-              <span class="sm-col-plain">{% if n %}<a class="iv-num" href="{% url 'interview_scheduler' %}?bucket={{ t.key }}&role={{ role.title|urlencode }}{{ iv_filter_qs }}">{{ n }}</a>{% else %}<span class="iv-zero">0</span>{% endif %}</span>
-              {% endwith %}{% endfor %}
-              <button type="button" class="fnl-toggle iv-role-toggle" aria-expanded="false"
-                      aria-label="Show {{ role.title }}'s vacancies">+</button>
-            </div>
-            <div class="iv-vacancies" hidden>
-              {% for v in role.vacancies %}
-              <div class="sm-row sm-row-iv iv-vac-row">
-                <span class="sm-col-name">{{ v.code }}{% if v.location %} <span class="iv-loc">&middot; {{ v.location }}</span>{% endif %}</span>
-                {% for t in iv_strip %}{% with n=v|dict_get:t.key %}
-                <span class="sm-col-plain">{% if n %}<a class="iv-num" href="{% url 'interview_scheduler' %}?bucket={{ t.key }}&job={{ v.job_id }}{% if scope == 'open' %}&scope=open{% endif %}">{{ n }}</a>{% else %}<span class="iv-zero">0</span>{% endif %}</span>
-                {% endwith %}{% endfor %}
-                <span></span>
-              </div>
-              {% endfor %}
-            </div>
-          </div>
-          {% empty %}<div class="text-muted text-center py-3">No interviews scheduled or awaiting a result.</div>{% endfor %}
-        </div>
-      </div>
-    </div>
-
     <div class="row g-3">
       <div class="col-lg-6">
         <div class="fnl-panel">
@@ -432,6 +381,59 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
             <span class="sm-col-hired">{{ r.hired }}</span>
           </div>
           {% empty %}<div class="text-muted text-center py-3">No data.</div>{% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <h4 class="sm-section-title">Interviews</h4>
+    {# ---- Interviews: KPI strip (left) + Interviews by Role (right) ---- #}
+    <div class="row g-3">
+      <div class="col-lg-5">
+        <div class="fnl-panel h-100">
+          <div class="iv-strip">
+            {% for t in iv_strip %}
+            <a class="iv-tile" style="border-left-color:{{ t.accent }}"
+               href="{% url 'interview_scheduler' %}?bucket={{ t.key }}{{ iv_filter_qs }}">
+              <div class="lbl">{{ t.label }}</div>
+              <div class="val">{{ t.total }}</div>
+              <div class="split">R1 {{ t.r1 }} &middot; R2 {{ t.r2 }}</div>
+              <div class="hint">{{ t.hint }}</div>
+            </a>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-7">
+        <div class="fnl-panel h-100">
+          <div class="fnl-panel-head sm-panel-head"><h5>By Role / Vacancy</h5></div>
+          <div class="sm-thead sm-thead-iv">
+            <span class="sm-col-name">Role / Vacancy</span>
+            {% for t in iv_strip %}<span class="sm-col-plain">{{ t.label }}</span>{% endfor %}
+            <span></span>
+          </div>
+          {% for role in iv_by_role %}
+          <div class="iv-role">
+            <div class="sm-row sm-row-iv">
+              <span class="sm-col-name">{{ role.title }}</span>
+              {% for t in iv_strip %}{% with n=role|dict_get:t.key %}
+              <span class="sm-col-plain">{% if n %}<a class="iv-num" href="{% url 'interview_scheduler' %}?bucket={{ t.key }}&role={{ role.title|urlencode }}{{ iv_filter_qs }}">{{ n }}</a>{% else %}<span class="iv-zero">0</span>{% endif %}</span>
+              {% endwith %}{% endfor %}
+              <button type="button" class="fnl-toggle iv-role-toggle" aria-expanded="false"
+                      aria-label="Show {{ role.title }}'s vacancies">+</button>
+            </div>
+            <div class="iv-vacancies" hidden>
+              {% for v in role.vacancies %}
+              <div class="sm-row sm-row-iv iv-vac-row">
+                <span class="sm-col-name">{{ v.code }}{% if v.location %} <span class="iv-loc">&middot; {{ v.location }}</span>{% endif %}</span>
+                {% for t in iv_strip %}{% with n=v|dict_get:t.key %}
+                <span class="sm-col-plain">{% if n %}<a class="iv-num" href="{% url 'interview_scheduler' %}?bucket={{ t.key }}&job={{ v.job_id }}{% if scope == 'open' %}&scope=open{% endif %}">{{ n }}</a>{% else %}<span class="iv-zero">0</span>{% endif %}</span>
+                {% endwith %}{% endfor %}
+                <span></span>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% empty %}<div class="text-muted text-center py-3">No interviews scheduled or awaiting a result.</div>{% endfor %}
         </div>
       </div>
     </div>
@@ -518,28 +520,6 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
       </div>
     </div>
     {% endwith %}
-
-    <div class="card app-card p-4 mt-4">
-      <h5 class="mb-3">Upcoming Interviews</h5>
-  <div class="table-responsive">
-    <table class="table table-hover align-middle w-100">
-      <thead><tr><th>Date</th><th>Candidate</th><th>Round</th><th>Interviewer</th><th>Mode</th></tr></thead>
-      <tbody>
-        {% for i in upcoming_interviews %}
-        <tr>
-          <td>{{ i.scheduled_date|date:"d M Y" }}</td>
-          <td><a href="{% url 'candidate_timeline' i.candidate.pk %}">{{ i.candidate.full_name }}</a></td>
-          <td>{{ i.get_round_type_display }}</td>
-          <td>{{ i.interviewer|default:"Unassigned" }}</td>
-          <td>{{ i.get_mode_display }}</td>
-        </tr>
-        {% empty %}<tr><td colspan="5" class="text-muted text-center">No upcoming interviews.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-      <a href="{% url 'interview_scheduler' %}" class="btn btn-outline-app btn-sm">Open Interviews</a>
-    </div>
   </div>
 
   <!-- ===================== DAILY VIEW ===================== -->

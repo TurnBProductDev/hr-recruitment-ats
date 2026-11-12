@@ -352,10 +352,6 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
             )
             prev_value = value
 
-        ctx['upcoming_interviews'] = Interview.objects.select_related('candidate', 'interviewer').filter(
-            status=Interview.Status.SCHEDULED, scheduled_date__gte=timezone.now()
-        ).order_by('scheduled_date')[:10]
-
         # ---------- Daily View: actions HR took on a day, not current state ----------
         daily_range = daily_view.range_from_request(self.request.GET)
         ctx['daily_from'], ctx['daily_to'] = daily_range
