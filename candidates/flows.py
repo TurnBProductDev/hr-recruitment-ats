@@ -8,7 +8,7 @@ having cleared a stage even if they were later rejected/hired (funnel view).
 """
 from django.db.models import OuterRef, Q, Subquery
 
-from candidates.models import Candidate, CommunicationLog
+from candidates.models import Candidate, CandidateStatusHistory, CommunicationLog
 from interviews.models import Interview
 
 S = Candidate.Status
@@ -28,7 +28,13 @@ PENDING = IV.Result.PENDING
 
 
 def _reached(stage):
-    return Q(history__new_status=stage)
+    """Has a live (not undone) history row moving the candidate into `stage`.
+    An undone move (e.g. Shortlisted, then Undo back to Open) never happened
+    as far as the funnel is concerned - otherwise that candidate counts as
+    both Screening Pending and Qualified. A pk__in subquery (not a join) so
+    the two conditions stay tied to the same row under .exclude() too."""
+    return Q(pk__in=CandidateStatusHistory.objects.filter(
+        new_status=stage, is_undone=False).values('candidate_id'))
 
 
 def _decision_pending(round_types):
