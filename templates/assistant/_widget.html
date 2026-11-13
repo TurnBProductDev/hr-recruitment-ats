@@ -7,15 +7,38 @@
   id is sent too, so "this candidate" works.
 {% endcomment %}
 <style>
+/* Floating robot mascot (the open/close button) - bobs, waves, blinks and
+   says "Hi!" now and then. All motion is off for prefers-reduced-motion. */
 #askats-fab {
-  position: fixed; right: 22px; bottom: 22px; z-index: 1080; border: none; border-radius: 999px;
-  background: var(--primary-green, #0e6f6b); color: #fff; padding: 12px 18px; font: 600 14px/1 'Poppins', sans-serif;
-  box-shadow: 0 8px 24px rgba(0,0,0,.22); display: flex; align-items: center; gap: 8px; cursor: pointer;
+  position: fixed; right: 18px; bottom: 14px; z-index: 1080; width: 84px; height: 92px; padding: 0;
+  border: none; background: none; cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
-#askats-fab:hover { filter: brightness(1.06); }
+#askats-fab svg { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 6px 10px rgba(0,0,0,.18)); }
+#askats-fab .bot { animation: askats-bob 3.2s ease-in-out infinite; transform-origin: 60px 70px; }
+#askats-fab .arm-wave { transform-origin: 92px 62px; animation: askats-wave 3.2s ease-in-out infinite; }
+#askats-fab .eye { transform-box: fill-box; transform-origin: center; animation: askats-blink 4.5s infinite; }
+#askats-fab .shadow { transform-box: fill-box; transform-origin: center; animation: askats-shadow 3.2s ease-in-out infinite; }
+#askats-fab:hover .bot { animation-duration: 1.4s; }
+#askats-fab:focus-visible { outline: 3px solid var(--primary-green, #0e6f6b); outline-offset: 2px; border-radius: 16px; }
+.askats-hi {
+  position: absolute; right: 70px; top: -6px; background: #0e8c74; color: #fff; font: 700 13px/1 'Poppins', sans-serif;
+  padding: 8px 12px; border-radius: 14px; white-space: nowrap; box-shadow: 0 4px 12px rgba(0,0,0,.18);
+  opacity: 0; transform: translateY(6px) scale(.9); transition: opacity .25s ease, transform .25s ease; pointer-events: none;
+}
+.askats-hi::after { content: ""; position: absolute; right: -6px; bottom: 6px; border: 7px solid transparent; border-left-color: #0e8c74; border-right: 0; }
+#askats-fab:hover .askats-hi, #askats-fab.say-hi .askats-hi { opacity: 1; transform: none; }
+#askats-fab[aria-expanded="true"] .askats-hi { opacity: 0; }
+@keyframes askats-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes askats-shadow { 0%, 100% { transform: scaleX(1); opacity: .5; } 50% { transform: scaleX(.82); opacity: .3; } }
+@keyframes askats-wave { 0%, 60%, 100% { transform: rotate(0); } 70% { transform: rotate(-22deg); } 80% { transform: rotate(4deg); } 90% { transform: rotate(-16deg); } }
+@keyframes askats-blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+@media (prefers-reduced-motion: reduce) {
+  #askats-fab .bot, #askats-fab .arm-wave, #askats-fab .eye, #askats-fab .shadow { animation: none; }
+}
+.askats-head-bot { width: 28px; height: 28px; flex: 0 0 28px; }
 #askats-panel {
-  position: fixed; right: 22px; bottom: 80px; z-index: 1081; width: 400px; max-width: calc(100vw - 32px);
-  height: 580px; max-height: calc(100vh - 110px); background: var(--bg-surface); color: var(--text-primary);
+  position: fixed; right: 22px; bottom: 112px; z-index: 1081; width: 400px; max-width: calc(100vw - 32px);
+  height: 580px; max-height: calc(100vh - 140px); background: var(--bg-surface); color: var(--text-primary);
   border: 1px solid var(--border-color); border-radius: 14px; box-shadow: 0 18px 48px rgba(0,0,0,.25);
   display: flex; flex-direction: column; overflow: hidden;
 }
@@ -46,15 +69,45 @@
 .askats-foot { font-size: .64rem; color: var(--text-muted); text-align: center; padding: 0 10px 8px; }
 </style>
 
-<button type="button" id="askats-fab" aria-controls="askats-panel" aria-expanded="false">
-  <i class="bi bi-stars"></i> Ask the ATS
+<button type="button" id="askats-fab" aria-controls="askats-panel" aria-expanded="false"
+        aria-label="Ask the ATS - open the assistant" title="Ask the ATS">
+  <span class="askats-hi">Hi! Ask me</span>
+  <svg viewBox="0 0 120 130" aria-hidden="true" focusable="false">
+    <ellipse class="shadow" cx="60" cy="122" rx="30" ry="4" fill="#9fb3b0"/>
+    <g class="bot">
+      <!-- left arm (resting) and right arm (waves) -->
+      <ellipse cx="22" cy="80" rx="8" ry="15" transform="rotate(-12 22 80)" fill="#8e999e"/>
+      <g class="arm-wave"><ellipse cx="99" cy="50" rx="9" ry="16" transform="rotate(32 99 50)" fill="#8e999e"/></g>
+      <!-- antenna -->
+      <rect x="58.5" y="20" width="3" height="8" rx="1.5" fill="#8e999e"/>
+      <circle cx="60" cy="17" r="6.5" fill="#0e8c74"/>
+      <!-- body -->
+      <ellipse cx="60" cy="72" rx="42" ry="46" fill="#c3c9ce"/>
+      <!-- visor face -->
+      <rect x="30" y="44" width="60" height="30" rx="15" fill="#2e3538"/>
+      <path class="eye" d="M40 61 q5 -7 10 0" stroke="#4fdcc4" stroke-width="3" fill="none" stroke-linecap="round"/>
+      <path class="eye" d="M70 61 q5 -7 10 0" stroke="#4fdcc4" stroke-width="3" fill="none" stroke-linecap="round"/>
+      <path d="M55 66 q5 4 10 0" stroke="#4fdcc4" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+      <!-- cheeks and mouth bar -->
+      <circle cx="36" cy="85" r="4.5" fill="#97bdb9"/>
+      <circle cx="84" cy="85" r="4.5" fill="#97bdb9"/>
+      <rect x="51" y="96" width="18" height="3.5" rx="1.75" fill="#0e8c74"/>
+    </g>
+  </svg>
 </button>
 <div id="askats-panel" role="dialog" aria-label="Ask the ATS" hidden
      data-ask-url="{% url 'assistant_ask' %}"
      data-candidate-id="{% if request.resolver_match.url_name == 'candidate_timeline' %}{{ candidate.pk|default:'' }}{% endif %}"
      data-candidate-name="{% if request.resolver_match.url_name == 'candidate_timeline' %}{{ candidate.full_name|default:'' }}{% endif %}">
   <div class="askats-head">
-    <i class="bi bi-stars"></i><span class="t">Ask the ATS</span>
+    <svg class="askats-head-bot" viewBox="18 8 84 104" aria-hidden="true" focusable="false">
+      <circle cx="60" cy="17" r="6.5" fill="#bff3e8"/>
+      <ellipse cx="60" cy="72" rx="42" ry="46" fill="#e6eaec"/>
+      <rect x="30" y="44" width="60" height="30" rx="15" fill="#2e3538"/>
+      <path d="M40 61 q5 -7 10 0 M70 61 q5 -7 10 0" stroke="#4fdcc4" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+      <path d="M55 66 q5 4 10 0" stroke="#4fdcc4" stroke-width="3" fill="none" stroke-linecap="round"/>
+    </svg>
+    <span class="t">Ask the ATS</span>
     <button type="button" id="askats-clear" title="New conversation"><i class="bi bi-arrow-counterclockwise"></i></button>
     <button type="button" id="askats-close" title="Close"><i class="bi bi-x-lg"></i></button>
   </div>
@@ -166,5 +219,14 @@
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(input.value); }
   });
   try { if (sessionStorage.getItem(OPEN_KEY)) setOpen(true); } catch (e) {}
+
+  // Robot says "Hi!" for a few seconds the first time it appears in this tab.
+  try {
+    if (!sessionStorage.getItem('askats-greeted') && panel.hidden) {
+      sessionStorage.setItem('askats-greeted', '1');
+      setTimeout(function () { fab.classList.add('say-hi'); }, 800);
+      setTimeout(function () { fab.classList.remove('say-hi'); }, 5800);
+    }
+  } catch (e) {}
 })();
 </script>
