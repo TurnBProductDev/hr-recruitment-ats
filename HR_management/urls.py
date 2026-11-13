@@ -46,6 +46,7 @@ urlpatterns = [
     path('', include('interviews.urls')),
     path('', include('dashboard.urls')),
     path('', include('notifications.urls')),
+    path('', include('assistant.urls')),
     # Uploaded files (Job.jd_file, Candidate Attachments, ...) - served here in
     # every environment, not just DEBUG. django.contrib.staticfiles/WhiteNoise
     # only ever covers STATIC_URL; nothing served MEDIA_URL in production

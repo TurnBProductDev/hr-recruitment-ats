@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'notifications',
     'prompts',
     'email_templates',
+    'assistant',
 ]
 
 MIDDLEWARE = [

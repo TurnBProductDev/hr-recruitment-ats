@@ -220,5 +220,8 @@
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
 {% block extra_js %}{% endblock %}
+{% if user.is_authenticated and not is_interviewer_portal %}{% if is_hr_admin or is_recruiter or is_hiring_manager %}
+  {% include "assistant/_widget.html" %}
+{% endif %}{% endif %}
 </body>
 </html>

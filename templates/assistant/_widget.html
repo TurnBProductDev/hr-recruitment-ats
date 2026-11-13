@@ -1,0 +1,170 @@
+{% comment %}
+  "Ask the ATS" floating assistant (assistant/ app). Included by hr_base.html
+  for HR Admin / Recruiter / Hiring Manager only. The conversation lives in
+  this browser tab's sessionStorage (kept while moving between pages, gone
+  when the tab closes) and the recent turns are sent with each question - the
+  server keeps no chat history. On a candidate's profile the page's candidate
+  id is sent too, so "this candidate" works.
+{% endcomment %}
+<style>
+#askats-fab {
+  position: fixed; right: 22px; bottom: 22px; z-index: 1080; border: none; border-radius: 999px;
+  background: var(--primary-green, #0e6f6b); color: #fff; padding: 12px 18px; font: 600 14px/1 'Poppins', sans-serif;
+  box-shadow: 0 8px 24px rgba(0,0,0,.22); display: flex; align-items: center; gap: 8px; cursor: pointer;
+}
+#askats-fab:hover { filter: brightness(1.06); }
+#askats-panel {
+  position: fixed; right: 22px; bottom: 80px; z-index: 1081; width: 400px; max-width: calc(100vw - 32px);
+  height: 580px; max-height: calc(100vh - 110px); background: var(--bg-surface); color: var(--text-primary);
+  border: 1px solid var(--border-color); border-radius: 14px; box-shadow: 0 18px 48px rgba(0,0,0,.25);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+#askats-panel[hidden] { display: none; }
+.askats-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; background: var(--primary-green, #0e6f6b); color: #fff; }
+.askats-head .t { font-weight: 700; flex: 1; }
+.askats-head button { background: none; border: none; color: #fff; opacity: .85; font-size: 1rem; padding: 2px 6px; cursor: pointer; }
+.askats-head button:hover { opacity: 1; }
+.askats-msgs { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.askats-msg { max-width: 92%; padding: 9px 12px; border-radius: 12px; font-size: .84rem; line-height: 1.45; word-wrap: break-word; }
+.askats-msg.user { align-self: flex-end; background: var(--primary-green, #0e6f6b); color: #fff; border-bottom-right-radius: 4px; white-space: pre-wrap; }
+.askats-msg.bot { align-self: flex-start; background: var(--bg-hover); border: 1px solid var(--border-color); border-bottom-left-radius: 4px; }
+.askats-msg.bot.err { border-color: #dc3545; }
+.askats-msg.bot p { margin: 0 0 6px; } .askats-msg.bot p:last-child { margin-bottom: 0; }
+.askats-msg.bot ul, .askats-msg.bot ol { margin: 4px 0 6px; padding-left: 18px; }
+.askats-msg.bot table { font-size: .78rem; border-collapse: collapse; margin: 4px 0; }
+.askats-msg.bot th, .askats-msg.bot td { border: 1px solid var(--border-color); padding: 3px 6px; }
+.askats-msg.bot h1, .askats-msg.bot h2, .askats-msg.bot h3, .askats-msg.bot h4 { font-size: .9rem; font-weight: 700; margin: 6px 0 4px; }
+.askats-welcome { font-size: .82rem; color: var(--text-muted); }
+.askats-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.askats-chip { border: 1px solid var(--border-color); background: var(--bg-surface); color: var(--text-primary); border-radius: 999px; padding: 4px 10px; font-size: .74rem; cursor: pointer; }
+.askats-chip:hover { border-color: var(--primary-green, #0e6f6b); }
+.askats-typing { align-self: flex-start; font-size: .78rem; color: var(--text-muted); }
+.askats-form { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--border-color); }
+.askats-form textarea { flex: 1; resize: none; height: 42px; max-height: 110px; border: 1px solid var(--border-color); border-radius: 10px; padding: 9px 11px; font-size: .84rem; background: var(--bg-surface); color: var(--text-primary); }
+.askats-form button { border: none; border-radius: 10px; background: var(--primary-green, #0e6f6b); color: #fff; padding: 0 14px; }
+.askats-form button:disabled { opacity: .5; }
+.askats-foot { font-size: .64rem; color: var(--text-muted); text-align: center; padding: 0 10px 8px; }
+</style>
+
+<button type="button" id="askats-fab" aria-controls="askats-panel" aria-expanded="false">
+  <i class="bi bi-stars"></i> Ask the ATS
+</button>
+<div id="askats-panel" role="dialog" aria-label="Ask the ATS" hidden
+     data-ask-url="{% url 'assistant_ask' %}"
+     data-candidate-id="{% if request.resolver_match.url_name == 'candidate_timeline' %}{{ candidate.pk|default:'' }}{% endif %}"
+     data-candidate-name="{% if request.resolver_match.url_name == 'candidate_timeline' %}{{ candidate.full_name|default:'' }}{% endif %}">
+  <div class="askats-head">
+    <i class="bi bi-stars"></i><span class="t">Ask the ATS</span>
+    <button type="button" id="askats-clear" title="New conversation"><i class="bi bi-arrow-counterclockwise"></i></button>
+    <button type="button" id="askats-close" title="Close"><i class="bi bi-x-lg"></i></button>
+  </div>
+  <div class="askats-msgs" id="askats-msgs"></div>
+  <form class="askats-form" id="askats-form">
+    {% csrf_token %}
+    <textarea id="askats-input" rows="1" placeholder="Ask about candidates, numbers, or how to…" aria-label="Your question"></textarea>
+    <button type="submit" id="askats-send" aria-label="Send"><i class="bi bi-send-fill"></i></button>
+  </form>
+  <div class="askats-foot">Read-only AI assistant - check important details on the candidate's page.</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
+<script>
+(function () {
+  var KEY = 'askats-history', OPEN_KEY = 'askats-open';
+  var fab = document.getElementById('askats-fab'), panel = document.getElementById('askats-panel');
+  var list = document.getElementById('askats-msgs'), form = document.getElementById('askats-form');
+  var input = document.getElementById('askats-input'), send = document.getElementById('askats-send');
+  var candId = panel.dataset.candidateId, candName = panel.dataset.candidateName;
+  var busy = false;
+
+  function load() { try { return JSON.parse(sessionStorage.getItem(KEY)) || []; } catch (e) { return []; } }
+  function save(h) { try { sessionStorage.setItem(KEY, JSON.stringify(h.slice(-30))); } catch (e) {} }
+  var history = load();
+
+  function md(text) {
+    if (typeof marked === 'undefined' || typeof DOMPurify === 'undefined') {
+      var d = document.createElement('div'); d.textContent = text; return d.innerHTML.replace(/\n/g, '<br>');
+    }
+    return DOMPurify.sanitize(marked.parse(text));
+  }
+  function bubble(role, text, isErr) {
+    var div = document.createElement('div');
+    div.className = 'askats-msg ' + (role === 'user' ? 'user' : 'bot') + (isErr ? ' err' : '');
+    if (role === 'user') { div.textContent = text; } else { div.innerHTML = md(text); }
+    list.appendChild(div);
+    list.scrollTop = list.scrollHeight;
+  }
+  function welcome() {
+    var w = document.createElement('div');
+    w.className = 'askats-welcome';
+    w.innerHTML = 'Hi! I can answer questions about your candidates, vacancies, interviews and numbers, ' +
+      'and explain how to use the ATS. I can\'t change anything.';
+    var chips = document.createElement('div'); chips.className = 'askats-chips';
+    var ideas = candId
+      ? ['Summarise this candidate', 'What are the key concerns for ' + (candName || 'this candidate') + '?',
+         'Draft 5 phone screening questions for this candidate']
+      : ['Which interviews are overdue?', 'Top 5 scored candidates for Sales Associate',
+         'How many applications came in this week, by source?', 'How do I schedule an interview?'];
+    ideas.forEach(function (q) {
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'askats-chip'; b.textContent = q;
+      b.addEventListener('click', function () { ask(q); });
+      chips.appendChild(b);
+    });
+    w.appendChild(chips);
+    list.appendChild(w);
+  }
+  function render() {
+    list.innerHTML = '';
+    if (!history.length) { welcome(); return; }
+    history.forEach(function (m) { bubble(m.role, m.content, m.err); });
+  }
+  function setOpen(open) {
+    panel.hidden = !open;
+    fab.setAttribute('aria-expanded', open ? 'true' : 'false');
+    try { sessionStorage.setItem(OPEN_KEY, open ? '1' : ''); } catch (e) {}
+    if (open) { render(); input.focus(); }
+  }
+
+  function ask(text) {
+    text = (text || '').trim();
+    if (!text || busy) return;
+    busy = true; send.disabled = true;
+    if (!history.length) list.innerHTML = '';
+    history.push({role: 'user', content: text}); save(history);
+    bubble('user', text);
+    input.value = '';
+    var typing = document.createElement('div'); typing.className = 'askats-typing';
+    typing.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Looking that up…';
+    list.appendChild(typing); list.scrollTop = list.scrollHeight;
+    var turns = history.filter(function (m) { return !m.err; }).slice(-12)
+      .map(function (m) { return {role: m.role, content: m.content}; });
+    fetch(panel.dataset.askUrl, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': form.querySelector('[name=csrfmiddlewaretoken]').value},
+      body: JSON.stringify({messages: turns, candidate_id: candId || null})
+    })
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(function (data) { return {text: data.reply || 'No answer.', err: !!data.error}; })
+      .catch(function () { return {text: 'Sorry - I could not reach the server. Please try again.', err: true}; })
+      .then(function (res) {
+        typing.remove();
+        history.push({role: 'assistant', content: res.text, err: res.err}); save(history);
+        bubble('assistant', res.text, res.err);
+        busy = false; send.disabled = false; input.focus();
+      });
+  }
+
+  fab.addEventListener('click', function () { setOpen(panel.hidden); });
+  document.getElementById('askats-close').addEventListener('click', function () { setOpen(false); });
+  document.getElementById('askats-clear').addEventListener('click', function () {
+    history = []; save(history); render(); input.focus();
+  });
+  form.addEventListener('submit', function (e) { e.preventDefault(); ask(input.value); });
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(input.value); }
+  });
+  try { if (sessionStorage.getItem(OPEN_KEY)) setOpen(true); } catch (e) {}
+})();
+</script>
