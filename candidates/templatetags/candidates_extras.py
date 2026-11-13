@@ -26,6 +26,32 @@ def score_badge_class(score):
 
 
 @register.filter
+def score_band(score):
+    """HR's band name for a match score (prompts.match_scoring.SCORE_BANDS):
+    85+ Strong Fit, 70+ Strong Potential - Minor Gaps, 55+ Potential -
+    Significant Gaps, 40+ Consider, below 40 Unfit."""
+    from prompts.match_scoring import SCORE_BANDS
+    if score is None:
+        return ''
+    return next(label for floor, label in SCORE_BANDS if score >= floor)
+
+
+FACTOR_LABELS = {
+    'core_function_experience': 'Core experience', 'domain_relevance': 'Domain',
+    'seniority_fit': 'Seniority', 'evidence_of_results': 'Results',
+    'education_and_skills': 'Education & skills',
+}
+
+
+@register.filter
+def score_factors(breakdown):
+    """[(label, 0-10 rating)] from a match breakdown's `factors`, in display
+    order - empty for scores made before factor ratings existed."""
+    factors = (breakdown or {}).get('factors') or {}
+    return [(label, factors[key]) for key, label in FACTOR_LABELS.items() if key in factors]
+
+
+@register.filter
 def score_tier(score):
     """Same strong/borderline/weak cutoffs as score_badge_class, named for the
     score-meter bar's colour classes (.score-fill-high/-mid/-low)."""

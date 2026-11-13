@@ -297,7 +297,7 @@
             <td data-order="{{ c.match_score|default_if_none:-1 }}">
               {% if c.match_score is not None %}
                 <div class="score-meter">
-                  <div class="score-meter-num"><strong>{{ c.match_score }}</strong><span class="text-muted">/100</span></div>
+                  <div class="score-meter-num" title="{{ c.match_score|score_band }}"><strong>{{ c.match_score }}</strong><span class="text-muted">/100</span></div>
                   <div class="score-meter-track"><div class="score-meter-fill score-fill-{{ c.match_score|score_tier }}"
                        style="width:{{ c.match_score }}%"></div></div>
                 </div>

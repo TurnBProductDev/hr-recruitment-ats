@@ -176,6 +176,7 @@
           <div class="d-flex align-items-baseline gap-2">
             <span class="match-score-num match-score-{{ candidate.match_score|score_tier }}">{{ candidate.match_score }}</span>
             <span class="text-muted">/ 100</span>
+            <span class="fw-semibold small text-uppercase match-score-{{ candidate.match_score|score_tier }}">{{ candidate.match_score|score_band }}</span>
           </div>
           {% if candidate.match_rationale %}<p class="pd-meta mt-2 mb-0 fst-italic">{{ candidate.match_rationale }}</p>{% endif %}
           {% else %}<p class="text-muted mb-0">Not scored yet.</p>{% endif %}

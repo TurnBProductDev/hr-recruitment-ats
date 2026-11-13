@@ -161,6 +161,12 @@ class Candidate(models.Model):
     is_on_hold = models.BooleanField(default=False)
     cv_summary = models.TextField('AI CV Summary', blank=True, null=True,
                                   help_text='Short AI-generated summary of the resume.')
+    # The resume's full text, read from the CV file itself (see
+    # candidates/cv_text.py) so Score Candidates judges the whole CV, not just
+    # the parsed fields/summary. cv_text_ref records which file it came from,
+    # so replacing the resume makes it re-read instead of scoring stale text.
+    cv_text = models.TextField('CV Text', blank=True, null=True)
+    cv_text_ref = models.CharField(max_length=1000, blank=True, default='')
 
     # 10 AI-generated Tele Screening call questions, based on the CV - see
     # candidates/screening_questions.py. Generated once (on first View/Generate

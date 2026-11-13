@@ -34,8 +34,11 @@ from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
 
+from . import cv_text
 from .models import ScoringCriteria
-from prompts.match_scoring import RESPONSE_JSON_SCHEMA, SYSTEM_PROMPT
+from prompts.match_scoring import (
+    CONSIDER_CEILING, FACTOR_KEYS, NO_CORE_EXPERIENCE_MAX_RATING, RESPONSE_JSON_SCHEMA, SYSTEM_PROMPT,
+)
 from prompts.store import render_prompt
 
 logger = logging.getLogger(__name__)
@@ -54,7 +57,9 @@ logger = logging.getLogger(__name__)
 # in _candidate_text() - both change what the model sees for the exact same
 # candidate/job pair, so old cached scores need invalidating too.
 CACHE_TIMEOUT = 60 * 60 * 24
-CACHE_PREFIX = 'match_scoring:v5:'
+# v6: full CV text in _candidate_text(), score bands + factor ratings in the
+# prompt/response (prompts/match_scoring.py).
+CACHE_PREFIX = 'match_scoring:v6:'
 
 class ScoreError(Exception):
     """Raised when a candidate could not be scored. Message is shown to HR."""
@@ -122,6 +127,16 @@ def _candidate_text(candidate):
     if candidate.cv_summary:
         parts.append(f'AI CV Summary:\n{candidate.cv_summary}')
 
+    # The whole resume, read from the CV file (see candidates/cv_text.py) -
+    # the primary evidence when available. A legacy SharePoint-only CV can't
+    # be read, so the model is told it's judging the parsed profile alone.
+    full_cv = cv_text.get_cv_text(candidate)
+    if full_cv:
+        parts.append(f'FULL CV TEXT:\n{full_cv}')
+    else:
+        parts.append('(Full CV text not available - judge from the parsed profile above, '
+                     'conservatively where it is thin.)')
+
     return '\n\n'.join(parts)
 
 
@@ -172,7 +187,7 @@ def score_candidate(candidate, job):
             {'role': 'user', 'content': user_content},
         ],
         'temperature': 0,
-        'max_tokens': 900,
+        'max_tokens': 1400,
         'response_format': {'type': 'json_schema', 'json_schema': RESPONSE_JSON_SCHEMA},
     }
     timeout = int(getattr(settings, 'SCORE_CANDIDATES_TIMEOUT', 60))
@@ -202,8 +217,19 @@ def score_candidate(candidate, job):
     except (TypeError, ValueError):
         score = 0
 
+    ratings = data.get('factor_ratings') or {}
+    # The model's 0-10 factor ratings (prompts/match_scoring.FACTOR_KEYS),
+    # kept so HR can see what the score was built from.
+    factors = {k: max(0, min(10, int(ratings[k]))) for k in FACTOR_KEYS
+               if isinstance(ratings.get(k), (int, float))}
+    # Safety net for the prompt's HARD RULE: no real core experience means
+    # Consider at best, even if the model's overall number drifted higher.
+    core = factors.get('core_function_experience')
+    if core is not None and core <= NO_CORE_EXPERIENCE_MAX_RATING:
+        score = min(score, CONSIDER_CEILING)
     result = {
         'score': score,
+        'factors': factors,
         'likes': [s[:300] for s in (data.get('likes') or []) if isinstance(s, str)][:8],
         'not_matched': [s[:300] for s in (data.get('not_matched') or []) if isinstance(s, str)][:8],
         'rationale': (data.get('rationale') or '').strip()[:1000] or None,
