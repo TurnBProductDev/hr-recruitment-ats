@@ -81,7 +81,11 @@ class ScoringUsesFullCvTests(TestCase):
     def _response(self, core=6, overall=72):
         body = {'factor_ratings': {'core_function_experience': core, 'domain_relevance': 5, 'seniority_fit': 7,
                                    'evidence_of_results': 7, 'education_and_skills': 8},
-                'likes': ['x'], 'not_matched': ['y'], 'overall_score': overall, 'rationale': 'r'}
+                'key_strengths': [{'heading': 'Proven sales performance',
+                                   'points': ['Exceeded quarterly targets at HDFC Bank']}],
+                'key_concerns': [{'title': 'B2B vs B2C sales', 'detail': 'Home loans are retail sales.'}],
+                'candidate_overview': 'Abhil has strong sales experience.\n\nHowever, B2B fit needs checking.',
+                'overall_score': overall, 'rationale': 'r'}
         resp = mock.Mock(status_code=200)
         resp.json.return_value = {'choices': [{'message': {'content': json.dumps(body)}}]}
         return resp
@@ -94,6 +98,9 @@ class ScoringUsesFullCvTests(TestCase):
         self.assertIn('FULL CV TEXT:\nWHOLE RESUME TEXT', user_msg)
         self.assertEqual(result['score'], 72)
         self.assertEqual(result['factors']['core_function_experience'], 6)
+        self.assertEqual(result['strengths'][0]['heading'], 'Proven sales performance')
+        self.assertEqual(result['concerns'][0]['title'], 'B2B vs B2C sales')
+        self.assertTrue(result['overview'].startswith('Abhil has strong sales experience.'))
 
     def test_missing_cv_is_flagged_to_the_model(self):
         with mock.patch.object(cv_text, 'get_cv_text', return_value=None), \
@@ -105,3 +112,56 @@ class ScoringUsesFullCvTests(TestCase):
         with mock.patch.object(cv_text, 'get_cv_text', return_value=None),              mock.patch('candidates.match_scoring.requests.post', return_value=self._response(core=3, overall=61)):
             result = match_scoring.score_candidate(self.candidate, self.job)
         self.assertEqual(result['score'], 54)
+
+
+class AssessmentDisplayTests(TestCase):
+    """Candidate Overview replaces the intake summary's own overview section;
+    the CV Score card shows Key Strengths / Key Concerns (old scores keep
+    Likes / Not Matched)."""
+
+    SUMMARY = ('### Candidate Overview\nGeneric overview text.\n\n'
+               '### Core Technical Competencies\n- SQL\n')
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        from django.contrib.auth.models import Group
+        from .permissions import HR_ADMIN
+        user = get_user_model().objects.create_user('hr', 'hr@example.com', 'pw')
+        user.groups.add(Group.objects.get_or_create(name=HR_ADMIN)[0])
+        self.client.force_login(user)
+        self.job = Job.objects.create(job_code='S1', title='Sales Associate')
+        self.candidate = Candidate.objects.create(full_name='Abhil', email='a@example.com', job=self.job,
+                                                  cv_summary=self.SUMMARY)
+
+    def _page(self):
+        from django.urls import reverse
+        return self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
+
+    def test_details_markdown_drops_only_the_overview_section(self):
+        details = self.candidate.cv_summary_details_markdown
+        self.assertNotIn('Generic overview text', details)
+        self.assertIn('Core Technical Competencies', details)
+
+    def test_new_score_shows_overview_strengths_and_concerns(self):
+        self.candidate.match_score = 72
+        self.candidate.match_breakdown = match_scoring.dump_breakdown({
+            'score': 72, 'overview': 'Abhil has strong sales experience.',
+            'strengths': [{'heading': 'Proven sales performance', 'points': ['Exceeded targets']}],
+            'concerns': [{'title': 'B2B vs B2C sales', 'detail': 'Retail loans.'}], 'rationale': 'r'})
+        self.candidate.save()
+        page = self._page()
+        self.assertContains(page, 'Abhil has strong sales experience.')
+        self.assertContains(page, 'Key Strengths')
+        self.assertContains(page, 'Proven sales performance')
+        self.assertContains(page, 'Key Concerns to Validate')
+        self.assertContains(page, 'B2B vs B2C sales')
+        self.assertNotContains(page, 'Generic overview text')
+
+    def test_old_score_keeps_likes_and_the_full_summary(self):
+        self.candidate.match_score = 65
+        self.candidate.match_breakdown = json.dumps({'score': 65, 'likes': ['Has an MBA'], 'not_matched': ['No B2B']})
+        self.candidate.save()
+        page = self._page()
+        self.assertContains(page, 'Has an MBA')
+        self.assertContains(page, 'Not Matched')
+        self.assertContains(page, 'Generic overview text')

@@ -1589,18 +1589,23 @@ class CandidateScreeningQuestionsView(GroupRequiredMixin, View):
 
     def get(self, request, pk):
         candidate = get_object_or_404(Candidate, pk=pk)
-        questions = screening_questions.load_questions(candidate.screening_questions)
+        # ?regenerate=1 (the popup's Regenerate button) replaces a stored
+        # guide - e.g. one made in the old 10-question format, or before the
+        # CV was re-scored with new Key Concerns.
+        guide = None if request.GET.get('regenerate') else screening_questions.load_questions(
+            candidate.screening_questions)
         error = None
-        if not questions:
+        if not guide:
             try:
-                questions = screening_questions.generate_questions(candidate)
+                guide = screening_questions.generate_questions(candidate)
             except screening_questions.ScreeningQuestionsError as exc:
                 error = str(exc)
+                guide = screening_questions.load_questions(candidate.screening_questions)
             else:
-                candidate.screening_questions = screening_questions.dump_questions(questions)
+                candidate.screening_questions = screening_questions.dump_questions(guide)
                 candidate.save(update_fields=['screening_questions', 'updated_at'])
         return render(request, 'candidates/_screening_questions.html',
-                     {'candidate': candidate, 'questions': questions, 'error': error})
+                     {'candidate': candidate, 'guide': guide, 'error': error})
 
 
 class CandidateStatusActionView(GroupRequiredMixin, View):

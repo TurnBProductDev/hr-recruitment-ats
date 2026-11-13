@@ -349,18 +349,28 @@ html { scroll-behavior: smooth; }
           <div class="card-head-row">
             <div class="section-eyebrow"><i class="bi bi-stars"></i> AI CV Summary</div>
           </div>
+          {% with overview=candidate.match_breakdown_parsed.overview %}
+          {% if overview %}
+            {% comment %}
+              Role-specific Candidate Overview written at CV scoring (candidates/match_scoring.py) -
+              replaces the generic "Candidate Overview" section of the intake summary below.
+            {% endcomment %}
+            <div class="pd-subhead mb-1">Candidate Overview</div>
+            <div class="pd-body cv-overview mb-3">{{ overview|linebreaks }}</div>
+          {% endif %}
           {% if candidate.cv_summary %}
             {% comment %}
               Markdown source, kept inert - marked.js + DOMPurify below render it into headings/table/bullets.
               Pre-markdown-prompt summaries are auto-split into sentence bullets by cv_summary_markdown.
             {% endcomment %}
-            <div id="cv-summary-raw" hidden>{{ candidate.cv_summary_markdown }}</div>
+            <div id="cv-summary-raw" hidden>{% if overview %}{{ candidate.cv_summary_details_markdown }}{% else %}{{ candidate.cv_summary_markdown }}{% endif %}</div>
             <div id="cv-summary-md" class="cv-summary-md">
-              <p class="mb-0" style="white-space: pre-line;">{{ candidate.cv_summary }}</p>
+              <p class="mb-0" style="white-space: pre-line;">{% if overview %}{{ candidate.cv_summary_details_markdown }}{% else %}{{ candidate.cv_summary }}{% endif %}</p>
             </div>
-          {% else %}
+          {% elif not overview %}
             <p class="text-muted mb-0">No AI summary yet — this is generated from the CV during careers intake.</p>
           {% endif %}
+          {% endwith %}
         </div>
       </div>
 
@@ -396,21 +406,42 @@ html { scroll-behavior: smooth; }
             </div>
             {% endif %}{% endwith %}
 
-            {% if b.likes %}
-            <div class="mb-1 mt-2">
-              <div class="pd-subhead text-accent-green">Likes</div>
-              <ul class="pd-body mb-0 ps-3">
-                {% for item in b.likes %}<li>{{ item }}</li>{% endfor %}
-              </ul>
-            </div>
-            {% endif %}
-            {% if b.not_matched %}
-            <div class="mb-1">
-              <div class="pd-subhead" style="color:#dc3545;">Not Matched</div>
-              <ul class="pd-body mb-0 ps-3">
-                {% for item in b.not_matched %}<li>{{ item }}</li>{% endfor %}
-              </ul>
-            </div>
+            {% if b.strengths or b.concerns %}
+              {% if b.strengths %}
+              <div class="mb-2 mt-3">
+                <div class="pd-subhead text-accent-green">Key Strengths</div>
+                {% for g in b.strengths %}
+                <div class="pd-body fw-semibold mt-2">{{ forloop.counter }}. {{ g.heading }}</div>
+                <ul class="pd-body mb-0 ps-3">{% for p in g.points %}<li>{{ p }}</li>{% endfor %}</ul>
+                {% endfor %}
+              </div>
+              {% endif %}
+              {% if b.concerns %}
+              <div class="mb-1 mt-3">
+                <div class="pd-subhead" style="color:#dc3545;">Key Concerns to Validate</div>
+                <ol class="pd-body mb-0 ps-3">
+                  {% for c in b.concerns %}<li class="mb-1"><strong>{{ c.title }}:</strong> {{ c.detail }}</li>{% endfor %}
+                </ol>
+              </div>
+              {% endif %}
+            {% else %}
+              {# Scored before Key Strengths/Concerns existed - re-score to upgrade. #}
+              {% if b.likes %}
+              <div class="mb-1 mt-2">
+                <div class="pd-subhead text-accent-green">Likes</div>
+                <ul class="pd-body mb-0 ps-3">
+                  {% for item in b.likes %}<li>{{ item }}</li>{% endfor %}
+                </ul>
+              </div>
+              {% endif %}
+              {% if b.not_matched %}
+              <div class="mb-1">
+                <div class="pd-subhead" style="color:#dc3545;">Not Matched</div>
+                <ul class="pd-body mb-0 ps-3">
+                  {% for item in b.not_matched %}<li>{{ item }}</li>{% endfor %}
+                </ul>
+              </div>
+              {% endif %}
             {% endif %}
             {% endwith %}
             {% if candidate.match_rationale %}<p class="pd-body text-muted fst-italic mt-3 mb-0">{{ candidate.match_rationale }}</p>{% endif %}
@@ -1241,6 +1272,16 @@ pollCandidateAction("{% url 'candidate_rescore_status' candidate.pk %}");
       .then(function (r) { return r.text(); })
       .then(function (html) { body.innerHTML = html; })
       .catch(function () { body.innerHTML = '<div class="alert alert-danger">Could not load questions. Please try again.</div>'; });
+  });
+  // Regenerate (inside the loaded guide): replace the stored guide with a fresh one.
+  body.addEventListener('click', function (event) {
+    var btn = event.target.closest('[data-regenerate-url]');
+    if (!btn) return;
+    body.innerHTML = '<div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm"></span> Regenerating…</div>';
+    fetch(btn.dataset.regenerateUrl, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+      .then(function (r) { return r.text(); })
+      .then(function (html) { body.innerHTML = html; })
+      .catch(function () { body.innerHTML = '<div class="alert alert-danger">Could not regenerate questions. Please try again.</div>'; });
   });
 })();
 

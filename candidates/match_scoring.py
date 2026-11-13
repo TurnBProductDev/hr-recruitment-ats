@@ -36,6 +36,7 @@ from django.utils import timezone
 
 from . import cv_text
 from .models import ScoringCriteria
+from prompts.company import COMPANY_CONTEXT
 from prompts.match_scoring import (
     CONSIDER_CEILING, FACTOR_KEYS, NO_CORE_EXPERIENCE_MAX_RATING, RESPONSE_JSON_SCHEMA, SYSTEM_PROMPT,
 )
@@ -59,7 +60,8 @@ logger = logging.getLogger(__name__)
 CACHE_TIMEOUT = 60 * 60 * 24
 # v6: full CV text in _candidate_text(), score bands + factor ratings in the
 # prompt/response (prompts/match_scoring.py).
-CACHE_PREFIX = 'match_scoring:v6:'
+# v7: Candidate Overview / Key Strengths / Key Concerns + company context.
+CACHE_PREFIX = 'match_scoring:v7:'
 
 class ScoreError(Exception):
     """Raised when a candidate could not be scored. Message is shown to HR."""
@@ -151,7 +153,8 @@ def _build_system_prompt(must_have, extra_criteria):
     today = timezone.localdate().strftime('%d %B %Y')
     return render_prompt(
         'match_scoring', SYSTEM_PROMPT,
-        must_have_block=must_have_block, extra_criteria_block=extra_criteria_block, today=today)
+        must_have_block=must_have_block, extra_criteria_block=extra_criteria_block, today=today,
+        company_context=COMPANY_CONTEXT)
 
 
 def build_cache_key(job_text, candidate_text, must_have, extra_criteria):
@@ -187,7 +190,7 @@ def score_candidate(candidate, job):
             {'role': 'user', 'content': user_content},
         ],
         'temperature': 0,
-        'max_tokens': 1400,
+        'max_tokens': 2500,
         'response_format': {'type': 'json_schema', 'json_schema': RESPONSE_JSON_SCHEMA},
     }
     timeout = int(getattr(settings, 'SCORE_CANDIDATES_TIMEOUT', 60))
@@ -230,8 +233,21 @@ def score_candidate(candidate, job):
     result = {
         'score': score,
         'factors': factors,
-        'likes': [s[:300] for s in (data.get('likes') or []) if isinstance(s, str)][:8],
-        'not_matched': [s[:300] for s in (data.get('not_matched') or []) if isinstance(s, str)][:8],
+        # Candidate Overview (shown at the top of the AI CV Summary), Key
+        # Strengths (themed groups) and Key Concerns (to validate on the
+        # call) - replaced likes/not_matched, which old breakdowns still carry.
+        'overview': (data.get('candidate_overview') or '').strip()[:2500] or None,
+        'strengths': [
+            {'heading': g['heading'].strip()[:120],
+             'points': [p.strip()[:300] for p in g.get('points') or [] if isinstance(p, str) and p.strip()][:6]}
+            for g in (data.get('key_strengths') or [])
+            if isinstance(g, dict) and isinstance(g.get('heading'), str) and g['heading'].strip()
+        ][:6],
+        'concerns': [
+            {'title': c['title'].strip()[:120], 'detail': (c.get('detail') or '').strip()[:500]}
+            for c in (data.get('key_concerns') or [])
+            if isinstance(c, dict) and isinstance(c.get('title'), str) and c['title'].strip()
+        ][:8],
         'rationale': (data.get('rationale') or '').strip()[:1000] or None,
     }
 
@@ -247,16 +263,21 @@ def dump_breakdown(result):
     if result is None:
         return None
     trimmed = dict(result)
+    # match_breakdown is an unbounded TextField; this cap only guards against
+    # a runaway response (the per-field caps in score_candidate keep a normal
+    # one well under it).
+    limit = 16000
     try:
         text = json.dumps(trimmed)
-        if len(text) <= 4000:
+        if len(text) <= limit:
             return text
-        trimmed['not_matched'] = trimmed.get('not_matched', [])[:4]
-        trimmed['likes'] = trimmed.get('likes', [])[:4]
+        for key in ('strengths', 'concerns', 'likes', 'not_matched'):
+            if key in trimmed:
+                trimmed[key] = trimmed[key][:4]
         text = json.dumps(trimmed)
-        if len(text) <= 4000:
+        if len(text) <= limit:
             return text
         trimmed.pop('rationale', None)
-        return json.dumps(trimmed)[:4000]
+        return json.dumps(trimmed)[:limit]
     except (TypeError, ValueError):
         return None

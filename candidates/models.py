@@ -280,6 +280,16 @@ class Candidate(models.Model):
             return text
         return '\n'.join(f'- {s}' for s in sentences)
 
+    @property
+    def cv_summary_details_markdown(self):
+        """cv_summary_markdown minus its own generic "Candidate Overview"
+        section - shown instead of the full summary once CV scoring has
+        written a role-specific Candidate Overview (match_breakdown
+        'overview'), so the profile page doesn't show two overviews."""
+        text = self.cv_summary_markdown
+        stripped = re.sub(r'(?ims)^#{1,6}\s*candidate overview\s*$.*?(?=^#{1,6}\s|\Z)', '', text).strip()
+        return stripped or text
+
 
 # A hold taken at the Open stage is what this app has always called a
 # "Screening Hold"; every other stage simply names itself.

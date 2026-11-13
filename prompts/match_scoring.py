@@ -65,28 +65,48 @@ RESPONSE_JSON_SCHEMA = {
                 'required': list(FACTOR_KEYS),
                 'additionalProperties': False,
             },
-            'likes': {
+            'key_strengths': {
                 'type': 'array',
-                'items': {'type': 'string'},
-                'description': 'Specific, evidence-grounded reasons this candidate fits - what they have '
-                               'actually done, not skills merely mentioned.',
+                'description': '2-5 themed groups of evidence-grounded strengths for this role.',
+                'items': {
+                    'type': 'object',
+                    'properties': {
+                        'heading': {'type': 'string'},
+                        'points': {'type': 'array', 'items': {'type': 'string'}},
+                    },
+                    'required': ['heading', 'points'],
+                    'additionalProperties': False,
+                },
             },
-            'not_matched': {
+            'key_concerns': {
                 'type': 'array',
-                'items': {'type': 'string'},
-                'description': 'Specific, genuine gaps against what this role needs - each one should say '
-                               'why it matters for the role, not just name a missing keyword.',
+                'description': '3-6 specific concerns or gaps for HR to validate on the screening call.',
+                'items': {
+                    'type': 'object',
+                    'properties': {
+                        'title': {'type': 'string'},
+                        'detail': {'type': 'string'},
+                    },
+                    'required': ['title', 'detail'],
+                    'additionalProperties': False,
+                },
             },
             'overall_score': {
                 'type': 'integer',
                 'description': 'Exact 0-100 score inside the right band. Not rounded to 5 or 10.',
+            },
+            'candidate_overview': {
+                'type': 'string',
+                'description': '2-3 short paragraphs (separated by a blank line): a recruiter\'s overview of '
+                               'this candidate for this role at this company.',
             },
             'rationale': {
                 'type': 'string',
                 'description': '2-4 sentences: the overall read and a shortlist recommendation.',
             },
         },
-        'required': ['factor_ratings', 'likes', 'not_matched', 'overall_score', 'rationale'],
+        'required': ['factor_ratings', 'key_strengths', 'key_concerns', 'overall_score',
+                     'candidate_overview', 'rationale'],
         'additionalProperties': False,
     },
 }
@@ -99,6 +119,7 @@ SYSTEM_PROMPT = (
     "whose year is on or before today's year is already completed (not \"currently pursuing\"), and a job "
     "with no end date (\"Present\") means the candidate holds it right now, as of today. Never call a "
     "finished degree or a current job \"upcoming\"/\"in progress\" just because its year looks recent.\n\n"
+    "{company_context}\n\n"
     "The candidate profile has parsed fields and, when available, the FULL CV TEXT. The full CV is your "
     "primary evidence - the parsed fields and AI summary are a convenience and can contain extraction "
     "errors or omissions. Read the whole CV: responsibilities, achievements, numbers and dates.\n\n"
@@ -132,7 +153,7 @@ SYSTEM_PROMPT = (
     "- seniority_fit: whether their level and total professional tenure match what the role needs.\n"
     "- evidence_of_results: concrete, preferably quantified outcomes (targets met, revenue, growth, delivery).\n"
     "- education_and_skills: required qualifications, and skills they have actually demonstrated.\n\n"
-    "Step 2 - likes and not_matched: the evidence behind those ratings.\n\n"
+    "Step 2 - key_strengths and key_concerns: the evidence behind those ratings (format below).\n\n"
     "Step 3 - overall_score, using these bands exactly:\n"
     "- 85-100 Strong Fit: has done this role's core work convincingly and meets the must-haves - could "
     "perform well from day one.\n"
@@ -151,10 +172,28 @@ SYSTEM_PROMPT = (
     "that band. Give the exact integer - do NOT round to a multiple of 5 or 10 (68, 73 and 81 are normal "
     "scores). Two candidates should get the same score only if they are genuinely equally strong.\n\n"
     "Output:\n"
-    "- likes: 3-8 specific, evidence-grounded reasons this candidate fits - cite what they actually did, not "
-    "a skill they merely listed.\n"
-    "- not_matched: 3-8 specific gaps - each one should explain briefly why it matters for this role, not "
-    "just name something missing. Say plainly which gaps are significant.\n"
+    "- key_strengths: 2-5 themed groups, each a short heading (e.g. \"Proven sales performance\", "
+    "\"Direct sales and business development\", \"Strong analytical capabilities\", \"Management and "
+    "stakeholder engagement\") with 2-5 points. Each point is concrete evidence from the CV - name the "
+    "company, the numbers and the outcome (e.g. \"Achieved Rs 20 crore+ loan disbursement at HDFC Bank\", "
+    "\"Exceeded quarterly sales targets\"), not a skill merely listed. Only strengths that matter for this "
+    "role. For a thin profile, use fewer groups rather than padding.\n"
+    "- key_concerns: 3-6 concerns to validate on the screening call, most important first. title = a "
+    "short label (e.g. \"B2B vs B2C sales\", \"Technology-services sales\", \"Current role alignment\", "
+    "\"Experience mismatch\", \"Employment chronology\", \"Demo generation vs actual sales\", \"Career "
+    "objective mismatch\"); detail = 1-2 sentences saying exactly what is unclear or missing in this CV and "
+    "what HR should confirm. Look for: whether the core work was really done (and B2B vs B2C, individual vs "
+    "team achievement), domain fit for this company, level/seniority mismatch (overqualified people "
+    "stepping down as well as under-experienced ones), unexplained dates, gaps or overlaps (e.g. a degree "
+    "running alongside full-time work), a recent exit, and any stated career objective pointing elsewhere. "
+    "Say plainly which concerns are significant.\n"
+    "- candidate_overview: 2-3 short paragraphs separated by a blank line, in a recruiter's voice, written "
+    "about the candidate by first name for this role at this company. Paragraph 1: who they are for this "
+    "role - their strongest relevant experience, with the evidence that proves it. Then any specific "
+    "advantage for this company (e.g. \"His SQL, Power BI and Excel skills are additional advantages for "
+    "understanding TurnB's Analytics and AI offerings\"). Last paragraph starts with \"However,\" and names "
+    "the main reservation that needs assessing. Be honest: if the CV is positioned towards a different kind "
+    "of role, say so directly.\n"
     "- rationale: 2-4 sentences giving the overall read and a shortlist recommendation, in the tone of a "
     "recruiter's honest note to a hiring manager. It must agree with the band you chose: if there are "
     "significant gaps, say \"significant gaps\" plainly; never call gaps minor when the score is below 70, "

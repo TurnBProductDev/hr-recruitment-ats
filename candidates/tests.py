@@ -2129,14 +2129,20 @@ class ScreeningQuestionsGenerationTests(TestCase):
         with override_settings(AZURE_OPENAI_ENDPOINT='', AZURE_OPENAI_KEY=''):
             self.assertFalse(screening_questions.is_configured())
 
-    def test_returns_ten_questions(self):
-        body = {'choices': [{'message': {'content': json.dumps(
-            {'questions': [f'Question {i}?' for i in range(1, 11)]})}}]}
+    def test_returns_a_sectioned_guide(self):
+        guide = {'sections': [{'title': f'Section {n}', 'questions': [f'Question {n}.{i}?' for i in range(1, 6)]}
+                          for n in range(1, 5)],
+             'role_play': {'scenario': 'You are approaching a CFO.', 'client_challenges': ['Poor forecasting'],
+                           'ask_candidate_to': ['Handle an objection']},
+             'must_ask': ['Question 1.1?', 'Question 2.1?']}
+        body = {'choices': [{'message': {'content': json.dumps(guide)}}]}
         with mock.patch('candidates.screening_questions.requests.post',
                         return_value=self._response(json_body=body)):
             result = screening_questions.generate_questions(self._candidate())
-        self.assertEqual(len(result), 10)
-        self.assertEqual(result[0], 'Question 1?')
+        self.assertEqual(len(result['sections']), 4)
+        self.assertEqual(result['sections'][0]['questions'][0], 'Question 1.1?')
+        self.assertEqual(result['must_ask'], ['Question 1.1?', 'Question 2.1?'])
+        self.assertEqual(result['role_play']['scenario'], 'You are approaching a CFO.')
 
     def test_http_error_is_reported(self):
         with mock.patch('candidates.screening_questions.requests.post',
@@ -2156,14 +2162,19 @@ class ScreeningQuestionsGenerationTests(TestCase):
                 screening_questions.generate_questions(self._candidate())
 
     def test_dump_and_load_round_trip(self):
-        questions = ['Q1?', 'Q2?']
-        text = screening_questions.dump_questions(questions)
-        self.assertEqual(screening_questions.load_questions(text), questions)
+        guide = {'must_ask': ['Q1?'], 'sections': [{'title': 'Current role', 'questions': ['Q1?', 'Q2?']}],
+                 'role_play': None}
+        text = screening_questions.dump_questions(guide)
+        self.assertEqual(screening_questions.load_questions(text), guide)
+
+    def test_old_flat_list_still_loads_as_one_untitled_section(self):
+        guide = screening_questions.load_questions(json.dumps(['Q1?', 'Q2?']))
+        self.assertEqual(guide['sections'], [{'title': '', 'questions': ['Q1?', 'Q2?']}])
 
     def test_load_questions_handles_blank_and_junk(self):
-        self.assertEqual(screening_questions.load_questions(None), [])
-        self.assertEqual(screening_questions.load_questions(''), [])
-        self.assertEqual(screening_questions.load_questions('not json'), [])
+        self.assertIsNone(screening_questions.load_questions(None))
+        self.assertIsNone(screening_questions.load_questions(''))
+        self.assertIsNone(screening_questions.load_questions('not json'))
 
     def test_profile_text_uses_full_work_and_education_history_when_present(self):
         # Two candidates sharing the same flat qualification/last_role/skills
@@ -2223,8 +2234,12 @@ class ScreeningQuestionsViewTests(TestCase):
         services.change_status(self.candidate, Candidate.Status.SHORTLISTED)
 
     def _mock_response(self):
-        body = {'choices': [{'message': {'content': json.dumps(
-            {'questions': [f'Question {i}?' for i in range(1, 11)]})}}]}
+        guide = {'sections': [{'title': f'Section {n}', 'questions': [f'Question {n}.{i}?' for i in range(1, 6)]}
+                          for n in range(1, 5)],
+             'role_play': {'scenario': 'You are approaching a CFO.', 'client_challenges': ['Poor forecasting'],
+                           'ask_candidate_to': ['Handle an objection']},
+             'must_ask': ['Question 1.1?', 'Question 2.1?']}
+        body = {'choices': [{'message': {'content': json.dumps(guide)}}]}
         response = mock.Mock(status_code=200, text='')
         response.json.return_value = body
         return response
@@ -2234,10 +2249,23 @@ class ScreeningQuestionsViewTests(TestCase):
                         return_value=self._mock_response()) as post:
             response = self.client.get(reverse('candidate_screening_questions', args=[self.candidate.pk]))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Question 1?')
+        self.assertContains(response, 'Question 1.1?')
+        self.assertContains(response, 'Practical role-play')
         post.assert_called_once()
         self.candidate.refresh_from_db()
-        self.assertEqual(screening_questions.load_questions(self.candidate.screening_questions)[0], 'Question 1?')
+        guide = screening_questions.load_questions(self.candidate.screening_questions)
+        self.assertEqual(guide['sections'][0]['questions'][0], 'Question 1.1?')
+
+    def test_regenerate_replaces_the_stored_guide(self):
+        self.candidate.screening_questions = screening_questions.dump_questions(['Old question?'])
+        self.candidate.save(update_fields=['screening_questions'])
+        with mock.patch('candidates.screening_questions.requests.post',
+                        return_value=self._mock_response()) as post:
+            response = self.client.get(
+                reverse('candidate_screening_questions', args=[self.candidate.pk]) + '?regenerate=1')
+        post.assert_called_once()
+        self.assertContains(response, 'Question 1.1?')
+        self.assertNotContains(response, 'Old question?')
 
     def test_second_view_does_not_regenerate(self):
         self.candidate.screening_questions = screening_questions.dump_questions(['Already there?'])

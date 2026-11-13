@@ -1,8 +1,11 @@
-"""10 AI-generated Tele Screening call questions, based on a candidate's CV -
-generated once (Candidate.screening_questions stays blank until the first
-View/Generate click) and reused after that, so the same 10 questions are
-still there for an interviewer to refer back to even after the candidate has
-moved past Tele Screening. See candidates/views.py::CandidateScreeningQuestionsView.
+"""AI-generated Tele Screening call guide for a candidate - 4 themed sections
+of tailored questions, a practical role-play and a 5-question "must ask"
+shortlist (see prompts/screening_questions.py), built from the full CV, the
+vacancy's JD and the CV Score's Key Concerns. Generated once
+(Candidate.screening_questions stays blank until the first View/Generate
+click) and reused after that, so it's still there to refer back to after the
+candidate moves past Tele Screening; HR can Regenerate it. See
+candidates/views.py::CandidateScreeningQuestionsView.
 
 Direct Azure OpenAI call, same resource as candidates/match_scoring.py -
 no caching layer here, since the result is persisted on the candidate row
@@ -14,12 +17,17 @@ import logging
 import requests
 from django.conf import settings
 
+from . import cv_text
+
 from prompts import screening_questions as prompts
+from prompts.company import COMPANY_CONTEXT
 from prompts.store import render_prompt
 
 logger = logging.getLogger(__name__)
 
-QUESTION_COUNT = 10
+# Approximate total across the 4 sections (the must-ask 5 and the role-play
+# come on top) - see prompts/screening_questions.py.
+QUESTION_COUNT = 20
 
 RESPONSE_JSON_SCHEMA = prompts.response_json_schema(QUESTION_COUNT)
 # A template default (the {question_count} token left literal, not baked in)
@@ -92,27 +100,45 @@ def _profile_text(candidate):
         parts.append(f'Total experience: {candidate.total_experience_years} years')
     if candidate.cv_summary:
         parts.append(f'AI CV Summary:\n{candidate.cv_summary}')
+
+    job = candidate.job
+    if job and (job.description or job.requirements):
+        jd = '\n\n'.join(t for t in (job.description, job.requirements) if t)
+        parts.append(f'Vacancy job description:\n{jd}')
+
+    # Concerns flagged when the CV was scored (candidates/match_scoring.py) -
+    # the guide should validate each of these on the call.
+    concerns = (candidate.match_breakdown_parsed or {}).get('concerns') or []
+    if concerns:
+        lines = [f"- {c.get('title')}: {c.get('detail')}" for c in concerns if c.get('title')]
+        parts.append('Key concerns flagged at CV scoring (validate these):\n' + '\n'.join(lines))
+
+    full_cv = cv_text.get_cv_text(candidate)
+    if full_cv:
+        parts.append(f'FULL CV TEXT:\n{full_cv}')
     return '\n\n'.join(parts)
 
 
 def generate_questions(candidate):
-    """Call Azure OpenAI for QUESTION_COUNT tele-screening questions based on
-    this candidate's profile. Raises ScreeningQuestionsError with a message
-    fit for the results screen; never raises anything else. Does not save -
-    the caller persists the result onto Candidate.screening_questions."""
+    """Call Azure OpenAI for this candidate's Tele Screening guide. Returns
+    {'must_ask': [...], 'sections': [{'title', 'questions'}], 'role_play':
+    {...} or None}. Raises ScreeningQuestionsError with a message fit for the
+    results screen; never raises anything else. Does not save - the caller
+    persists the result onto Candidate.screening_questions (dump_questions)."""
     if not is_configured():
         raise ScreeningQuestionsError(
             'Question generation is not configured - set AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_KEY.')
 
     system_prompt = render_prompt(
-        'screening_questions', _DEFAULT_SYSTEM_PROMPT_TEMPLATE, question_count=QUESTION_COUNT)
+        'screening_questions', _DEFAULT_SYSTEM_PROMPT_TEMPLATE,
+        question_count=QUESTION_COUNT, company_context=COMPANY_CONTEXT)
     payload = {
         'messages': [
             {'role': 'system', 'content': system_prompt},
             {'role': 'user', 'content': _profile_text(candidate)},
         ],
         'temperature': 0.3,
-        'max_tokens': 900,
+        'max_tokens': 3000,
         'response_format': {'type': 'json_schema', 'json_schema': RESPONSE_JSON_SCHEMA},
     }
     timeout = int(getattr(settings, 'SCORE_CANDIDATES_TIMEOUT', 60))
@@ -133,30 +159,60 @@ def generate_questions(candidate):
 
     try:
         content = response.json()['choices'][0]['message']['content']
-        data = json.loads(content)
-        questions = [q.strip() for q in data['questions'] if isinstance(q, str) and q.strip()]
+        guide = _normalise(json.loads(content))
     except (ValueError, KeyError, IndexError, TypeError):
         raise ScreeningQuestionsError('Azure OpenAI returned an unexpected response shape.')
 
-    if not questions:
+    if not guide['sections']:
         raise ScreeningQuestionsError('Azure OpenAI returned no usable questions.')
-    return questions[:QUESTION_COUNT]
+    return guide
 
 
-def dump_questions(questions):
+def _strings(items, limit, cap=400):
+    return [s.strip()[:cap] for s in (items or []) if isinstance(s, str) and s.strip()][:limit]
+
+
+def _normalise(data):
+    """The guide in its stored/displayed shape, from the model's JSON or a
+    stored copy - anything malformed just drops out. A stored plain list (the
+    old 10-question format) becomes one untitled section, so questions
+    generated before this change still display."""
+    if isinstance(data, list):
+        questions = _strings(data, 30)
+        return {'must_ask': [], 'sections': [{'title': '', 'questions': questions}] if questions else [],
+                'role_play': None}
+    if not isinstance(data, dict):
+        raise TypeError('guide must be a dict or list')
+    sections = []
+    for sec in data.get('sections') or []:
+        if isinstance(sec, dict):
+            questions = _strings(sec.get('questions'), 10)
+            if questions:
+                sections.append({'title': str(sec.get('title') or '').strip()[:120], 'questions': questions})
+    role_play = None
+    rp = data.get('role_play')
+    if isinstance(rp, dict) and isinstance(rp.get('scenario'), str) and rp['scenario'].strip():
+        role_play = {'scenario': rp['scenario'].strip()[:600],
+                     'client_challenges': _strings(rp.get('client_challenges'), 6),
+                     'ask_candidate_to': _strings(rp.get('ask_candidate_to'), 6)}
+    return {'must_ask': _strings(data.get('must_ask'), 5), 'sections': sections[:6], 'role_play': role_play}
+
+
+def dump_questions(guide):
     """JSON text for Candidate.screening_questions (never raises)."""
     try:
-        return json.dumps(questions)
+        return json.dumps(guide)
     except (TypeError, ValueError):
         return None
 
 
 def load_questions(text):
-    """Questions back out of Candidate.screening_questions (never raises)."""
+    """The stored guide, normalised (see _normalise), or None if there's
+    nothing usable stored. Never raises."""
     if not text:
-        return []
+        return None
     try:
-        data = json.loads(text)
-    except ValueError:
-        return []
-    return data if isinstance(data, list) else []
+        guide = _normalise(json.loads(text))
+    except (ValueError, TypeError):
+        return None
+    return guide if guide['sections'] else None

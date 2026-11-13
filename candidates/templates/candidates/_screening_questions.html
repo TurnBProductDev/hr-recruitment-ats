@@ -1,9 +1,53 @@
-{% if error %}
-<div class="alert alert-danger mb-0">{{ error }}</div>
-{% elif questions %}
-<ol class="ps-3 mb-0">
-  {% for q in questions %}<li class="mb-2">{{ q }}</li>{% endfor %}
-</ol>
-{% else %}
-<p class="text-muted mb-0">No questions available.</p>
+{% comment %}
+  Tele Screening call guide (candidates/screening_questions.py): must-ask
+  shortlist, 4 themed sections, a role-play. A guide stored in the old flat
+  10-question format shows as one untitled section.
+{% endcomment %}
+<style>
+.sq-must { background: var(--bg-hover); border: 1px solid var(--border-color); border-left: 3px solid var(--primary-green); border-radius: 8px; padding: 12px 16px; margin-bottom: 18px; }
+.sq-h { font-size: .74rem; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--text-muted); margin: 0 0 8px; }
+.sq-sec { margin-bottom: 18px; }
+.sq-sec-title { font-weight: 700; font-size: .95rem; margin-bottom: 6px; }
+.sq-rp { border: 1px dashed var(--border-color); border-radius: 8px; padding: 12px 16px; }
+.sq-list li { margin-bottom: 6px; }
+</style>
+{% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+{% if guide %}
+  {% if guide.must_ask %}
+  <div class="sq-must">
+    <div class="sq-h"><i class="bi bi-star-fill"></i> Must ask (if time is short)</div>
+    <ol class="ps-3 mb-0 sq-list">{% for q in guide.must_ask %}<li>{{ q }}</li>{% endfor %}</ol>
+  </div>
+  {% endif %}
+
+  {% for sec in guide.sections %}
+  <div class="sq-sec">
+    {% if sec.title %}<div class="sq-sec-title">{% if guide.sections|length > 1 %}{% cycle 'A' 'B' 'C' 'D' 'E' 'F' %}. {% endif %}{{ sec.title }}</div>{% endif %}
+    <ol class="ps-3 mb-0 sq-list">{% for q in sec.questions %}<li>{{ q }}</li>{% endfor %}</ol>
+  </div>
+  {% endfor %}
+
+  {% if guide.role_play %}
+  <div class="sq-rp">
+    <div class="sq-sec-title">Practical role-play</div>
+    <p class="mb-2">{{ guide.role_play.scenario }}</p>
+    {% if guide.role_play.client_challenges %}
+    <div class="sq-h">The client faces</div>
+    <ul class="ps-3 mb-2 sq-list">{% for c in guide.role_play.client_challenges %}<li>{{ c }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% if guide.role_play.ask_candidate_to %}
+    <div class="sq-h">Ask the candidate to</div>
+    <ul class="ps-3 mb-0 sq-list">{% for c in guide.role_play.ask_candidate_to %}<li>{{ c }}</li>{% endfor %}</ul>
+    {% endif %}
+  </div>
+  {% endif %}
+{% elif not error %}
+  <p class="text-muted mb-0">No questions available.</p>
 {% endif %}
+
+<div class="d-flex justify-content-end mt-3">
+  <button type="button" class="btn btn-sm btn-outline-app"
+          data-regenerate-url="{% url 'candidate_screening_questions' candidate.pk %}?regenerate=1">
+    <i class="bi bi-arrow-repeat"></i> Regenerate
+  </button>
+</div>
