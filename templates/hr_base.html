@@ -112,6 +112,9 @@
     </div>
 
     <div class="app-nav-right">
+      {% if user.is_authenticated and not is_interviewer_portal %}{% if is_hr_admin or is_recruiter or is_hiring_manager %}
+        {% include "chatbot/_nav_button.html" %}
+      {% endif %}{% endif %}
       <button type="button" class="app-theme-toggle" id="themeToggleBtn" aria-label="Switch between light and dark mode" title="Switch between light and dark mode">
         <i class="bi bi-sun-fill"></i><i class="bi bi-moon-stars-fill"></i>
       </button>
