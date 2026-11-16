@@ -1,6 +1,9 @@
 {% comment %}
-  "Ask the ATS" chat panel + script (chatbot/ app). It opens from the robot
-  button in the top bar (chatbot/_nav_button.html) and drops down beneath it.
+  "Ask the ATS" chat pop-up + script (chatbot/ app). The robot icon in the top
+  bar (chatbot/_nav_button.html) opens it as a centred pop-up over a blurred
+  page. Minimise hides it and leaves a floating robot (bottom-right) that
+  brings it back; Close shuts it. After moving to another page an open chat
+  comes back minimised, so the new page isn't covered.
   Included by hr_base.html for HR Admin / Recruiter / Hiring Manager only. The conversation lives in
   this browser tab's sessionStorage (kept while moving between pages, gone
   when the tab closes) and the recent turns are sent with each question - the
@@ -9,13 +12,41 @@
 {% endcomment %}
 <style>
 .askats-head-bot { width: 28px; height: 28px; flex: 0 0 28px; }
+/* Blurred page behind the open pop-up. */
+#askats-backdrop {
+  position: fixed; inset: 0; z-index: 1079; background: rgba(16, 32, 30, .28);
+  -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px); animation: askats-fade .18s ease;
+}
+#askats-backdrop[hidden] { display: none; }
 #askats-panel {
-  position: fixed; right: 16px; top: 72px; z-index: 1081; width: 400px; max-width: calc(100vw - 32px);
-  height: 580px; max-height: calc(100vh - 90px); background: var(--bg-surface); color: var(--text-primary);
-  border: 1px solid var(--border-color); border-radius: 14px; box-shadow: 0 18px 48px rgba(0,0,0,.25);
-  display: flex; flex-direction: column; overflow: hidden;
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 1081;
+  width: 720px; max-width: calc(100vw - 32px); height: 640px; max-height: calc(100vh - 48px);
+  background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border-color);
+  border-radius: 16px; box-shadow: 0 24px 64px rgba(0,0,0,.32);
+  display: flex; flex-direction: column; overflow: hidden; animation: askats-pop .2s ease;
 }
 #askats-panel[hidden] { display: none; }
+@keyframes askats-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes askats-pop { from { opacity: 0; transform: translate(-50%, -46%) scale(.97); } to { opacity: 1; transform: translate(-50%, -50%); } }
+/* Minimised: a floating robot that brings the pop-up back. */
+#askats-mini {
+  position: fixed; right: 20px; bottom: 18px; z-index: 1080; width: 64px; height: 70px; padding: 0;
+  border: none; background: none; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+#askats-mini[hidden] { display: none; }
+#askats-mini svg { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 6px 10px rgba(0,0,0,.22)); }
+#askats-mini .bot { animation: askats-bob 3.2s ease-in-out infinite; transform-origin: 60px 70px; }
+#askats-mini .eye { transform-box: fill-box; transform-origin: center; animation: askats-blink 4.5s infinite; }
+#askats-mini:hover .bot { animation-duration: 1.4s; }
+#askats-mini:focus-visible { outline: 3px solid var(--primary-green, #0e6f6b); outline-offset: 2px; border-radius: 14px; }
+/* Green dot = an answer arrived while minimised. */
+#askats-mini .dot { display: none; position: absolute; top: 2px; right: 4px; width: 14px; height: 14px; border-radius: 50%;
+  background: #0e8c74; border: 2px solid #fff; }
+#askats-mini.unread .dot { display: block; }
+@media (prefers-reduced-motion: reduce) {
+  #askats-panel, #askats-backdrop { animation: none; }
+  #askats-mini .bot, #askats-mini .eye { animation: none; }
+}
 .askats-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; background: var(--primary-green, #0e6f6b); color: #fff; }
 .askats-head .t { font-weight: 700; flex: 1; }
 .askats-head button { background: none; border: none; color: #fff; opacity: .85; font-size: 1rem; padding: 2px 6px; cursor: pointer; }
@@ -42,7 +73,27 @@
 .askats-foot { font-size: .64rem; color: var(--text-muted); text-align: center; padding: 0 10px 8px; }
 </style>
 
-<div id="askats-panel" role="dialog" aria-label="Ask the ATS" hidden
+<div id="askats-backdrop" hidden></div>
+<button type="button" id="askats-mini" hidden aria-label="Ask the ATS - reopen the chat" title="Ask the ATS (minimised)">
+  <svg viewBox="8 4 104 120" aria-hidden="true" focusable="false">
+    <g class="bot">
+      <ellipse cx="22" cy="80" rx="8" ry="15" transform="rotate(-12 22 80)" fill="#8e999e"/>
+      <ellipse cx="99" cy="50" rx="9" ry="16" transform="rotate(32 99 50)" fill="#8e999e"/>
+      <rect x="58.5" y="20" width="3" height="8" rx="1.5" fill="#8e999e"/>
+      <circle cx="60" cy="17" r="6.5" fill="#0e8c74"/>
+      <ellipse cx="60" cy="72" rx="42" ry="46" fill="#c3c9ce"/>
+      <rect x="30" y="44" width="60" height="30" rx="15" fill="#2e3538"/>
+      <path class="eye" d="M40 61 q5 -7 10 0" stroke="#4fdcc4" stroke-width="3" fill="none" stroke-linecap="round"/>
+      <path class="eye" d="M70 61 q5 -7 10 0" stroke="#4fdcc4" stroke-width="3" fill="none" stroke-linecap="round"/>
+      <path d="M55 66 q5 4 10 0" stroke="#4fdcc4" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+      <circle cx="36" cy="85" r="4.5" fill="#97bdb9"/>
+      <circle cx="84" cy="85" r="4.5" fill="#97bdb9"/>
+      <rect x="51" y="96" width="18" height="3.5" rx="1.75" fill="#0e8c74"/>
+    </g>
+  </svg>
+  <span class="dot" aria-hidden="true"></span>
+</button>
+<div id="askats-panel" role="dialog" aria-modal="true" aria-label="Ask the ATS" hidden
      data-ask-url="{% url 'chatbot_ask' %}"
      data-candidate-id="{% if request.resolver_match.url_name == 'candidate_timeline' %}{{ candidate.pk|default:'' }}{% endif %}"
      data-candidate-name="{% if request.resolver_match.url_name == 'candidate_timeline' %}{{ candidate.full_name|default:'' }}{% endif %}">
@@ -55,8 +106,9 @@
       <path d="M55 66 q5 4 10 0" stroke="#4fdcc4" stroke-width="3" fill="none" stroke-linecap="round"/>
     </svg>
     <span class="t">Ask the ATS</span>
-    <button type="button" id="askats-clear" title="New conversation"><i class="bi bi-arrow-counterclockwise"></i></button>
-    <button type="button" id="askats-close" title="Close"><i class="bi bi-x-lg"></i></button>
+    <button type="button" id="askats-clear" title="New conversation" aria-label="New conversation"><i class="bi bi-arrow-counterclockwise"></i></button>
+    <button type="button" id="askats-min" title="Minimise" aria-label="Minimise"><i class="bi bi-dash-lg"></i></button>
+    <button type="button" id="askats-close" title="Close" aria-label="Close"><i class="bi bi-x-lg"></i></button>
   </div>
   <div class="askats-msgs" id="askats-msgs"></div>
   <form class="askats-form" id="askats-form">
@@ -120,29 +172,32 @@
     if (!history.length) { welcome(); return; }
     history.forEach(function (m) { bubble(m.role, m.content, m.err); });
   }
-  // Drop the panel down beneath the top-bar button, right-aligned to it and
-  // kept inside the window.
-  var EDGE = 8;
-  function placePanel() {
-    var r = fab.getBoundingClientRect(), pw = panel.offsetWidth;
-    var top = Math.max(EDGE, r.bottom + 10);
-    var left = Math.min(Math.max(EDGE, r.right - pw), window.innerWidth - pw - EDGE);
-    panel.style.top = top + 'px'; panel.style.left = left + 'px'; panel.style.right = 'auto';
-    panel.style.maxHeight = (window.innerHeight - top - EDGE) + 'px';
+  // Three states: 'open' (centred pop-up over a blurred page), 'min'
+  // (hidden, floating robot shown to bring it back) and 'closed'.
+  var backdrop = document.getElementById('askats-backdrop'), mini = document.getElementById('askats-mini');
+  var state = 'closed';
+  function setState(next) {
+    var opening = next === 'open' && state !== 'open';
+    state = next;
+    panel.hidden = backdrop.hidden = next !== 'open';
+    mini.hidden = next !== 'min';
+    fab.setAttribute('aria-expanded', next === 'open' ? 'true' : 'false');
+    document.body.style.overflow = next === 'open' ? 'hidden' : '';   // no page scroll behind the pop-up
+    try { sessionStorage.setItem(OPEN_KEY, next === 'closed' ? '' : next); } catch (e) {}
+    if (opening) { mini.classList.remove('unread'); render(); input.focus(); }
   }
-  window.addEventListener('resize', function () { if (!panel.hidden) placePanel(); });
-  // Close on Escape, or a click outside the panel and the button.
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !panel.hidden) setOpen(false); });
-  document.addEventListener('mousedown', function (e) {
-    if (!panel.hidden && !panel.contains(e.target) && !fab.contains(e.target)) setOpen(false);
-  });
+  function setOpen(open) { setState(open ? 'open' : 'closed'); }   // kept for the code below
 
-  function setOpen(open) {
-    panel.hidden = !open;
-    fab.setAttribute('aria-expanded', open ? 'true' : 'false');
-    try { sessionStorage.setItem(OPEN_KEY, open ? '1' : ''); } catch (e) {}
-    if (open) { placePanel(); render(); input.focus(); }
-  }
+  // Esc or a click on the blurred background minimises (the conversation
+  // stays); the X closes.
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && state === 'open') setState('min'); });
+  backdrop.addEventListener('click', function () { setState('min'); });
+  document.getElementById('askats-min').addEventListener('click', function () { setState('min'); });
+  mini.addEventListener('click', function () { setState('open'); });
+  // Following a link inside the chat leaves it minimised on the new page.
+  list.addEventListener('click', function (e) {
+    if (e.target.closest('a[href]')) { try { sessionStorage.setItem(OPEN_KEY, 'min'); } catch (err) {} }
+  });
 
   function ask(text) {
     text = (text || '').trim();
@@ -170,11 +225,12 @@
         typing.remove();
         history.push({role: 'assistant', content: res.text, err: res.err}); save(history);
         bubble('assistant', res.text, res.err);
+        if (state !== 'open') mini.classList.add('unread');
         busy = false; send.disabled = false; input.focus();
       });
   }
 
-  fab.addEventListener('click', function () { setOpen(panel.hidden); });
+  fab.addEventListener('click', function () { setState('open'); });
   document.getElementById('askats-close').addEventListener('click', function () { setOpen(false); });
   document.getElementById('askats-clear').addEventListener('click', function () {
     history = []; save(history); render(); input.focus();
@@ -183,7 +239,9 @@
   input.addEventListener('keydown', function (e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(input.value); }
   });
-  try { if (sessionStorage.getItem(OPEN_KEY)) setOpen(true); } catch (e) {}
+  // An open or minimised chat comes back minimised on the next page, so the
+  // page itself isn't covered - one click on the robot reopens it.
+  try { if (sessionStorage.getItem(OPEN_KEY)) setState('min'); } catch (e) {}
 
   // The robot says "Hi!" for a few seconds the first time it appears in this tab.
   try {
