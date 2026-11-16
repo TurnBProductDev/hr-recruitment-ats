@@ -1524,12 +1524,11 @@ class InterviewKpiTests(TestCase):
             resp = self.client.get(reverse('interview_scheduler'), {'bucket': bucket, 'role': 'Analyst'})
             self.assertEqual(len(resp.context['interviews']), expected, bucket)
 
-    def test_default_list_matches_the_tiles_and_stale_ones_are_listed_separately(self):
+    def test_default_list_matches_the_tiles_and_leaves_out_stale_ones(self):
         resp = self.client.get(reverse('interview_scheduler'))
         tiles = {t['key']: t['total'] for t in resp.context['iv_strip']}
         # 'up' (upcoming) + 'late' (overdue) + 'done' (result pending); never 'gone'.
         self.assertEqual(len(resp.context['interviews']),
                          tiles['upcoming'] + tiles['overdue'] + tiles['result_pending'])
         self.assertEqual(len(resp.context['interviews']), 3)
-        self.assertEqual([i.candidate.full_name for i in resp.context['stale_interviews']], ['gone'])
-        self.assertContains(resp, 'Needs tidying')
+        self.assertNotIn('gone', [i.candidate.full_name for i in resp.context['interviews']])

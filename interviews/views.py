@@ -90,9 +90,9 @@ class InterviewSchedulerListView(GroupRequiredMixin, ListView):
             # Everything the KPI tiles count - booked and not marked done
             # (Upcoming/Overdue) plus marked done with no result yet (Result
             # Pending) - for the candidate's current round only, so this list
-            # and the tiles (here and on the dashboard) always agree. Stale
-            # interviews (candidate already moved past that round) are listed
-            # separately in get_context_data instead.
+            # and the tiles (here and on the dashboard) always agree. A stale
+            # interview (still booked for a round the candidate has already
+            # left) isn't listed, same as it isn't counted.
             from candidates.views import GENERAL_APPLICATION  # local: avoids an import cycle
             qs = (kpis.active_interviews()
                   .filter(Q(status__in=Interview.OPEN_STATUSES) | kpis.bucket_q('result_pending'))
@@ -123,11 +123,6 @@ class InterviewSchedulerListView(GroupRequiredMixin, ListView):
         ctx['iv_strip'] = kpis.strip(active, now)
         ctx['iv_by_role'] = kpis.by_role(active, now)
         ctx['iv_filter_qs'] = ''
-        # Still booked, but the candidate has already moved past that round
-        # (or out of the process) - not counted anywhere, so they'd otherwise
-        # be invisible. Listed for HR to cancel / mark done.
-        ctx['stale_interviews'] = (base.filter(status__in=Interview.OPEN_STATUSES).exclude(kpis.AT_ACTIVE_STAGE)
-                                   .select_related('candidate', 'candidate__job').order_by('scheduled_date'))
         return ctx
 
 
