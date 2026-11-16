@@ -29,6 +29,12 @@
 .dataTables_wrapper .pagination .page-item.active .page-link { background:var(--primary-green); border-color:var(--primary-green); color:#fff; }
 .dataTables_wrapper .pagination .page-item.disabled .page-link { color:var(--text-muted); background-color:var(--bg-surface); }
 
+.iv-stale { background: rgba(255,193,7,.12); border: 1px solid rgba(255,193,7,.45); border-left: 3px solid #c99700; border-radius: 10px; padding: 12px 16px; font-size: .82rem; }
+.iv-stale-head { color: var(--text-primary); }
+.iv-stale-head .bi { color: #a07c00; margin-right: 4px; }
+.iv-stale-sub { color: var(--text-muted); font-size: .76rem; margin: 2px 0 6px; }
+.iv-stale ul { padding-left: 18px; }
+
 @media (max-width: 900px) {
   .iv-toolbar { align-items:stretch; }
   .iv-export-slot { margin-left:0; }
@@ -49,10 +55,33 @@
       &middot; <a href="{% url 'interview_scheduler' %}">Show all awaiting result</a>
     </div>
     {% else %}
-    <div class="iv-subtitle">{{ interviews|length }} awaiting result</div>
+    <div class="iv-subtitle">{{ interviews|length }} awaiting result (upcoming, overdue or result pending)</div>
     {% endif %}
   </div>
 </div>
+
+{# Same KPI tiles + By Role / Vacancy as the dashboard (interviews/kpis.py) #}
+<div class="mb-4">{% include "interviews/_kpi_block.html" %}</div>
+
+{% if stale_interviews %}
+<div class="iv-stale mb-4">
+  <div class="iv-stale-head">
+    <i class="bi bi-exclamation-triangle"></i>
+    <strong>Needs tidying: {{ stale_interviews|length }} interview{{ stale_interviews|length|pluralize }} still booked for a round the candidate has already left</strong>
+  </div>
+  <div class="iv-stale-sub">They aren't counted above. Open the candidate and cancel the interview, or mark it done and record the result.</div>
+  <ul class="mb-0">
+    {% for iv in stale_interviews %}
+    <li>
+      <a href="{% url 'candidate_timeline' iv.candidate.pk %}">{{ iv.candidate.full_name }}</a>
+      &middot; {{ iv.get_round_type_display }} booked {{ iv.scheduled_date|date:"d M Y" }}
+      &middot; candidate is now <strong>{{ iv.candidate.get_status_display }}</strong>
+      {% if iv.candidate.job %}<span class="text-muted">&middot; {{ iv.candidate.job.title }}</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
 
 <form method="get">
   {# Keep a drilled-into tile's filters when searching by name #}

@@ -1,0 +1,107 @@
+{% load candidates_extras %}
+{% comment %}
+  Interview KPIs - the tiles (Today / Upcoming / Result Pending / Overdue,
+  each with an R1/R2 split) and the By Role / Vacancy table. Shared by the
+  dashboard's Summary tab and the Interviews page, so both always show the
+  same numbers (interviews/kpis.py). Self-contained: its own styles and the
+  +/- toggle script, so it renders the same on any page.
+
+  Context: iv_strip, iv_by_role (interviews.kpis.strip / by_role) and
+  iv_filter_qs (filters carried onto every link, e.g. '&scope=open'; may be '').
+{% endcomment %}
+<style>
+.ivk-panel { background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 12px; padding: 22px 24px 18px; height: 100%; }
+.ivk-panel h5 { font-size: 1.05rem; margin: 0 0 10px; }
+.ivk-strip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.ivk-tile {
+  display: block; text-decoration: none; color: inherit; background: var(--bg-hover);
+  border: 1px solid var(--border-color); border-left-width: 3px; border-radius: 8px; padding: 10px 14px;
+  transition: box-shadow .12s ease;
+}
+.ivk-tile:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); color: inherit; }
+.ivk-tile .lbl { font-size: .66rem; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; color: var(--text-muted); }
+.ivk-tile .val { font-size: 1.6rem; font-weight: 700; line-height: 1.2; color: var(--text-primary); }
+.ivk-tile .split { font-size: .72rem; font-weight: 600; color: var(--text-primary); }
+.ivk-tile .hint { font-size: .64rem; color: var(--text-muted); margin-top: 2px; }
+.ivk-head, .ivk-row { display: grid; align-items: center; gap: 10px; grid-template-columns: minmax(0, 1fr) 62px 74px 92px 66px 22px; }
+.ivk-head { padding: 10px 0 8px; border-bottom: 1px solid var(--border-color); font-size: .66rem; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--text-muted); }
+.ivk-head span { text-align: center; } .ivk-head span:first-child { text-align: left; }
+.ivk-row { padding: 13px 0; }
+.ivk-row .name { min-width: 0; font-size: .82rem; font-weight: 500; color: var(--text-primary); }
+.ivk-row .num { text-align: center; font-size: .76rem; }
+.ivk-role { border-bottom: 1px solid var(--border-color); }
+.ivk-role:last-child { border-bottom: none; }
+.ivk-vac { padding: 8px 0 8px 14px; background: var(--bg-hover); border-radius: 6px; margin-bottom: 4px; }
+.ivk-vac .name { font-size: .76rem; }
+.ivk-loc { color: var(--text-muted); }
+.ivk-num { font-weight: 700; color: var(--text-primary); text-decoration: none; }
+.ivk-num:hover { color: var(--accent-teal); text-decoration: underline; }
+.ivk-zero { color: var(--text-muted); opacity: .6; }
+.ivk-toggle { width: 22px; height: 22px; border-radius: 999px; border: 1px solid var(--border-color); background: var(--bg-surface);
+  padding: 0; display: flex; align-items: center; justify-content: center; font-size: .85rem; color: var(--text-muted); cursor: pointer; }
+.ivk-toggle:hover { border-color: #b9c8c8; color: var(--text-primary); }
+@media (max-width: 700px) { .ivk-panel { overflow-x: auto; } .ivk-head, .ivk-row { min-width: 460px; } }
+</style>
+<div class="row g-3">
+  <div class="col-lg-5">
+    <div class="ivk-panel">
+      <div class="ivk-strip">
+        {% for t in iv_strip %}
+        <a class="ivk-tile" style="border-left-color:{{ t.accent }}"
+           href="{% url 'interview_scheduler' %}?bucket={{ t.key }}{{ iv_filter_qs }}">
+          <div class="lbl">{{ t.label }}</div>
+          <div class="val">{{ t.total }}</div>
+          <div class="split">R1 {{ t.r1 }} &middot; R2 {{ t.r2 }}</div>
+          <div class="hint">{{ t.hint }}</div>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-7">
+    <div class="ivk-panel">
+      <h5>By Role / Vacancy</h5>
+      <div class="ivk-head">
+        <span>Role / Vacancy</span>
+        {% for t in iv_strip %}<span>{{ t.label }}</span>{% endfor %}
+        <span></span>
+      </div>
+      {% for role in iv_by_role %}
+      <div class="ivk-role">
+        <div class="ivk-row">
+          <span class="name">{{ role.title }}</span>
+          {% for t in iv_strip %}{% with n=role|dict_get:t.key %}
+          <span class="num">{% if n %}<a class="ivk-num" href="{% url 'interview_scheduler' %}?bucket={{ t.key }}&role={{ role.title|urlencode }}{{ iv_filter_qs }}">{{ n }}</a>{% else %}<span class="ivk-zero">0</span>{% endif %}</span>
+          {% endwith %}{% endfor %}
+          <button type="button" class="ivk-toggle" aria-expanded="false" aria-label="Show {{ role.title }}'s vacancies">+</button>
+        </div>
+        <div class="ivk-vacancies" hidden>
+          {% for v in role.vacancies %}
+          <div class="ivk-row ivk-vac">
+            <span class="name">{{ v.code }}{% if v.location %} <span class="ivk-loc">&middot; {{ v.location }}</span>{% endif %}</span>
+            {% for t in iv_strip %}{% with n=v|dict_get:t.key %}
+            <span class="num">{% if n %}<a class="ivk-num" href="{% url 'interview_scheduler' %}?bucket={{ t.key }}&job={{ v.job_id }}{{ iv_filter_qs }}">{{ n }}</a>{% else %}<span class="ivk-zero">0</span>{% endif %}</span>
+            {% endwith %}{% endfor %}
+            <span></span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% empty %}<div class="text-muted text-center py-3">No interviews scheduled or awaiting a result.</div>{% endfor %}
+    </div>
+  </div>
+</div>
+<script>
+// By Role / Vacancy: +/- shows/hides that role's vacancy (job code) rows.
+document.querySelectorAll('.ivk-role').forEach(function (role) {
+  var btn = role.querySelector('.ivk-toggle'), rows = role.querySelector('.ivk-vacancies');
+  if (!btn || !rows || btn.dataset.bound) return;
+  btn.dataset.bound = '1';
+  btn.addEventListener('click', function () {
+    var open = rows.hidden;
+    rows.hidden = !open;
+    btn.textContent = open ? '−' : '+';
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+});
+</script>

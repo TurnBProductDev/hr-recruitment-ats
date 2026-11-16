@@ -1,7 +1,7 @@
 import logging
 
 from django.contrib import messages
-from django.db.models import BooleanField, Case, Value, When
+from django.db.models import BooleanField, Case, Q, Value, When
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -87,7 +87,16 @@ class InterviewSchedulerListView(GroupRequiredMixin, ListView):
             if get.get('role'):
                 qs = qs.filter(candidate__job__title=get['role'])
         else:
-            qs = Interview.objects.filter(status__in=Interview.OPEN_STATUSES, result=Interview.Result.PENDING)
+            # Everything the KPI tiles count - booked and not marked done
+            # (Upcoming/Overdue) plus marked done with no result yet (Result
+            # Pending) - for the candidate's current round only, so this list
+            # and the tiles (here and on the dashboard) always agree. Stale
+            # interviews (candidate already moved past that round) are listed
+            # separately in get_context_data instead.
+            from candidates.views import GENERAL_APPLICATION  # local: avoids an import cycle
+            qs = (kpis.active_interviews()
+                  .filter(Q(status__in=Interview.OPEN_STATUSES) | kpis.bucket_q('result_pending'))
+                  .exclude(candidate__job__title__iexact=GENERAL_APPLICATION))
         qs = (qs.select_related('candidate', 'candidate__job', 'interviewer')
               .annotate(is_upcoming=Case(
                   When(scheduled_date__gt=timezone.now(), then=Value(True)),
@@ -104,6 +113,21 @@ class InterviewSchedulerListView(GroupRequiredMixin, ListView):
         ctx['filter_job'] = None
         if self.bucket and self.request.GET.get('job', '').isdigit():
             ctx['filter_job'] = Job.objects.filter(pk=self.request.GET['job']).first()
+
+        # KPI tiles + By Role / Vacancy at the top (interviews/_kpi_block.html,
+        # shared with the dashboard) - across all vacancies, same as this list.
+        from candidates.views import GENERAL_APPLICATION  # local: avoids an import cycle
+        base = Interview.objects.exclude(candidate__job__title__iexact=GENERAL_APPLICATION)
+        active = kpis.active_interviews(base)
+        now = timezone.now()
+        ctx['iv_strip'] = kpis.strip(active, now)
+        ctx['iv_by_role'] = kpis.by_role(active, now)
+        ctx['iv_filter_qs'] = ''
+        # Still booked, but the candidate has already moved past that round
+        # (or out of the process) - not counted anywhere, so they'd otherwise
+        # be invisible. Listed for HR to cancel / mark done.
+        ctx['stale_interviews'] = (base.filter(status__in=Interview.OPEN_STATUSES).exclude(kpis.AT_ACTIVE_STAGE)
+                                   .select_related('candidate', 'candidate__job').order_by('scheduled_date'))
         return ctx
 
 

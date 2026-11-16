@@ -109,6 +109,10 @@ class SchedulerReviewPageTests(_People):
     def setUp(self):
         super().setUp()
         self.client.force_login(self.hr)
+        # At Round 1, so the interview is a current one (the Interviews page
+        # lists only interviews for the candidate's current round).
+        self.candidate.status = Candidate.Status.ROUND1
+        self.candidate.save(update_fields=['status'])
         self.interview = Interview.objects.create(
             candidate=self.candidate, round_type=Interview.RoundType.ROUND1,
             interviewer=self.interviewer, scheduled_date=self.start, created_by=self.hr)
