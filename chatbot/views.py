@@ -11,7 +11,7 @@ from . import engine
 class AskView(GroupRequiredMixin, View):
     """POST {messages: [{role, content}...], candidate_id?} -> {reply}.
     HR Admin / Recruiter / Hiring Manager only (ANY_STAFF) - not the
-    Interviewer portal. Read-only: see assistant/tools.py."""
+    Interviewer portal. Read-only: see chatbot/tools.py."""
     allowed_groups = ANY_STAFF
 
     def post(self, request):

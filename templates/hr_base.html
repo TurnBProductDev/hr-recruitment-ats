@@ -221,7 +221,7 @@
 <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
 {% block extra_js %}{% endblock %}
 {% if user.is_authenticated and not is_interviewer_portal %}{% if is_hr_admin or is_recruiter or is_hiring_manager %}
-  {% include "assistant/_widget.html" %}
+  {% include "chatbot/_widget.html" %}
 {% endif %}{% endif %}
 </body>
 </html>

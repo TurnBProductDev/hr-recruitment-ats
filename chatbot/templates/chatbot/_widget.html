@@ -1,5 +1,5 @@
 {% comment %}
-  "Ask the ATS" floating assistant (assistant/ app). Included by hr_base.html
+  "Ask the ATS" floating assistant (chatbot/ app). Included by hr_base.html
   for HR Admin / Recruiter / Hiring Manager only. The conversation lives in
   this browser tab's sessionStorage (kept while moving between pages, gone
   when the tab closes) and the recent turns are sent with each question - the
@@ -96,7 +96,7 @@
   </svg>
 </button>
 <div id="askats-panel" role="dialog" aria-label="Ask the ATS" hidden
-     data-ask-url="{% url 'assistant_ask' %}"
+     data-ask-url="{% url 'chatbot_ask' %}"
      data-candidate-id="{% if request.resolver_match.url_name == 'candidate_timeline' %}{{ candidate.pk|default:'' }}{% endif %}"
      data-candidate-name="{% if request.resolver_match.url_name == 'candidate_timeline' %}{{ candidate.full_name|default:'' }}{% endif %}">
   <div class="askats-head">

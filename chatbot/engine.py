@@ -1,6 +1,6 @@
 """The "Ask the ATS" conversation loop: Azure OpenAI chat completions with
-function calling over assistant/tools.py's read-only tools, plus the app
-guide (assistant/help.py) in the system prompt for "how do I / what is"
+function calling over chatbot/tools.py's read-only tools, plus the app
+guide (chatbot/help.py) in the system prompt for "how do I / what is"
 questions. Stateless: the browser sends the recent conversation each turn.
 """
 import json

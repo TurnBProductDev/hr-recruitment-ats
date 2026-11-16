@@ -46,7 +46,7 @@ INSTALLED_APPS = [
     'notifications',
     'prompts',
     'email_templates',
-    'assistant',
+    'chatbot',
 ]
 
 MIDDLEWARE = [
@@ -224,6 +224,14 @@ SCORE_CANDIDATES_TIMEOUT = int(os.environ.get("SCORE_CANDIDATES_TIMEOUT", "60"))
 # key as a password, same as the Logic App SAS URLs above. Unset = the
 # endpoint refuses every request with 401.
 CV_EXTRACT_API_KEY = os.environ.get("CV_EXTRACT_API_KEY", "")
+
+# Largest request body Django will read (default 2.5 MB). The Logic App sends
+# each attachment base64-encoded inside JSON (+~33%), so the default silently
+# rejected any CV over ~1.8 MB - CVs with photos or designed layouts often are
+# (seen 2026-11-14: a 7.4 MB PDF -> ~10 MB body -> the run failed). 30 MB
+# covers a ~20 MB file. The extract endpoint is API-key protected and every
+# other POST needs a login, so this doesn't open anything to the public.
+DATA_UPLOAD_MAX_MEMORY_SIZE = int(os.environ.get("DATA_UPLOAD_MAX_MEMORY_SIZE", str(30 * 1024 * 1024)))
 
 # --- CV storage (Azure Blob) ------------------------------------------------
 # Candidates from the careers-mailbox intake flow have their CV written to

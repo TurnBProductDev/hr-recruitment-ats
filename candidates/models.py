@@ -166,7 +166,12 @@ class Candidate(models.Model):
     # the parsed fields/summary. cv_text_ref records which file it came from,
     # so replacing the resume makes it re-read instead of scoring stale text.
     cv_text = models.TextField('CV Text', blank=True, null=True)
-    cv_text_ref = models.CharField(max_length=1000, blank=True, default='')
+    # Nullable on purpose: rows are also inserted outside Django (the careers
+    # mailbox Logic App's sp_intake_add_candidate), which doesn't list this
+    # column - NOT NULL with only a Django-side default made those INSERTs
+    # fail (2026-11-13). Every column added to Candidate must be nullable or
+    # carry a database default for the same reason.
+    cv_text_ref = models.CharField(max_length=1000, blank=True, null=True, default='')
 
     # 10 AI-generated Tele Screening call questions, based on the CV - see
     # candidates/screening_questions.py. Generated once (on first View/Generate

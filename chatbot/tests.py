@@ -1,7 +1,7 @@
 """Ask the ATS - tools, conversation loop (Azure OpenAI mocked), access.
 
 Run against sqlite so the live Azure DB is never touched:
-    DB_ENGINE=sqlite python manage.py test assistant
+    DB_ENGINE=sqlite python manage.py test chatbot
 """
 import json
 from datetime import timedelta
@@ -95,7 +95,7 @@ class EngineTests(TestCase):
             'id': 'c1', 'type': 'function',
             'function': {'name': 'search_candidates', 'arguments': '{"name": "Abhil"}'}}]})
         second = self._resp({'content': 'Abhil scored **72**.'})
-        with mock.patch('assistant.engine.requests.post', side_effect=[first, second]) as post:
+        with mock.patch('chatbot.engine.requests.post', side_effect=[first, second]) as post:
             reply = engine.answer(engine.clean_history([{'role': 'user', 'content': 'Score of Abhil?'}]))
         self.assertEqual(reply, 'Abhil scored **72**.')
         tool_msg = post.call_args_list[1].kwargs['json']['messages'][-1]
@@ -103,7 +103,7 @@ class EngineTests(TestCase):
         self.assertIn('Abhil S Raj', tool_msg['content'])
 
     def test_page_candidate_and_guide_in_system_prompt(self):
-        with mock.patch('assistant.engine.requests.post', return_value=self._resp({'content': 'ok'})) as post:
+        with mock.patch('chatbot.engine.requests.post', return_value=self._resp({'content': 'ok'})) as post:
             engine.answer(engine.clean_history([{'role': 'user', 'content': 'Summarise'}]), candidate_id=self.c.pk)
         system = post.call_args.kwargs['json']['messages'][0]['content']
         self.assertIn(f'candidate_id {self.c.pk}', system)
@@ -128,14 +128,14 @@ class AccessTests(TestCase):
         self.client.force_login(self._user('hr', HR_ADMIN))
         r = mock.Mock(status_code=200)
         r.json.return_value = {'choices': [{'message': {'content': 'Hello'}}]}
-        with mock.patch('assistant.engine.requests.post', return_value=r):
-            resp = self.client.post(reverse('assistant_ask'), json.dumps(
+        with mock.patch('chatbot.engine.requests.post', return_value=r):
+            resp = self.client.post(reverse('chatbot_ask'), json.dumps(
                 {'messages': [{'role': 'user', 'content': 'hi'}]}), content_type='application/json')
         self.assertEqual(resp.json()['reply'], 'Hello')
         self.assertContains(self.client.get(reverse('hr_dashboard')), 'id="askats-fab"')
 
     def test_interviewer_cannot_ask(self):
         self.client.force_login(self._user('panel', INTERVIEWER))
-        resp = self.client.post(reverse('assistant_ask'), json.dumps(
+        resp = self.client.post(reverse('chatbot_ask'), json.dumps(
             {'messages': [{'role': 'user', 'content': 'hi'}]}), content_type='application/json')
         self.assertIn(resp.status_code, (302, 403))
