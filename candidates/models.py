@@ -422,6 +422,17 @@ class EmailRegistry(models.Model):
         return f"{self.email} ({self.application_count} applications)"
 
 
+class DuplicateRuleState(models.Model):
+    """Single row: the highest Candidate id the 6-month duplicate rule
+    (candidates/duplicate_rule.py) has already checked. Every candidate above
+    it is new and still to be checked - whichever route created it, including
+    the careers-mailbox stored procedure, which never runs Python."""
+    last_candidate_id = models.BigIntegerField(default=0)
+
+    def __str__(self):
+        return f"Duplicate rule checked up to candidate {self.last_candidate_id}"
+
+
 class Note(models.Model):
     """Free-text HR notes on a candidate, e.g. "Strong communication,
     salary expectation high"."""

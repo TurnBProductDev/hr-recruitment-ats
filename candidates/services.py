@@ -265,4 +265,8 @@ def submit_application(candidate):
     candidate.save()
     register_application(candidate)
     record_creation(candidate)
+    # 6-month same-vacancy repeat rule (candidates/duplicate_rule.py).
+    from . import duplicate_rule  # local: duplicate_rule imports services
+    duplicate_rule.run_pending()
+    candidate.refresh_from_db()
     return candidate

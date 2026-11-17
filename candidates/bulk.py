@@ -23,7 +23,7 @@ from django.db import connection
 from django.db.models import F
 from django.utils import timezone
 
-from . import cv_extraction, cv_parser, services
+from . import cv_extraction, cv_parser, duplicate_rule, services
 from .cv_extraction import CVExtractionError
 from .models import BulkUploadBatch, BulkUploadItem
 
@@ -138,6 +138,10 @@ def process_item(item, batch=None):
         # Keep a copy of the file on the candidate itself, as before -
         # resume_url points at the SharePoint copy when filing succeeded.
         candidate.resume_blob_url.save(item.filename, ContentFile(content), save=True)
+        # 6-month same-vacancy repeat rule - only after the full save above,
+        # which would otherwise write the old status back over an auto-reject.
+        duplicate_rule.run_pending()
+        candidate.refresh_from_db()
 
         item.candidate = candidate
         item.parsed_json = json.dumps(

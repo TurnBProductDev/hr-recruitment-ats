@@ -62,6 +62,9 @@ MIDDLEWARE = [
     # Remembers the Vacancy / open-only filter across pages until it's changed,
     # cleared, the user signs in/out, or the browser closes.
     'dashboard.sticky_filter.StickyFilterMiddleware',
+    # Checks newly arrived candidates (incl. careers-mailbox ones the stored
+    # procedure inserts directly) against the 6-month same-vacancy repeat rule.
+    'candidates.duplicate_rule.DuplicateRuleMiddleware',
 ]
 
 ROOT_URLCONF = 'HR_management.urls'
