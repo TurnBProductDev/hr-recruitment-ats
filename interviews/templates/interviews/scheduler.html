@@ -49,7 +49,12 @@
       &middot; <a href="{% url 'interview_scheduler' %}">Show all awaiting result</a>
     </div>
     {% else %}
-    <div class="iv-subtitle">{{ interviews|length }} awaiting result (upcoming, overdue or result pending)</div>
+    <div class="iv-subtitle">{{ interviews|length }} awaiting result (upcoming, overdue or result pending)
+      {% if filter_job %}
+      &middot; <strong>{{ filter_job.title }}{% if filter_job.job_code %} ({{ filter_job.job_code }}){% endif %}</strong>
+      &middot; <a href="?setfilter=1&amp;scoped=1&amp;scope=open&amp;job=">Clear vacancy filter</a>
+      {% endif %}
+    </div>
     {% endif %}
   </div>
 </div>

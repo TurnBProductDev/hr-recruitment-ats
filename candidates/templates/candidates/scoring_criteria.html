@@ -12,6 +12,7 @@
         </p>
       </div>
       <form method="get" class="d-flex align-items-end gap-2">
+        <input type="hidden" name="setfilter" value="1">{# remember the vacancy on every page - dashboard/sticky_filter.py #}
         <div>
           <label class="form-label small text-muted mb-0">Vacancy</label>
           <select name="job" class="form-select form-select-sm" onchange="this.form.submit()" style="min-width: 260px;">

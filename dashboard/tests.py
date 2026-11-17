@@ -214,6 +214,17 @@ class OpenPositionsTests(TestCase):
         response = self._get()
         self.assertEqual(response.context['open_positions'], 0)
 
+    def test_follows_the_vacancy_filter(self):
+        picked = Job.objects.create(title='Sales Associate', status=Job.Status.OPEN, openings=2)
+        Job.objects.create(title='Analytics Consultant AI', status=Job.Status.OPEN, openings=5)
+        response = self.client.get(f"{reverse('hr_dashboard')}?scoped=1&scope=open&job={picked.pk}")
+        self.assertEqual(response.context['open_positions'], 2)
+
+    def test_a_closed_vacancy_has_no_open_positions(self):
+        closed = Job.objects.create(title='Closed Role', status=Job.Status.CLOSED, openings=3)
+        response = self.client.get(f"{reverse('hr_dashboard')}?scoped=1&job={closed.pk}")
+        self.assertEqual(response.context['open_positions'], 0)
+
 
 class OverviewFunnelTests(TestCase):
     def setUp(self):

@@ -246,6 +246,7 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
   <form method="get" class="d-flex align-items-end flex-wrap gap-3">
     <input type="hidden" name="view" value="{{ view }}">
     <input type="hidden" name="scoped" value="1">
+    <input type="hidden" name="setfilter" value="1">{# remember it on every page - dashboard/sticky_filter.py #}
     <div>
       <label class="form-label small text-muted mb-0">Job Code</label>
       <select class="form-select form-select-sm" onchange="this.form.job.value=this.value; this.form.submit();" style="min-width: 130px;">

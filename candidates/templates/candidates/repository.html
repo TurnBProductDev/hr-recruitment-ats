@@ -91,6 +91,7 @@
 <form method="get" id="repoFilterForm">
   <input type="hidden" name="tab" value="{{ tab }}">
   <input type="hidden" name="scoped" value="1">
+  <input type="hidden" name="setfilter" value="1">{# remember it on every page - dashboard/sticky_filter.py #}
 
   <div class="repo-head">
     <div>
@@ -234,13 +235,12 @@
         <i class="bi bi-file-earmark-excel"></i> Export to Excel
       </a>
       {% comment %}
-        No scoped=1 here (unlike everything else on this page) - dropping it
-        too, not just the visible values, is what makes this a true reset
-        back to the same defaults a fresh visit gets (see
-        CandidateRepositoryListView._scope), not just an empty-but-still-
-        "submitted" filter form.
+        A true reset back to the defaults a fresh visit gets (all vacancies,
+        open only) - setfilter=1 with those values also forgets the vacancy
+        remembered across pages (dashboard/sticky_filter.py); a bare ?tab=
+        link would just have it re-applied.
       {% endcomment %}
-      <a href="?tab={{ tab }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-x-circle"></i> Clear Filters</a>
+      <a href="?tab={{ tab }}&amp;setfilter=1&amp;scoped=1&amp;scope=open&amp;job=" class="btn btn-sm btn-outline-secondary"><i class="bi bi-x-circle"></i> Clear Filters</a>
     </div>
 
     {% if is_hr_admin or is_recruiter or is_hiring_manager %}

@@ -101,6 +101,7 @@
   </div>
   <form method="get" id="reportsFilterForm" class="d-flex align-items-end flex-wrap gap-3">
     <input type="hidden" name="view" value="{{ view }}">
+    <input type="hidden" name="setfilter" value="1">{# remember the vacancy on every page - dashboard/sticky_filter.py #}
     <div>
       <label class="form-label small text-muted mb-0">Job Code</label>
       <select class="form-select form-select-sm" onchange="this.form.job.value=this.value; this.form.submit();" style="min-width: 130px;">

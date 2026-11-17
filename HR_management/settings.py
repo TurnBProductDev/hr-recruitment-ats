@@ -59,6 +59,9 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'HR_management.middleware.NoCacheForAuthenticatedMiddleware',
+    # Remembers the Vacancy / open-only filter across pages until it's changed,
+    # cleared, the user signs in/out, or the browser closes.
+    'dashboard.sticky_filter.StickyFilterMiddleware',
 ]
 
 ROOT_URLCONF = 'HR_management.urls'

@@ -1525,12 +1525,13 @@ class RepositoryStatusFilterTests(TestCase):
         self.assertNotContains(response, 'All statuses')
 
     def test_clear_filters_link_drops_every_filter_but_keeps_the_tab(self):
-        """No scoped=1 either - that's what makes it a true reset back to a
-        fresh visit's own defaults (see _scope), not just an empty-looking
-        filter form that's still technically "submitted"."""
+        """Resets to a fresh visit's defaults (all vacancies, open only) and,
+        via setfilter=1, also forgets the vacancy remembered across pages
+        (dashboard/sticky_filter.py) - every other filter is dropped."""
         response = self.client.get(
             f"{reverse('candidate_repository')}?tab={HOLD_TAB}&q=rose&source=Careers&scoped=1&scope=open")
-        self.assertContains(response, f'href="?tab={HOLD_TAB}"')
+        self.assertContains(
+            response, f'href="?tab={HOLD_TAB}&amp;setfilter=1&amp;scoped=1&amp;scope=open&amp;job="')
 
     def test_hold_tab_filters_by_the_stage_held_at(self):
         self._candidate('Held at round 1', Candidate.Status.ROUND1, held=True)

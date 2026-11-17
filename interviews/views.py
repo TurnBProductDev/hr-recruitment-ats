@@ -80,10 +80,7 @@ class InterviewSchedulerListView(GroupRequiredMixin, ListView):
             from candidates.views import GENERAL_APPLICATION  # local: avoids an import cycle
             qs = (kpis.active_interviews().filter(kpis.bucket_q(self.bucket))
                   .exclude(candidate__job__title__iexact=GENERAL_APPLICATION))
-            if get.get('scope') == 'open':
-                qs = qs.filter(candidate__job__status=Job.Status.OPEN, candidate__job__is_archived=False)
-            if get.get('job', '').isdigit():
-                qs = qs.filter(candidate__job_id=get['job'])
+            qs = _vacancy_filter(qs, get)
             if get.get('role'):
                 qs = qs.filter(candidate__job__title=get['role'])
         else:
@@ -97,6 +94,9 @@ class InterviewSchedulerListView(GroupRequiredMixin, ListView):
             qs = (kpis.active_interviews()
                   .filter(Q(status__in=Interview.OPEN_STATUSES) | kpis.bucket_q('result_pending'))
                   .exclude(candidate__job__title__iexact=GENERAL_APPLICATION))
+            # The Vacancy filter remembered across pages (dashboard/sticky_filter.py
+            # puts it in the query string), same as the tiles above the list.
+            qs = _vacancy_filter(qs, get)
         qs = (qs.select_related('candidate', 'candidate__job', 'interviewer')
               .annotate(is_upcoming=Case(
                   When(scheduled_date__gt=timezone.now(), then=Value(True)),
@@ -110,20 +110,34 @@ class InterviewSchedulerListView(GroupRequiredMixin, ListView):
         ctx = super().get_context_data(**kwargs)
         ctx['bucket_label'] = kpis.BUCKET_LABELS.get(self.bucket)
         ctx['filter_role'] = self.request.GET.get('role', '')
+        get = self.request.GET
         ctx['filter_job'] = None
-        if self.bucket and self.request.GET.get('job', '').isdigit():
-            ctx['filter_job'] = Job.objects.filter(pk=self.request.GET['job']).first()
+        if get.get('job', '').isdigit():
+            ctx['filter_job'] = Job.objects.filter(pk=get['job']).first()
+        ctx['filter_open_only'] = get.get('scope') == 'open'
 
         # KPI tiles + By Role / Vacancy at the top (interviews/_kpi_block.html,
-        # shared with the dashboard) - across all vacancies, same as this list.
+        # shared with the dashboard) - same Vacancy filter as this list.
         from candidates.views import GENERAL_APPLICATION  # local: avoids an import cycle
-        base = Interview.objects.exclude(candidate__job__title__iexact=GENERAL_APPLICATION)
+        base = _vacancy_filter(
+            Interview.objects.exclude(candidate__job__title__iexact=GENERAL_APPLICATION), get)
         active = kpis.active_interviews(base)
         now = timezone.now()
         ctx['iv_strip'] = kpis.strip(active, now)
         ctx['iv_by_role'] = kpis.by_role(active, now)
-        ctx['iv_filter_qs'] = ''
+        ctx['iv_filter_qs'] = (('&scope=open' if ctx['filter_open_only'] else '')
+                               + (f"&job={get['job']}" if ctx['filter_job'] else ''))
         return ctx
+
+
+def _vacancy_filter(qs, get):
+    """Interviews narrowed by the `job` / `scope=open` query params - the
+    dashboard's Vacancy / Open-vacancies-only filter."""
+    if get.get('scope') == 'open':
+        qs = qs.filter(candidate__job__status=Job.Status.OPEN, candidate__job__is_archived=False)
+    if get.get('job', '').isdigit():
+        qs = qs.filter(candidate__job_id=get['job'])
+    return qs
 
 
 class InterviewScheduleView(GroupRequiredMixin, CreateView):
