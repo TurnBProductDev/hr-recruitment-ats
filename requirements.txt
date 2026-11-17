@@ -13,6 +13,8 @@ requests>=2.31
 # Reads CV PDFs directly (text layer + page rasterization for the scanned-CV
 # fallback) - see candidates/cv_extraction.py
 PyMuPDF>=1.24,<2.0
+# Shows Word (.docx) CVs as a web page - browsers can't display .docx inline
+mammoth>=1.8,<2.0
 # Signs short-lived SAS URLs for candidate CVs filed to Azure Blob Storage
 azure-storage-blob>=12.19
 # Builds the .ics calendar attachment for interview invite emails

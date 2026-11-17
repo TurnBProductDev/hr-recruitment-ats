@@ -24,7 +24,7 @@ from interviews.models import Interview, InterviewReschedule, InterviewRequest
 from jobs.models import Job
 
 from . import (
-    bulk, cv_extraction, cv_parser, cv_storage, match_scoring, rejection_emails,
+    bulk, cv_extraction, cv_parser, cv_preview, cv_storage, match_scoring, rejection_emails,
     screening_questions, scoring, services,
 )
 from .forms import (
@@ -1385,12 +1385,39 @@ class CandidateCvView(GroupRequiredMixin, View):
         ):
             raise Http404('No CV on file.')
         resume_url = (candidate.resume_url or '').strip()
+        load_bytes = None  # set when we can read the file ourselves (Word preview)
         if resume_url:
-            target = cv_storage.sas_url(resume_url) if cv_storage.is_our_blob_url(resume_url) else resume_url
+            if cv_storage.is_our_blob_url(resume_url):
+                target = cv_storage.sas_url(resume_url)
+                if cv_preview.is_docx(resume_url):
+                    def load_bytes():
+                        upstream = requests.get(target, timeout=(10, 30))
+                        upstream.raise_for_status()
+                        return upstream.content
+            else:
+                target = resume_url
         elif candidate.resume_blob_url:
             target = candidate.resume_blob_url.url
+            if cv_preview.is_docx(candidate.resume_blob_url.name):
+                def load_bytes():
+                    with candidate.resume_blob_url.open('rb') as f:
+                        return f.read()
         else:
             raise Http404('No CV on file.')
+
+        # Browsers can't show a .docx inline (it just downloads, and the Edit
+        # page's preview frame stays blank), so render it as a web page here.
+        # ?download=1 is the page's "Download original" link.
+        if load_bytes and request.GET.get('download') != '1':
+            try:
+                content = load_bytes()
+            except Exception as exc:  # noqa: BLE001 - fall through to the normal path
+                logger.warning('Could not load Word CV for candidate %s: %s', candidate.pk, exc)
+            else:
+                download_url = reverse('candidate_cv', args=[candidate.pk]) + '?download=1'
+                response = cv_preview.docx_response(content, f'{candidate.full_name} - CV', download_url)
+                if response is not None:
+                    return response
 
         if is_interviewer:
             # Keep the Interviewer entirely on our own domain rather than
