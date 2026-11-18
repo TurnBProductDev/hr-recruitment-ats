@@ -94,9 +94,11 @@ class InterviewerHomeView(GroupRequiredMixin, ListView):
         # it drops off entirely; that history lives on the candidate's own
         # timeline instead.
         qs = Interview.objects.filter(status__in=Interview.OPEN_STATUSES) \
-            .select_related('candidate', 'candidate__job', 'interviewer')
+            .select_related('candidate', 'candidate__job', 'interviewer', 'co_interviewer')
         if not _is_admin(self.request.user):
-            qs = qs.filter(interviewer=self.request.user)
+            # Their own interviews plus any they sit in on as Interviewer 2
+            # (view-only - the template hides Record Result for those).
+            qs = qs.filter(Q(interviewer=self.request.user) | Q(co_interviewer=self.request.user))
         return qs.order_by('scheduled_date')
 
     def get_context_data(self, **kwargs):
@@ -111,9 +113,10 @@ class InterviewerHomeView(GroupRequiredMixin, ListView):
         ctx['result_pending'] = [i for i in interviews if i.scheduled_date <= now]
 
         requests_qs = InterviewRequest.objects.filter(status__in=InterviewRequest.OPEN_STATUSES) \
-            .select_related('candidate', 'candidate__job', 'interviewer')
+            .select_related('candidate', 'candidate__job', 'interviewer', 'co_interviewer')
         if not is_admin:
-            requests_qs = requests_qs.filter(interviewer=self.request.user)
+            requests_qs = requests_qs.filter(
+                Q(interviewer=self.request.user) | Q(co_interviewer=self.request.user))
         ctx['next_prospects'] = requests_qs.order_by('-created_at')
         return ctx
 
@@ -139,14 +142,16 @@ class InterviewerCandidateView(GroupRequiredMixin, DetailView):
                 Q(interviews__isnull=False) | Q(interview_requests__isnull=False)).distinct()
         user = self.request.user
         return Candidate.objects.filter(
-            Q(interviews__interviewer=user) | Q(interview_requests__interviewer=user)).distinct()
+            Q(interviews__interviewer=user) | Q(interview_requests__interviewer=user)
+            | Q(interviews__co_interviewer=user) | Q(interview_requests__co_interviewer=user)).distinct()
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         is_admin = _is_admin(self.request.user)
         interviews_qs = self.object.interviews.all() if is_admin else (
-            self.object.interviews.filter(interviewer=self.request.user))
-        ctx['my_interviews'] = interviews_qs.select_related('interviewer').order_by('-scheduled_date')
+            self.object.interviews.filter(Q(interviewer=self.request.user) | Q(co_interviewer=self.request.user)))
+        ctx['my_interviews'] = (interviews_qs.select_related('interviewer', 'co_interviewer')
+                                .order_by('-scheduled_date'))
         ctx['is_admin_view'] = is_admin
         ctx['open_statuses'] = Interview.OPEN_STATUSES
         ctx['back_url'] = reverse('interviewer_home')
@@ -179,12 +184,14 @@ class InterviewProposeSlotsView(GroupRequiredMixin, View):
 
     def get(self, request, pk):
         request_obj = self._request_or_404(pk, request.user)
-        form = InterviewSlotProposalForm(interviewer=request_obj.interviewer)
+        form = InterviewSlotProposalForm(interviewer=request_obj.interviewer,
+                                         co_interviewer=request_obj.co_interviewer)
         return self._render(request, request_obj, form)
 
     def post(self, request, pk):
         request_obj = self._request_or_404(pk, request.user)
-        form = InterviewSlotProposalForm(request.POST, interviewer=request_obj.interviewer)
+        form = InterviewSlotProposalForm(request.POST, interviewer=request_obj.interviewer,
+                                         co_interviewer=request_obj.co_interviewer)
         if not form.is_valid():
             return self._render(request, request_obj, form, status=400)
 

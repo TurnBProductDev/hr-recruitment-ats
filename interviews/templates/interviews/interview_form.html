@@ -14,6 +14,7 @@
         <div class="row g-3">
           <div class="col-md-6"><label class="form-label">Round Type</label>{{ form.round_type }}</div>
           <div class="col-md-6"><label class="form-label">Interviewer</label>{{ form.interviewer }}</div>
+          <div class="col-md-6"><label class="form-label">Interviewer 2 <span class="text-muted small">(optional)</span></label>{{ form.co_interviewer }}{% for e in form.co_interviewer.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}</div>
           <div class="col-md-6"><label class="form-label">Date &amp; Time</label>{{ form.scheduled_date }}</div>
           <div class="col-md-6"><label class="form-label">Mode</label>{{ form.mode }}</div>
           <div class="col-md-6"><label class="form-label">Candidate Email</label>{{ form.candidate_email }}</div>

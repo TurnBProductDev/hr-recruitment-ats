@@ -211,11 +211,12 @@
         <div class="d-flex justify-content-between align-items-center mb-2 pb-2 {% if not forloop.last %}border-bottom{% endif %}">
           <div>
             <strong>{{ i.get_round_type_display }}</strong> &middot; {{ i.scheduled_date|date:"d M Y H:i" }} &middot; {{ i.get_mode_display }}
-            {% if is_admin_view %}&middot; Interviewer: {% if i.interviewer %}{{ i.interviewer.get_full_name|default:i.interviewer.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}{% endif %}
+            {% if is_admin_view %}&middot; Interviewer: {% if i.interviewer %}{{ i.interviewer.get_full_name|default:i.interviewer.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}{% if i.co_interviewer %} + {{ i.co_interviewer.get_full_name|default:i.co_interviewer.username }}{% endif %}
+            {% elif i.co_interviewer_id == request.user.pk %}&middot; <strong>You're Interviewer 2</strong> (with {{ i.interviewer.get_full_name|default:i.interviewer.username }}){% elif i.co_interviewer %}&middot; Interviewer 2: {{ i.co_interviewer.get_full_name|default:i.co_interviewer.username }}{% endif %}
             <div class="text-muted pd-meta">Status: {{ i.get_status_display }} &middot; Result: {{ i.get_result_display }}</div>
             {% if i.feedback %}<div class="pd-body mt-1">{{ i.feedback }}</div>{% endif %}
           </div>
-          {% if i.status in open_statuses %}
+          {% if i.status in open_statuses and i.co_interviewer_id != request.user.pk or i.status in open_statuses and is_admin_view %}
           <a href="{% url 'interview_result' i.pk %}" class="btn btn-sm btn-fill-app flex-shrink-0">Record Result</a>
           {% endif %}
         </div>

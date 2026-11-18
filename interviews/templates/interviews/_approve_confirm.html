@@ -6,7 +6,7 @@
 <div class="alert alert-info py-2 px-3 mb-3">
   <i class="bi bi-calendar-check"></i>
   <strong>{{ ir.candidate_selected_slot.start_datetime|date:"D, d M Y, H:i" }}</strong>
-  &middot; {{ ir.interviewer.get_full_name|default:ir.interviewer.username }} &middot; {{ ir.get_mode_display }}
+  &middot; {{ ir.interviewer.get_full_name|default:ir.interviewer.username }}{% if ir.co_interviewer %} + {{ ir.co_interviewer.get_full_name|default:ir.co_interviewer.username }}{% endif %} &middot; {{ ir.get_mode_display }}
 </div>
 <p class="small text-muted mb-3">Next you'll see the invite email to the candidate - review and edit it before sending.</p>
 <form method="post" action="{% url 'interview_request_approve' ir.pk %}">

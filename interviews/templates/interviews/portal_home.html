@@ -40,18 +40,20 @@
             <tr>
               <td class="pv-name">
                 <a href="{% url 'interviewer_candidate' r.candidate.pk %}">{{ r.candidate.full_name }}</a>
-                <div class="pv-meta">{{ r.candidate.job.title|default:"-" }}</div>
+                <div class="pv-meta">{{ r.candidate.job.title|default:"-" }}{% if r.co_interviewer_id == request.user.pk and not is_admin_view %} &middot; <strong>You're Interviewer 2</strong> (with {{ r.interviewer.get_full_name|default:r.interviewer.username }}){% endif %}</div>
               </td>
-              {% if is_admin_view %}<td>{{ r.interviewer.get_full_name|default:r.interviewer.username }}</td>{% endif %}
+              {% if is_admin_view %}<td>{{ r.interviewer.get_full_name|default:r.interviewer.username }}{% if r.co_interviewer %}<div class="pv-meta">+ {{ r.co_interviewer.get_full_name|default:r.co_interviewer.username }}</div>{% endif %}</td>{% endif %}
               <td>{{ r.get_round_type_display }}</td>
               <td>
-                {% if r.status == 'AWAITING_SLOTS' %}<span class="text-muted">Awaiting your slots</span>
+                {% if r.status == 'AWAITING_SLOTS' %}<span class="text-muted">{% if r.interviewer_id == request.user.pk or is_admin_view %}Awaiting your slots{% else %}Awaiting {{ r.interviewer.get_full_name|default:r.interviewer.username }}'s slots{% endif %}</span>
                 {% elif r.status == 'AWAITING_SELECTION' %}<span class="text-muted">Waiting on the candidate to pick a slot</span>
                 {% else %}<span class="text-muted">Candidate picked a slot - awaiting HR approval</span>{% endif %}
               </td>
               <td class="text-nowrap text-end">
-                {% if r.status == 'AWAITING_SLOTS' %}
+                {% if r.status == 'AWAITING_SLOTS' and r.interviewer_id == request.user.pk or r.status == 'AWAITING_SLOTS' and is_admin_view %}
                 <a href="{% url 'interviewer_propose_slots' r.pk %}" class="btn btn-sm btn-fill-app">Propose Slots</a>
+                {% else %}
+                <a href="{% url 'interviewer_candidate' r.candidate.pk %}" class="btn btn-sm btn-outline-app">View Candidate</a>
                 {% endif %}
               </td>
             </tr>
@@ -77,9 +79,9 @@
             <tr>
               <td class="pv-name">
                 <a href="{% url 'interviewer_candidate' iv.candidate.pk %}">{{ iv.candidate.full_name }}</a>
-                <div class="pv-meta">{{ iv.candidate.job.title|default:"-" }}</div>
+                <div class="pv-meta">{{ iv.candidate.job.title|default:"-" }}{% if iv.co_interviewer_id == request.user.pk and not is_admin_view %} &middot; <strong>You're Interviewer 2</strong>{% endif %}</div>
               </td>
-              {% if is_admin_view %}<td>{% if iv.interviewer %}{{ iv.interviewer.get_full_name|default:iv.interviewer.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</td>{% endif %}
+              {% if is_admin_view %}<td>{% if iv.interviewer %}{{ iv.interviewer.get_full_name|default:iv.interviewer.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}{% if iv.co_interviewer %}<div class="pv-meta">+ {{ iv.co_interviewer.get_full_name|default:iv.co_interviewer.username }}</div>{% endif %}</td>{% endif %}
               <td>{{ iv.get_round_type_display }}</td>
               <td>{{ iv.scheduled_date|date:"d M Y H:i" }}</td>
               <td>{{ iv.get_mode_display }}</td>
@@ -109,15 +111,17 @@
             <tr>
               <td class="pv-name">
                 <a href="{% url 'interviewer_candidate' iv.candidate.pk %}">{{ iv.candidate.full_name }}</a>
-                <div class="pv-meta">{{ iv.candidate.job.title|default:"-" }}</div>
+                <div class="pv-meta">{{ iv.candidate.job.title|default:"-" }}{% if iv.co_interviewer_id == request.user.pk and not is_admin_view %} &middot; <strong>You're Interviewer 2</strong>{% endif %}</div>
               </td>
-              {% if is_admin_view %}<td>{% if iv.interviewer %}{{ iv.interviewer.get_full_name|default:iv.interviewer.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</td>{% endif %}
+              {% if is_admin_view %}<td>{% if iv.interviewer %}{{ iv.interviewer.get_full_name|default:iv.interviewer.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}{% if iv.co_interviewer %}<div class="pv-meta">+ {{ iv.co_interviewer.get_full_name|default:iv.co_interviewer.username }}</div>{% endif %}</td>{% endif %}
               <td>{{ iv.get_round_type_display }}</td>
               <td>{{ iv.scheduled_date|date:"d M Y H:i" }}</td>
               <td>{{ iv.get_mode_display }}</td>
               <td class="text-nowrap text-end">
                 <a href="{% url 'interviewer_candidate' iv.candidate.pk %}" class="btn btn-sm btn-outline-app">View Candidate</a>
+                {% if iv.interviewer_id == request.user.pk or is_admin_view %}
                 <a href="{% url 'interview_result' iv.pk %}" class="btn btn-sm btn-fill-app">Record Result</a>
+                {% endif %}
               </td>
             </tr>
             {% empty %}

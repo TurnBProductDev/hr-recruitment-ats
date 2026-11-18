@@ -96,7 +96,7 @@
             </td>
             <td>{{ iv.get_round_type_display }}</td>
             <td>{{ iv.scheduled_date|date:"d M Y H:i" }}</td>
-            <td>{% if iv.interviewer %}{{ iv.interviewer.get_full_name|default:iv.interviewer.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}</td>
+            <td>{% if iv.interviewer %}{{ iv.interviewer.get_full_name|default:iv.interviewer.username }}{% else %}<span class="text-muted">Unassigned</span>{% endif %}{% if iv.co_interviewer %}<div class="iv-meta">+ {{ iv.co_interviewer.get_full_name|default:iv.co_interviewer.username }}</div>{% endif %}</td>
             <td>
               {% if iv.status == 'COMPLETED' %}
                 <span class="badge-status badge-final_selection">Result Pending</span>

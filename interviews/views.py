@@ -60,6 +60,28 @@ def _tell_interviewer_cancelled(interviewer, candidate, round_label, when=None, 
                        candidate.pk, interviewer.get_username(), exc)
 
 
+def _tell_co_interviewer_allocated(request, interview_request):
+    """In-app notification + heads-up email to Interviewer 2 when they're
+    allocated. The meeting itself reaches them when the candidate picks a
+    slot (calendar_sync.block_request_slot). Best-effort."""
+    co = interview_request.co_interviewer
+    if co is None:
+        return
+    candidate = interview_request.candidate
+    lead = interview_request.interviewer.get_full_name() or interview_request.interviewer.get_username()
+    notifications.notify(
+        co, title=f'Interviewer 2 - {candidate.full_name}',
+        message=f'You are the second interviewer for {candidate.full_name} '
+                f'({interview_request.get_round_type_display()}) with {lead}. '
+                f'You will get the meeting invite once the candidate picks a time.',
+        url=reverse('interviewer_candidate', args=[candidate.pk]))
+    try:
+        slot_emails.notify_co_interviewer_new_request(
+            interview_request, login_url=request.build_absolute_uri(reverse('interviewer_login')))
+    except logic_app_mail.EmailSendError as exc:
+        logger.warning('Could not email Interviewer 2 for request %s: %s', interview_request.pk, exc)
+
+
 class InterviewSchedulerListView(GroupRequiredMixin, ListView):
     """Scheduled interviews still awaiting a result. Once a result is marked the
     interview is completed and drops off this list. Overdue-but-unmarked
@@ -285,6 +307,7 @@ class InterviewAllocateView(GroupRequiredMixin, CreateView):
                 self.object, login_url=self.request.build_absolute_uri(reverse('interviewer_login')))
         except logic_app_mail.EmailSendError as exc:
             logger.warning('Could not email the new-allocation notice for request %s: %s', self.object.pk, exc)
+        _tell_co_interviewer_allocated(self.request, self.object)
         if _is_ajax(self.request):
             return HttpResponse(format_html(
                 '<div class="alert alert-success mb-0">Interviewer allocated - {} will propose available slots.</div>',
@@ -330,17 +353,20 @@ class InterviewRequestApproveView(GroupRequiredMixin, View):
             messages.error(request, 'No selected slot to approve.')
             return redirect('candidate_timeline', pk=request_obj.candidate_id)
 
-        clash = Interview.conflicts_for(request_obj.interviewer, slot.start_datetime).first()
-        if clash:
-            if _is_ajax(request):
-                return HttpResponse(format_html(
-                    '<div class="alert alert-danger mb-0">{}</div>', interviewer_conflict_message(clash)), status=400)
-            messages.error(request, interviewer_conflict_message(clash))
-            return redirect('candidate_timeline', pk=request_obj.candidate_id)
+        for person in (request_obj.interviewer, request_obj.co_interviewer):
+            clash = Interview.conflicts_for(person, slot.start_datetime).first()
+            if clash:
+                error = interviewer_conflict_message(clash, person)
+                if _is_ajax(request):
+                    return HttpResponse(format_html(
+                        '<div class="alert alert-danger mb-0">{}</div>', error), status=400)
+                messages.error(request, error)
+                return redirect('candidate_timeline', pk=request_obj.candidate_id)
 
         interview = Interview.objects.create(
             candidate=request_obj.candidate, round_type=request_obj.round_type,
-            interviewer=request_obj.interviewer, scheduled_date=slot.start_datetime,
+            interviewer=request_obj.interviewer, co_interviewer=request_obj.co_interviewer,
+            scheduled_date=slot.start_datetime,
             mode=request_obj.mode, created_by=request.user,
         )
         request_obj.status = InterviewRequest.Status.SCHEDULED
@@ -373,6 +399,11 @@ class InterviewRequestRescheduleView(GroupRequiredMixin, UpdateView):
     form_class = InterviewAllocationForm
     template_name = 'interviews/interview_allocate_form.html'
     allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
+
+    def get_object(self, queryset=None):
+        obj = super().get_object(queryset)
+        self.previous_co_interviewer_id = obj.co_interviewer_id  # before the form writes over it
+        return obj
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
@@ -414,6 +445,8 @@ class InterviewRequestRescheduleView(GroupRequiredMixin, UpdateView):
                 request_obj, login_url=self.request.build_absolute_uri(reverse('interviewer_login')))
         except logic_app_mail.EmailSendError as exc:
             logger.warning('Could not email the reschedule notice for request %s: %s', request_obj.pk, exc)
+        if request_obj.co_interviewer_id and request_obj.co_interviewer_id != self.previous_co_interviewer_id:
+            _tell_co_interviewer_allocated(self.request, request_obj)
         if _is_ajax(self.request):
             return HttpResponse(format_html(
                 '<div class="alert alert-success mb-0">Interview reset - {} will propose available slots.</div>',
@@ -485,9 +518,10 @@ class InterviewRequestCancelView(GroupRequiredMixin, View):
         request_obj.candidate_token = None
         request_obj.save(update_fields=['status', 'candidate_token'])
         note = (request.POST.get('note') or '').strip()
-        _tell_interviewer_cancelled(
-            request_obj.interviewer, candidate, request_obj.get_round_type_display(),
-            when=slot.start_datetime if slot else None, note=note)
+        for person in (request_obj.interviewer, request_obj.co_interviewer):
+            _tell_interviewer_cancelled(
+                person, candidate, request_obj.get_round_type_display(),
+                when=slot.start_datetime if slot else None, note=note)
         messages.success(request, f'{request_obj.get_round_type_display()} interview cancelled for '
                                   f'{candidate.full_name} - the interviewer has been told.')
         return redirect('candidate_timeline', pk=candidate.pk)
@@ -547,7 +581,8 @@ class InterviewRescheduleView(GroupRequiredMixin, UpdateView):
         obj = super().get_object(queryset)
         # Snapshot before the form writes over it - the row is rewritten in
         # place, so this is the only chance to see what it used to say.
-        self.before = {'scheduled_date': obj.scheduled_date, 'interviewer_id': obj.interviewer_id}
+        self.before = {'scheduled_date': obj.scheduled_date, 'interviewer_id': obj.interviewer_id,
+                       'co_interviewer_id': obj.co_interviewer_id}
         return obj
 
     def get_template_names(self):
@@ -565,6 +600,9 @@ class InterviewRescheduleView(GroupRequiredMixin, UpdateView):
     def form_valid(self, form):
         moved = not _same_minute(form.instance.scheduled_date, self.before['scheduled_date'])
         reassigned = form.instance.interviewer_id != self.before['interviewer_id']
+        # Adding/removing/swapping Interviewer 2 only needs the calendar
+        # meeting's attendees updated - not a reschedule-history row.
+        co_changed = form.instance.co_interviewer_id != self.before['co_interviewer_id']
         if moved:
             form.instance.status = Interview.Status.RESCHEDULED
         response = super().form_valid(form)
@@ -575,6 +613,7 @@ class InterviewRescheduleView(GroupRequiredMixin, UpdateView):
                 previous_interviewer_id=self.before['interviewer_id'],
                 new_interviewer_id=self.object.interviewer_id,
                 changed_by=self.request.user)
+        if moved or reassigned or co_changed:
             calendar_sync.sync_interview(self.object, _portal_url(self.request, self.object.candidate_id))
         _maybe_create_teams_meeting(self.object)
         if _is_ajax(self.request):
@@ -625,9 +664,10 @@ class InterviewCancelView(GroupRequiredMixin, View):
         interview.save(update_fields=['status', 'cancelled_at'])
         if upcoming:
             calendar_sync.cancel_interview_event(interview, 'This interview was cancelled by HR.')
-            _tell_interviewer_cancelled(
-                interview.interviewer, interview.candidate, interview.get_round_type_display(),
-                when=interview.scheduled_date, note=(request.POST.get('note') or '').strip())
+            for person in (interview.interviewer, interview.co_interviewer):
+                _tell_interviewer_cancelled(
+                    person, interview.candidate, interview.get_round_type_display(),
+                    when=interview.scheduled_date, note=(request.POST.get('note') or '').strip())
         return redirect('candidate_timeline', pk=interview.candidate_id)
 
 

@@ -75,9 +75,11 @@ def split_emails(stored):
     return [e for e in (stored or '').split(';') if e]
 
 
-def _attendees(interviewer, required=(), optional=()):
-    """Graph attendee list: interviewer + `required` as required, `optional`
-    as optional, each address once (first role wins)."""
+def _attendees(interviewer, required=(), optional=(), co_interviewer=None):
+    """Graph attendee list: interviewer (and Interviewer 2, if any) +
+    `required` as required, `optional` as optional, each address once (first
+    role wins). Interviewer 2 being an attendee is what puts the meeting on
+    their calendar too."""
     seen, out = set(), []
 
     def add(email, kind, name=''):
@@ -90,8 +92,9 @@ def _attendees(interviewer, required=(), optional=()):
             address['name'] = name
         out.append({'emailAddress': address, 'type': kind})
 
-    if interviewer is not None and interviewer.email:
-        add(interviewer.email, 'required', _name(interviewer))
+    for person in (interviewer, co_interviewer):
+        if person is not None and person.email:
+            add(person.email, 'required', _name(person))
     for email in required:
         add(email, 'required')
     for email in optional:
@@ -99,7 +102,7 @@ def _attendees(interviewer, required=(), optional=()):
     return out
 
 
-def _event(*, candidate, round_label, interviewer, start, mode, portal_url=''):
+def _event(*, candidate, round_label, interviewer, start, mode, portal_url='', co_interviewer=None):
     """The Graph event as first created - before HR's invite replaces the
     subject/message. Times go over in UTC; Outlook shows them in each
     attendee's own time zone."""
@@ -107,6 +110,9 @@ def _event(*, candidate, round_label, interviewer, start, mode, portal_url=''):
     lines = [f'{round_label} interview with <b>{html.escape(candidate.full_name)}</b>'
              + (f' for {html.escape(role)}' if role else '') + '.',
              f'Mode: {html.escape(Interview.Mode(mode).label)}.']
+    if co_interviewer is not None:
+        lines.append('Interviewers: ' + html.escape(
+            ', '.join(_name(p) for p in (interviewer, co_interviewer) if p is not None)) + '.')
     if portal_url:
         lines.append(f'Candidate profile: <a href="{html.escape(portal_url)}">{html.escape(portal_url)}</a>')
     lines.append('Scheduled through TurnB ATS. Changes are made by HR in the ATS.')
@@ -115,18 +121,19 @@ def _event(*, candidate, round_label, interviewer, start, mode, portal_url=''):
         'body': {'contentType': 'HTML', 'content': '<br>'.join(lines)},
         'start': _utc(start),
         'end': _utc(start + INTERVIEW_DURATION),
-        'attendees': _attendees(interviewer),
+        'attendees': _attendees(interviewer, co_interviewer=co_interviewer),
         'showAs': 'busy',
         'allowNewTimeProposals': False,
         'responseRequested': True,
     }
 
 
-def book(*, candidate, round_label, interviewer, start, mode, portal_url='', transaction_id=''):
+def book(*, candidate, round_label, interviewer, start, mode, portal_url='', transaction_id='',
+         co_interviewer=None):
     """Create the meeting. Returns (event_id, join_url); join_url is '' for a
     non-video interview. Raises CalendarError."""
     event = _event(candidate=candidate, round_label=round_label, interviewer=interviewer,
-                   start=start, mode=mode, portal_url=portal_url)
+                   start=start, mode=mode, portal_url=portal_url, co_interviewer=co_interviewer)
     if mode == Interview.Mode.VIDEO:
         event.update(isOnlineMeeting=True, onlineMeetingProvider='teamsForBusiness')
     if transaction_id:
@@ -139,14 +146,14 @@ def book(*, candidate, round_label, interviewer, start, mode, portal_url='', tra
     return data['id'], data.get('join_url') or ''
 
 
-def move(event_id, *, interviewer, start, required=(), optional=()):
+def move(event_id, *, interviewer, start, required=(), optional=(), co_interviewer=None):
     """Move/re-assign an existing meeting. Only time and attendees change -
     the subject/message HR sent stay as they are. Outlook sends every
     attendee the update (and a cancellation to anyone dropped, e.g. a
     swapped-out interviewer). Returns its join URL. Raises CalendarError."""
     data = _post({'op': 'update', 'event_id': event_id, 'event': {
         'start': _utc(start), 'end': _utc(start + INTERVIEW_DURATION),
-        'attendees': _attendees(interviewer, required, optional)}})
+        'attendees': _attendees(interviewer, required, optional, co_interviewer)}})
     return data.get('join_url') or ''
 
 
@@ -158,19 +165,21 @@ def cancel(event_id, comment=''):
 
 # --- Helpers used by the views -------------------------------------------------
 
-def _can_book(interviewer, mode):
+def _can_book(interviewer, mode, co_interviewer=None):
     """A meeting is worth creating when it blocks someone's calendar (an
     interviewer with an email) or carries the Teams link (a video interview)."""
     if not is_configured():
         return False
-    return (interviewer is not None and bool(interviewer.email)) or mode == Interview.Mode.VIDEO
+    has_calendar = any(p is not None and bool(p.email) for p in (interviewer, co_interviewer))
+    return has_calendar or mode == Interview.Mode.VIDEO
 
 
 def block_request_slot(interview_request, portal_url=''):
     """The candidate just picked a slot: put it on the interviewer's calendar
     (replacing any earlier block for this request)."""
     slot = interview_request.candidate_selected_slot
-    if not slot or not _can_book(interview_request.interviewer, interview_request.mode):
+    if not slot or not _can_book(interview_request.interviewer, interview_request.mode,
+                                 interview_request.co_interviewer):
         return
     if interview_request.calendar_event_id:
         cancel_request_event(interview_request, 'The interview time changed.')
@@ -179,6 +188,7 @@ def block_request_slot(interview_request, portal_url=''):
             candidate=interview_request.candidate, round_label=interview_request.get_round_type_display(),
             interviewer=interview_request.interviewer, start=slot.start_datetime,
             mode=interview_request.mode, portal_url=portal_url,
+            co_interviewer=interview_request.co_interviewer,
             transaction_id=f'turnb-ats-request-{interview_request.pk}-slot-{slot.pk}')
     except CalendarError as exc:
         logger.warning('Could not block the calendar for interview request %s: %s', interview_request.pk, exc)
@@ -221,7 +231,7 @@ def _book_interview(interview, portal_url=''):
     interview.calendar_event_id, join_url = book(
         candidate=interview.candidate, round_label=interview.get_round_type_display(),
         interviewer=interview.interviewer, start=interview.scheduled_date, mode=interview.mode,
-        portal_url=portal_url,
+        portal_url=portal_url, co_interviewer=interview.co_interviewer,
         transaction_id=f'turnb-ats-interview-{interview.pk}-{timezone.now():%Y%m%d%H%M%S}')
     return join_url
 
@@ -230,14 +240,16 @@ def sync_interview(interview, portal_url=''):
     """Create the interview's meeting, or move it to the interview's current
     date/interviewer (keeping the candidate and CC people already invited).
     Past interviews are left alone."""
-    if interview.scheduled_date <= timezone.now() or not _can_book(interview.interviewer, interview.mode):
+    if interview.scheduled_date <= timezone.now() or not _can_book(
+            interview.interviewer, interview.mode, interview.co_interviewer):
         return
     try:
         if interview.calendar_event_id:
             join_url = move(interview.calendar_event_id, interviewer=interview.interviewer,
                             start=interview.scheduled_date,
                             required=split_emails(interview.calendar_required),
-                            optional=split_emails(interview.calendar_optional))
+                            optional=split_emails(interview.calendar_optional),
+                            co_interviewer=interview.co_interviewer)
         else:
             join_url = _book_interview(interview, portal_url)
     except CalendarError as exc:
@@ -279,7 +291,7 @@ def send_invite(interview, *, to_email, cc_emails, subject, body):
     _post({'op': 'update', 'event_id': interview.calendar_event_id, 'event': {
         'subject': subject,
         'body': {'contentType': 'HTML', 'content': logic_app_mail.to_html(text)},
-        'attendees': _attendees(interview.interviewer, required, optional),
+        'attendees': _attendees(interview.interviewer, required, optional, interview.co_interviewer),
         'responseRequested': True,
     }})
     interview.calendar_required = ';'.join(required)

@@ -68,6 +68,13 @@ class Interview(models.Model):
     interviewer = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='interviews'
     )
+    # Optional second interviewer: invited to the same calendar meeting and
+    # can view the candidate/CV in the portal, but doesn't propose slots or
+    # record the result - that stays with `interviewer`.
+    co_interviewer = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='co_interviews', verbose_name='Interviewer 2',
+    )
     scheduled_date = models.DateTimeField()
     mode = models.CharField(max_length=20, choices=Mode.choices, default=Mode.VIDEO)
     # Teams join URLs routinely run past URLField's default 200 characters.
@@ -129,7 +136,8 @@ class Interview(models.Model):
             return cls.objects.none()
         start, end = scheduled_date, scheduled_date + INTERVIEW_DURATION
         qs = cls.objects.filter(
-            interviewer=interviewer, status__in=cls.OPEN_STATUSES,
+            models.Q(interviewer=interviewer) | models.Q(co_interviewer=interviewer),
+            status__in=cls.OPEN_STATUSES,
             scheduled_date__lt=end, scheduled_date__gt=start - INTERVIEW_DURATION,
         )
         if exclude_pk:
@@ -201,6 +209,12 @@ class InterviewRequest(models.Model):
     candidate = models.ForeignKey(Candidate, on_delete=models.CASCADE, related_name='interview_requests')
     round_type = models.CharField(max_length=20, choices=Interview.RoundType.choices, default=Interview.RoundType.ROUND1)
     interviewer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='interview_requests')
+    # Optional second interviewer - see Interview.co_interviewer. Carried over
+    # to the Interview on HR's approval.
+    co_interviewer = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='co_interview_requests', verbose_name='Interviewer 2',
+    )
     mode = models.CharField(max_length=20, choices=Interview.Mode.choices, default=Interview.Mode.VIDEO)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.AWAITING_SLOTS)
     interview = models.ForeignKey(
@@ -296,7 +310,7 @@ class InterviewSlot(models.Model):
                       request__candidate_selected_slot=models.F('pk'))
         )
         qs = cls.objects.filter(
-            held, request__interviewer=interviewer,
+            held, models.Q(request__interviewer=interviewer) | models.Q(request__co_interviewer=interviewer),
             start_datetime__lt=end, start_datetime__gt=start - INTERVIEW_DURATION,
         )
         if exclude_request_pk:
@@ -338,21 +352,27 @@ def open_interview_request_message(request):
             f'{request.get_round_type_display()}, awaiting {waiting_on}.')
 
 
-def interviewer_conflict_message(interview):
-    """Why a schedule/reschedule was refused for double-booking the interviewer."""
+def _person(user):
+    return user.get_full_name() or user.get_username()
+
+
+def interviewer_conflict_message(interview, who=None):
+    """Why a schedule/reschedule was refused for double-booking an
+    interviewer. `who` is the person found busy - they may be on the
+    clashing interview as its Interviewer 2 rather than its interviewer."""
     when = timezone.localtime(interview.scheduled_date)
-    name = interview.interviewer.get_full_name() or interview.interviewer.get_username()
+    name = _person(who or interview.interviewer)
     return (f'{name} is already interviewing {interview.candidate.full_name} '
             f'at {when:%d %b %Y %H:%M}. Pick a different time or interviewer.')
 
 
-def held_slot_conflict_message(slot):
+def held_slot_conflict_message(slot, who=None):
     """Why a schedule/reschedule/slot-proposal was refused for overlapping a
     slot currently held by a pending candidate-selection flow - see
-    InterviewSlot.held_conflicts_for."""
+    InterviewSlot.held_conflicts_for. `who` as in interviewer_conflict_message."""
     when = timezone.localtime(slot.start_datetime)
     request = slot.request
-    name = request.interviewer.get_full_name() or request.interviewer.get_username()
+    name = _person(who or request.interviewer)
     return (f'{name} has a proposed/selected interview slot with '
             f'{request.candidate.full_name} at {when:%d %b %Y %H:%M} that is still pending. '
             f'Pick a different time or interviewer.')

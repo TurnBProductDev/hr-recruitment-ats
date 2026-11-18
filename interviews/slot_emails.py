@@ -107,6 +107,38 @@ def notify_interviewer_new_request(interview_request, login_url=''):
         to_email=interviewer.email, cc_emails=logic_app_mail.default_cc_list(), subject=subject, body=body)
 
 
+CO_INTERVIEWER_SUBJECT = 'You are Interviewer 2 - {candidate_name} ({round_type})'
+CO_INTERVIEWER_BODY = (
+    'Hello {co_interviewer_name},\n\n'
+    'You have been added as the second interviewer for {candidate_name} - {role} ({round_type}), '
+    'alongside {interviewer_name}.\n\n'
+    '{interviewer_name} will propose the interview times. Once the candidate picks one, you will '
+    'both receive the Outlook meeting invite and the time will be blocked on your calendar.\n\n'
+    'You can view the candidate and their CV in the Interviewer portal.\n\n'
+    '{login_url_line}'
+    'Regards,\n'
+    'TurnB ATS'
+)
+
+
+def notify_co_interviewer_new_request(interview_request, login_url=''):
+    """Heads-up to Interviewer 2 right after HR allocates them - the meeting
+    itself only reaches them once the candidate picks a slot."""
+    co, interviewer = interview_request.co_interviewer, interview_request.interviewer
+    if not (co and co.email):
+        return
+    candidate = interview_request.candidate
+    subject, body = render_email(
+        'co_interviewer_new_request', CO_INTERVIEWER_SUBJECT, CO_INTERVIEWER_BODY,
+        co_interviewer_name=co.get_full_name() or co.get_username(),
+        interviewer_name=interviewer.get_full_name() or interviewer.get_username(),
+        candidate_name=candidate.full_name, role=_role_name(candidate),
+        round_type=interview_request.get_round_type_display(),
+        login_url_line=f'Sign in here: {login_url}\n\n' if login_url else '')
+    logic_app_mail.send_email(
+        to_email=co.email, cc_emails=logic_app_mail.default_cc_list(), subject=subject, body=body)
+
+
 def notify_candidate_select_slot(interview_request, select_url):
     """Sent to the CANDIDATE once the interviewer has proposed their slots -
     asks them to pick one via the link (a token-secured public page, valid

@@ -73,6 +73,47 @@ def _setup_interviewer_field(field, current_id=None):
         f'{u.get_full_name() or u.username} ({u.email})' if u.email else (u.get_full_name() or u.username))
 
 
+def _setup_co_interviewer_field(field, current_id=None):
+    """Interviewer 2 (optional): same people as Interviewer."""
+    _setup_interviewer_field(field, current_id)
+    field.required = False
+    field.label = 'Interviewer 2 (optional)'
+    field.empty_label = 'None'
+
+
+def _clean_co_interviewer(cleaned):
+    interviewer, co = cleaned.get('interviewer'), cleaned.get('co_interviewer')
+    if co and interviewer and co.pk == interviewer.pk:
+        raise forms.ValidationError({'co_interviewer': 'Interviewer 2 must be a different person.'})
+
+
+def availability_error(person, when, *, exclude_pk=None, you=False):
+    """Why `person` can't take an interview at `when`, or None: another open
+    interview (as interviewer or Interviewer 2), a slot held by a pending
+    candidate pick, or - when Graph is configured - their Outlook calendar."""
+    clash = Interview.conflicts_for(person, when, exclude_pk=exclude_pk).first()
+    if clash:
+        return interviewer_conflict_message(clash, person)
+    held = InterviewSlot.held_conflicts_for(person, when).first()
+    if held:
+        return held_slot_conflict_message(held, person)
+    # Phase 2: also check the real Outlook calendar. Best-effort - a Graph
+    # outage must never block scheduling, only skip this extra check.
+    if graph_client.is_configured() and person.email:
+        try:
+            busy = graph_client.is_interviewer_busy(person.email, when, when + INTERVIEW_DURATION)
+        except graph_client.GraphError as exc:
+            logger.warning('Skipping Outlook calendar check for %s: %s', person.email, exc)
+        else:
+            if busy:
+                if you:
+                    return f'Your Outlook calendar shows you busy at {when:%d %b %Y %H:%M}. Pick a different time.'
+                name = person.get_full_name() or person.get_username()
+                return (f'{name}\'s Outlook calendar shows them busy at that time. '
+                        f'Pick a different time or interviewer.')
+    return None
+
+
 class InterviewForm(BootstrapFormMixin, forms.ModelForm):
     # Not a model field - just where the invite email goes. Kept separate
     # from Candidate.email so editing it here (e.g. a typo, or a personal
@@ -82,7 +123,7 @@ class InterviewForm(BootstrapFormMixin, forms.ModelForm):
 
     class Meta:
         model = Interview
-        fields = ['round_type', 'interviewer', 'scheduled_date', 'mode', 'meeting_link']
+        fields = ['round_type', 'interviewer', 'co_interviewer', 'scheduled_date', 'mode', 'meeting_link']
         widgets = {
             'scheduled_date': forms.DateTimeInput(attrs={'type': 'datetime-local'}),
         }
@@ -105,6 +146,7 @@ class InterviewForm(BootstrapFormMixin, forms.ModelForm):
             if resolving_request and not self.instance.pk:
                 self.fields['round_type'].initial = resolving_request.round_type
                 self.fields['interviewer'].initial = resolving_request.interviewer_id
+                self.fields['co_interviewer'].initial = resolving_request.co_interviewer_id
                 self.fields['mode'].initial = resolving_request.mode
         # Interviewer group + Hiring Manager are assignable - Hiring Manager
         # can take interviews themselves, not just delegate them - ordered by
@@ -115,6 +157,8 @@ class InterviewForm(BootstrapFormMixin, forms.ModelForm):
         # account in both groups would otherwise list twice.
         _setup_interviewer_field(self.fields['interviewer'], self.instance.interviewer_id)
         self.fields['interviewer'].empty_label = 'Unassigned'
+        co_id = self.instance.co_interviewer_id or (resolving_request.co_interviewer_id if resolving_request else None)
+        _setup_co_interviewer_field(self.fields['co_interviewer'], co_id)
         self._add_bootstrap_classes()
 
     def clean(self):
@@ -135,37 +179,16 @@ class InterviewForm(BootstrapFormMixin, forms.ModelForm):
             if request_clash:
                 raise forms.ValidationError(open_interview_request_message(request_clash))
 
-        interviewer = cleaned.get('interviewer')
+        _clean_co_interviewer(cleaned)
         scheduled_date = cleaned.get('scheduled_date')
-        if interviewer and scheduled_date:
-            clash = Interview.conflicts_for(
-                interviewer, scheduled_date, exclude_pk=self.instance.pk).first()
-            if clash:
-                raise forms.ValidationError(interviewer_conflict_message(clash))
-
-            # Manual/direct scheduling and rescheduling must respect a slot
-            # currently proposed to (or already picked by) a candidate for a
-            # *different* request - see InterviewSlot.held_conflicts_for.
-            held = InterviewSlot.held_conflicts_for(interviewer, scheduled_date).first()
-            if held:
-                raise forms.ValidationError(held_slot_conflict_message(held))
-
-            # Phase 2: also check the interviewer's real Outlook calendar, not
-            # just other interviews scheduled through this app. Best-effort -
-            # a Graph outage must never block scheduling, only skip this extra
-            # check (the Phase 1 same-app check above still applies either way).
-            if graph_client.is_configured() and interviewer.email:
-                try:
-                    busy = graph_client.is_interviewer_busy(
-                        interviewer.email, scheduled_date, scheduled_date + INTERVIEW_DURATION)
-                except graph_client.GraphError as exc:
-                    logger.warning('Skipping Outlook calendar check for %s: %s', interviewer.email, exc)
-                else:
-                    if busy:
-                        name = interviewer.get_full_name() or interviewer.get_username()
-                        raise forms.ValidationError(
-                            f'{name}\'s Outlook calendar shows them busy at that time. '
-                            f'Pick a different time or interviewer.')
+        # Both interviewers must be free: no other open interview (in either
+        # role), no slot held for a *different* request's candidate pick (see
+        # InterviewSlot.held_conflicts_for), and not busy in Outlook.
+        for person in (cleaned.get('interviewer'), cleaned.get('co_interviewer')):
+            if person and scheduled_date:
+                error = availability_error(person, scheduled_date, exclude_pk=self.instance.pk)
+                if error:
+                    raise forms.ValidationError(error)
         return cleaned
 
 
@@ -209,7 +232,7 @@ class InterviewAllocationForm(BootstrapFormMixin, forms.ModelForm):
     stuck re-asking the same one - see InterviewRequestRescheduleView."""
     class Meta:
         model = InterviewRequest
-        fields = ['round_type', 'interviewer', 'mode']
+        fields = ['round_type', 'interviewer', 'co_interviewer', 'mode']
 
     def __init__(self, *args, candidate=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -218,10 +241,12 @@ class InterviewAllocationForm(BootstrapFormMixin, forms.ModelForm):
             self.instance.round_type if self.instance.pk else None)
         # Interviewer group + Hiring Manager - see InterviewForm's __init__ above.
         _setup_interviewer_field(self.fields['interviewer'], self.instance.interviewer_id)
+        _setup_co_interviewer_field(self.fields['co_interviewer'], self.instance.co_interviewer_id)
         self._add_bootstrap_classes()
 
     def clean(self):
         cleaned = super().clean()
+        _clean_co_interviewer(cleaned)
         if self.candidate:
             clash = Interview.open_for(self.candidate).first()
             if clash:
@@ -273,9 +298,11 @@ class InterviewSlotProposalForm(BootstrapFormMixin, forms.Form):
         date_attrs={'type': 'text', 'class': 'form-control flatpickr-date'},
         time_attrs={'type': 'text', 'class': 'form-control flatpickr-time'}))
 
-    def __init__(self, *args, interviewer=None, **kwargs):
+    def __init__(self, *args, interviewer=None, co_interviewer=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.interviewer = interviewer
+        # Interviewer 2 isn't proposing, but every slot must suit them too.
+        self.co_interviewer = co_interviewer
         self._add_bootstrap_classes()
 
     def clean(self):
@@ -292,25 +319,16 @@ class InterviewSlotProposalForm(BootstrapFormMixin, forms.Form):
             for other in slots[i + 1:]:
                 if abs((slot - other)) < INTERVIEW_DURATION:
                     raise forms.ValidationError('Proposed slots must not overlap each other.')
-        if self.interviewer:
-            for slot in slots:
-                clash = Interview.conflicts_for(self.interviewer, slot).first()
-                if clash:
-                    raise forms.ValidationError(interviewer_conflict_message(clash))
-                held = InterviewSlot.held_conflicts_for(self.interviewer, slot).first()
-                if held:
-                    raise forms.ValidationError(held_slot_conflict_message(held))
-                if graph_client.is_configured() and self.interviewer.email:
-                    try:
-                        busy = graph_client.is_interviewer_busy(
-                            self.interviewer.email, slot, slot + INTERVIEW_DURATION)
-                    except graph_client.GraphError as exc:
-                        logger.warning('Skipping Outlook calendar check for %s: %s', self.interviewer.email, exc)
-                    else:
-                        if busy:
-                            raise forms.ValidationError(
-                                f'Your Outlook calendar shows you busy at {slot:%d %b %Y %H:%M}. '
-                                f'Pick a different time.')
+        for slot in slots:
+            if self.interviewer:
+                error = availability_error(self.interviewer, slot, you=True)
+                if error:
+                    raise forms.ValidationError(error)
+            if self.co_interviewer:
+                error = availability_error(self.co_interviewer, slot)
+                if error:
+                    raise forms.ValidationError(
+                        f'Interviewer 2 isn\'t free at {timezone.localtime(slot):%d %b %Y %H:%M}: {error}')
         cleaned['slots'] = sorted(slots)
         return cleaned
 

@@ -13,6 +13,11 @@
       {% for e in form.interviewer.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
     </div>
     <div class="col-md-6">
+      <label class="form-label">Interviewer 2 <span class="text-muted small">(optional)</span></label>
+      {{ form.co_interviewer }}
+      {% for e in form.co_interviewer.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
+    </div>
+    <div class="col-md-6">
       <label class="form-label">Date &amp; Time</label>
       {{ form.scheduled_date }}
       {% for e in form.scheduled_date.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}

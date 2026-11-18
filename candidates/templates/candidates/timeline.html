@@ -492,7 +492,7 @@ html { scroll-behavior: smooth; }
         {% if stage.decided_interview %}
         {% with iv=stage.decided_interview %}
         <div class="pd-meta text-muted mt-2">
-          Interviewer: <strong>{% if iv.interviewer %}{{ iv.interviewer.get_full_name|default:iv.interviewer.username }}{% else %}-{% endif %}</strong>
+          Interviewer: <strong>{% if iv.interviewer %}{{ iv.interviewer.get_full_name|default:iv.interviewer.username }}{% else %}-{% endif %}</strong>{% if iv.co_interviewer %} + {{ iv.co_interviewer.get_full_name|default:iv.co_interviewer.username }}{% endif %}
           &middot; Interview Score: <strong>{% if iv.score is not None %}{{ iv.score|floatformat:"-1" }}</strong><span class="text-muted"> / 10</span>{% else %}-</strong>{% endif %}
         </div>
         {% if stage.interview_feedback %}<div class="pd-body mt-1"><span class="text-muted">Feedback:</span> {{ stage.interview_feedback }}</div>{% endif %}
@@ -549,6 +549,7 @@ html { scroll-behavior: smooth; }
           <div class="pd-body mb-2">
             {% if stage.open_interview %}
             <span class="text-muted">Scheduled:</span> <strong>{{ stage.open_interview.scheduled_date|date:"d M Y, H:i" }}</strong>
+            {% with oi=stage.open_interview %}{% if oi.interviewer %}<div class="pd-meta text-muted mt-1"><i class="bi bi-person"></i> {{ oi.interviewer.get_full_name|default:oi.interviewer.username }}{% if oi.co_interviewer %} + {{ oi.co_interviewer.get_full_name|default:oi.co_interviewer.username }} <span class="small">(Interviewer 2)</span>{% endif %}</div>{% endif %}{% endwith %}
             {% elif not stage.interview_request and not stage.cancelled_interview %}
             <span class="text-muted fst-italic">Interview schedule pending</span>
             {% endif %}
@@ -573,6 +574,9 @@ html { scroll-behavior: smooth; }
           {% elif stage.interview_request %}
             {% with ir=stage.interview_request %}
             {% with interviewer_name=ir.interviewer.get_full_name|default:ir.interviewer.username %}
+            {% if ir.co_interviewer %}
+            <div class="pd-meta text-muted mb-1"><i class="bi bi-people"></i> Interviewer 2: <strong>{{ ir.co_interviewer.get_full_name|default:ir.co_interviewer.username }}</strong></div>
+            {% endif %}
             {% if ir.status == 'AWAITING_SLOTS' %}
             <div class="alert alert-info py-2 px-3 mb-2 small">
               <i class="bi bi-hourglass-split"></i> Waiting on {{ interviewer_name }} to propose available slots.
@@ -595,7 +599,7 @@ html { scroll-behavior: smooth; }
               <strong>{{ ir.candidate_selected_slot.start_datetime|date:"D, d M Y, H:i" }}</strong> -
               approve to schedule the interview.
               {% if ir.calendar_event_id %}
-              <div class="mt-1"><i class="bi bi-microsoft-teams"></i> Blocked on {{ interviewer_name }}'s calendar (Teams invite sent).</div>
+              <div class="mt-1"><i class="bi bi-microsoft-teams"></i> Blocked on {{ interviewer_name }}'s{% if ir.co_interviewer %} and {{ ir.co_interviewer.get_full_name|default:ir.co_interviewer.username }}'s calendars{% else %} calendar{% endif %} (Teams invite sent).</div>
               {% endif %}
             </div>
             {% endif %}
@@ -878,7 +882,7 @@ html { scroll-behavior: smooth; }
       {% for i in interviews %}
         <div class="mb-2 pb-2 {% if not forloop.last %}border-bottom{% endif %}">
           <strong>{{ i.get_round_type_display }}</strong> &middot; {{ i.scheduled_date|date:"d M Y H:i" }} &middot; {{ i.get_mode_display }}<br>
-          <span class="text-muted pd-meta">Interviewer: {{ i.interviewer|default:"Unassigned" }} &middot; Status: {{ i.get_status_display }} &middot; Result: {{ i.get_result_display }}</span>
+          <span class="text-muted pd-meta">Interviewer: {{ i.interviewer|default:"Unassigned" }}{% if i.co_interviewer %} + {{ i.co_interviewer }}{% endif %} &middot; Status: {{ i.get_status_display }} &middot; Result: {{ i.get_result_display }}</span>
           {% if i.feedback %}<div class="pd-body mt-1">{{ i.feedback }}</div>{% endif %}
         </div>
       {% empty %}<p class="text-muted mb-0">No interviews scheduled.</p>{% endfor %}

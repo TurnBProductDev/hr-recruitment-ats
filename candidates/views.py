@@ -1380,8 +1380,9 @@ class CandidateCvView(GroupRequiredMixin, View):
         candidate = get_object_or_404(Candidate, pk=pk)
         is_interviewer = is_interviewer_only(request.user)
         if is_interviewer and not (
-            candidate.interviews.filter(interviewer=request.user).exists()
-            or candidate.interview_requests.filter(interviewer=request.user).exists()
+            candidate.interviews.filter(Q(interviewer=request.user) | Q(co_interviewer=request.user)).exists()
+            or candidate.interview_requests.filter(
+                Q(interviewer=request.user) | Q(co_interviewer=request.user)).exists()
         ):
             raise Http404('No CV on file.')
         resume_url = (candidate.resume_url or '').strip()
