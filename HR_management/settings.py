@@ -65,6 +65,8 @@ MIDDLEWARE = [
     # Checks newly arrived candidates (incl. careers-mailbox ones the stored
     # procedure inserts directly) against the 6-month same-vacancy repeat rule.
     'candidates.duplicate_rule.DuplicateRuleMiddleware',
+    # Who-changed-what history for login accounts (dashboard/user_audit.py).
+    'dashboard.user_audit.AccountAuditMiddleware',
 ]
 
 ROOT_URLCONF = 'HR_management.urls'

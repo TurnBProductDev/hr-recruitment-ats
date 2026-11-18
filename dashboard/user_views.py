@@ -91,6 +91,32 @@ class UserUpdateView(GroupRequiredMixin, UpdateView):
         return reverse('user_list')
 
 
+class UserHistoryView(GroupRequiredMixin, ListView):
+    """Who changed which account, what, and when (dashboard/user_audit.py) -
+    every account, or one with ?account=<pk>."""
+    template_name = 'dashboard/user_history.html'
+    context_object_name = 'entries'
+    allowed_groups = (HR_ADMIN, RECRUITER, HIRING_MANAGER)
+    paginate_by = 100
+
+    def get_queryset(self):
+        from .models import AccountChangeLog
+        qs = AccountChangeLog.objects.select_related('account', 'changed_by')
+        self.account = None
+        account_pk = self.request.GET.get('account', '')
+        if account_pk.isdigit():
+            self.account = User.objects.filter(pk=account_pk).first()
+            qs = qs.filter(account_id=account_pk)
+        return qs
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx['account'] = self.account
+        ctx['back_url'] = reverse('user_list')
+        ctx['back_label'] = 'Users'
+        return ctx
+
+
 class UserToggleActiveView(GroupRequiredMixin, View):
     """One-click Deactivate/Activate from the list, for when a full Edit
     isn't needed - a departed employee's access can be pulled in one click."""

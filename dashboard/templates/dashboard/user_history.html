@@ -1,0 +1,62 @@
+{% extends "hr_base.html" %}
+{% block title %}User Change History{% endblock %}
+
+{% block extra_css %}
+<style>
+.uh-head { display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:16px; margin-bottom:18px; }
+.uh-title { font-size:1.5rem; font-weight:700; color:var(--text-primary); margin:0; }
+.uh-subtitle { font-size:.8rem; color:var(--text-muted); margin-top:2px; }
+.uh-when { white-space:nowrap; font-size:.8rem; color:var(--text-muted); }
+.uh-summary { font-size:.85rem; }
+.uh-summary span { display:block; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="uh-head">
+  <div>
+    <h3 class="uh-title mb-0">{% if account %}History: {{ account.get_full_name|default:account.username }}{% else %}User Change History{% endif %}</h3>
+    <div class="uh-subtitle">
+      Every change to a login account - role, name, email, login ID, active status, password - with who made it and when.
+      Recorded from 18 Nov 2026 onwards; earlier changes weren't tracked.
+      {% if account %}&middot; <a href="{% url 'user_history' %}">Show all accounts</a>{% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="app-card">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr><th>When</th>{% if not account %}<th>Account</th>{% endif %}<th>What changed</th><th>Changed by</th></tr>
+      </thead>
+      <tbody>
+        {% for e in entries %}
+        <tr>
+          <td class="uh-when">{{ e.created_at|date:"d M Y, H:i" }}</td>
+          {% if not account %}
+          <td>
+            {% if e.account %}<a href="{% url 'user_history' %}?account={{ e.account_id }}">{{ e.account_name }}</a>
+            {% else %}{{ e.account_name }}{% endif %}
+          </td>
+          {% endif %}
+          <td class="uh-summary">{% for part in e.summary_parts %}<span>{{ part }}</span>{% endfor %}</td>
+          <td>{{ e.changed_by_name }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="{% if account %}3{% else %}4{% endif %}" class="text-center text-muted py-4">No changes recorded yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if is_paginated %}
+  <div class="d-flex justify-content-between align-items-center p-3 small">
+    <span class="text-muted">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+    <span class="d-flex gap-2">
+      {% if page_obj.has_previous %}<a class="btn btn-sm btn-outline-app" href="?{% if account %}account={{ account.pk }}&amp;{% endif %}page={{ page_obj.previous_page_number }}">Newer</a>{% endif %}
+      {% if page_obj.has_next %}<a class="btn btn-sm btn-outline-app" href="?{% if account %}account={{ account.pk }}&amp;{% endif %}page={{ page_obj.next_page_number }}">Older</a>{% endif %}
+    </span>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

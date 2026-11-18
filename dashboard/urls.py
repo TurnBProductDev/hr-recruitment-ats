@@ -9,6 +9,7 @@ urlpatterns = [
 
     path('hr/users/', user_views.UserListView.as_view(), name='user_list'),
     path('hr/users/add/', user_views.UserCreateView.as_view(), name='user_add'),
+    path('hr/users/history/', user_views.UserHistoryView.as_view(), name='user_history'),
     path('hr/users/<int:pk>/edit/', user_views.UserUpdateView.as_view(), name='user_edit'),
     path('hr/users/<int:pk>/toggle-active/', user_views.UserToggleActiveView.as_view(), name='user_toggle_active'),
 ]
