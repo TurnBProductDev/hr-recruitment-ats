@@ -103,6 +103,15 @@ class SummaryTableTests(TestCase):
         self.assertEqual(row['rejected'], 2)      # Rejected + Blacklisted
         self.assertEqual(row['hired'], 1)         # Hired
 
+    def test_active_pool_split_adds_up_to_active_pool(self):
+        response = self.client.get(reverse('hr_dashboard'))
+        split = dict(response.context['pool_split'])
+        self.assertEqual(split, {'Qualified': 1, 'Round 1': 1, 'Round 2': 1,
+                                 'Final Selection': 1, 'On Hold': 1})
+        self.assertEqual(sum(split.values()), response.context['summary']['shortlisted'])
+        self.assertContains(response, 'Screening Pending')
+        self.assertContains(response, 'Active Pool by stage')
+
     def test_by_source_columns_add_up_to_total(self):
         row = self._row('by_source')
         self.assertEqual(row['open'] + row['shortlisted'] + row['rejected'] + row['hired'], row['total'])

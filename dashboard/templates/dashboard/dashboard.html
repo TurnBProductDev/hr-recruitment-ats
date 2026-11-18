@@ -139,6 +139,22 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
 .sm-kpi-subval { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border-color); }
 .sm-kpi-subval .lbl { font-size: .66rem; }
 .sm-kpi-subval .val { font-size: 1rem; margin-top: 2px; }
+/* Flip cards (Total Applicants, Active Pool): hover, keyboard focus, or a
+   tap (touch screens have no hover - JS toggles .is-flipped) shows the back.
+   Both faces share one grid cell, so the card is as tall as its taller face. */
+.sm-flip { flex: 1 1 150px; min-width: 150px; perspective: 1000px; cursor: pointer; outline: none; }
+.sm-flip-inner { display: grid; height: 100%; transition: transform .5s ease; transform-style: preserve-3d; }
+.sm-flip-inner > .sm-kpi { grid-area: 1 / 1; backface-visibility: hidden; -webkit-backface-visibility: hidden; min-width: 0; }
+.sm-flip-back { transform: rotateY(180deg); }
+.sm-flip.is-flipped .sm-flip-inner { transform: rotateY(180deg); }
+@media (hover: hover) { .sm-flip:hover .sm-flip-inner { transform: rotateY(180deg); } }
+.sm-flip:focus-visible .sm-kpi { box-shadow: 0 0 0 2px var(--accent-teal); }
+.sm-flip-hint { float: right; font-size: .8rem; color: var(--text-muted); opacity: .6; }
+.sm-split { list-style: none; margin: 8px 0 0; padding: 0; }
+.sm-split li { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: .8rem; padding: 3px 0; border-bottom: 1px dashed var(--border-color); color: var(--text-primary); }
+.sm-split li:last-child { border-bottom: 0; }
+.sm-split li strong { font-size: .9rem; color: var(--accent-teal); }
+@media (prefers-reduced-motion: reduce) { .sm-flip-inner { transition: none; } }
 
 /* Grid, not flex: a fixed track per column means a long Role/Source name
    (wrapping to several lines) can never squeeze its neighbours narrower on
@@ -290,20 +306,39 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
         <div class="val">{{ open_positions }}</div>
         <div class="sub">Openings</div>
       </div>
-      <div class="sm-kpi" style="--kpi-accent:#c9d3d1">
-        <div class="lbl">Total Applicants</div>
-        <div class="val">{{ s.total }}</div>
-        <div class="sm-kpi-subval">
-          <div class="lbl">Screened</div>
-          <div class="val" style="color:var(--text-muted)">{{ s.attended }}</div>
+      <div class="sm-flip" tabindex="0" title="Hover or tap to see screening pending">
+        <div class="sm-flip-inner">
+          <div class="sm-kpi" style="--kpi-accent:#c9d3d1">
+            <div class="lbl">Total Applicants <i class="bi bi-arrow-repeat sm-flip-hint"></i></div>
+            <div class="val">{{ s.total }}</div>
+            <div class="sm-kpi-subval">
+              <div class="lbl">Screened</div>
+              <div class="val" style="color:var(--text-muted)">{{ s.attended }}</div>
+            </div>
+          </div>
+          <div class="sm-kpi sm-flip-back" style="--kpi-accent:#a07c00" aria-hidden="true">
+            <div class="lbl">Screening Pending</div>
+            <div class="val" style="color:#a07c00">{{ s.open }}</div>
+            <div class="sub">Applied, not yet screened{% if s.total %} &middot; {% widthratio s.open s.total 100 %}% of applicants{% endif %}</div>
+          </div>
         </div>
       </div>
-      <div class="sm-kpi" style="--kpi-accent:var(--accent-teal)">
-        <div class="lbl">Active Pool</div>
-        <div class="val" style="color:var(--accent-teal)">{{ s.shortlisted }}</div>
-        <div class="sm-kpi-subval">
-          <div class="lbl">Rejected</div>
-          <div class="val" style="color:#b02a37">{{ s.rejected }}</div>
+      <div class="sm-flip" tabindex="0" title="Hover or tap to see the Active Pool by stage">
+        <div class="sm-flip-inner">
+          <div class="sm-kpi" style="--kpi-accent:var(--accent-teal)">
+            <div class="lbl">Active Pool <i class="bi bi-arrow-repeat sm-flip-hint"></i></div>
+            <div class="val" style="color:var(--accent-teal)">{{ s.shortlisted }}</div>
+            <div class="sm-kpi-subval">
+              <div class="lbl">Rejected</div>
+              <div class="val" style="color:#b02a37">{{ s.rejected }}</div>
+            </div>
+          </div>
+          <div class="sm-kpi sm-flip-back" style="--kpi-accent:var(--accent-teal)" aria-hidden="true">
+            <div class="lbl">Active Pool by stage &middot; {{ s.shortlisted }}</div>
+            <ul class="sm-split">
+              {% for label, n in pool_split %}<li><span>{{ label }}</span><strong>{{ n }}</strong></li>{% endfor %}
+            </ul>
+          </div>
         </div>
       </div>
       <div class="sm-kpi" style="--kpi-accent:var(--accent-teal)">
@@ -516,6 +551,24 @@ a.fnl-stat-card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.08); border-color:
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
+<script>
+// Summary flip cards: hover flips them on a mouse (CSS); a tap, Enter or
+// Space toggles them on touch screens / keyboards.
+document.querySelectorAll('.sm-flip').forEach(function (card) {
+  function toggle() {
+    var flipped = card.classList.toggle('is-flipped');
+    card.querySelectorAll('.sm-kpi').forEach(function (face, i) {
+      face.setAttribute('aria-hidden', String(i === 0 ? flipped : !flipped));
+    });
+  }
+  card.addEventListener('click', function () {
+    if (!window.matchMedia('(hover: hover)').matches) toggle();
+  });
+  card.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+  });
+});
+</script>
 <script>
 // Keep the Summary/Overview/Daily View choice in the URL + filter form, so
 // applying a filter stays on the current view and the browser back button

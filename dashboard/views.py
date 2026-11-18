@@ -63,6 +63,23 @@ def _summary_counts_qs(qs):
     return qs.aggregate(**_grouped_counts())
 
 
+# Active Pool split shown on the back of the Summary tab's Active Pool card -
+# exactly the statuses SHORTLISTED_GROUP counts, so the rows add up to it.
+POOL_STAGES = (
+    ('Qualified', Q(status=STATUS.SHORTLISTED)),
+    ('Round 1', Q(status=STATUS.ROUND1)),
+    ('Round 2', Q(status=STATUS.INTERVIEW)),
+    ('Final Selection', Q(status=STATUS.FINAL_SELECTION)),
+    ('On Hold', Q(status=STATUS.SCREENING_HOLD) & ~INITIAL_HOLD),
+)
+
+
+def _pool_split(qs):
+    """[(label, count), ...] for POOL_STAGES (one query)."""
+    counts = qs.aggregate(**{f's{i}': Count('id', filter=q) for i, (_, q) in enumerate(POOL_STAGES)})
+    return [(label, counts[f's{i}']) for i, (label, _) in enumerate(POOL_STAGES)]
+
+
 GREEN = '#0e6f6b'
 # Funnel bar segment colours, keyed by category rather than by rank/size, so
 # the same reason always reads the same colour wherever it shows up in the
@@ -166,6 +183,7 @@ class HRDashboardView(GroupRequiredMixin, TemplateView):
             open_jobs = open_jobs.filter(pk=job_id)
         ctx['open_positions'] = open_jobs.aggregate(n=Sum('openings'))['n'] or 0
         ctx['summary'] = _summary_counts_qs(base)
+        ctx['pool_split'] = _pool_split(base)
         ctx['by_job'] = (base.values('job__title')
                          # Max, not Sum: `openings` is a per-job value, not per-candidate -
                          # summing it across every candidate row in the group would multiply
