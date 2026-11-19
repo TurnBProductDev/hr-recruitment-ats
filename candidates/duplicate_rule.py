@@ -57,7 +57,8 @@ def months_before(dt, months):
 
 def _reject(candidate, remarks):
     from .services import change_status  # local: services imports models, keep this importable
-    change_status(candidate, STATUS.REJECTED, remarks=remarks, performed_by=PERFORMED_BY)
+    from .reject_reasons import DUPLICATE
+    change_status(candidate, STATUS.REJECTED, remarks=remarks, performed_by=PERFORMED_BY, reject_reason=DUPLICATE)
 
 
 def apply_to(candidate):

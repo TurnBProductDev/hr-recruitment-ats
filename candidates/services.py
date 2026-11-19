@@ -80,10 +80,15 @@ def hold_kind_for(candidate, from_status):
     return Candidate.HoldKind.INTERVIEW
 
 
-def change_status(candidate, new_status, user=None, remarks=None, performed_by=None):
+def change_status(candidate, new_status, user=None, remarks=None, performed_by=None,
+                  reject_reason=None, reject_reason_other=None):
+    """`reject_reason`/`reject_reason_other`: the Reject Reason picked for a
+    move to REJECTED (candidates/reject_reasons.py); ignored otherwise."""
     old_status = candidate.status
     if old_status == new_status:
         return candidate
+    if new_status != STATUS.REJECTED:
+        reject_reason = reject_reason_other = None
     candidate.status = new_status
     # Hold is available from every stage, so remember which one it was taken
     # from - that is what names it ("Round 2 Hold") - and, for Round 1/2,
@@ -95,6 +100,7 @@ def change_status(candidate, new_status, user=None, remarks=None, performed_by=N
     CandidateStatusHistory.objects.create(
         candidate=candidate, old_status=old_status, new_status=new_status,
         changed_by=user, performed_by=performed_by, remarks=remarks, hold_kind=candidate.hold_kind,
+        reject_reason=reject_reason or None, reject_reason_other=reject_reason_other or None,
     )
     return candidate
 

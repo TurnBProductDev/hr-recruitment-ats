@@ -750,7 +750,8 @@ class InterviewDoneCancelTests(TestCase):
 
     def test_reject_settles_the_interview_as_failed(self):
         self.client.post(reverse('interview_mark_done', args=[self.interview.pk]))
-        self.client.post(reverse('candidate_reject', args=[self.candidate.pk]), {'reason': 'Test remarks.'})
+        self.client.post(reverse('candidate_reject', args=[self.candidate.pk]),
+                         {'reason': 'Test remarks.', 'reject_reason': 'ROLE_FIT'})
         self.interview.refresh_from_db()
         self.assertEqual(self.interview.result, Interview.Result.FAIL)
 
@@ -764,7 +765,8 @@ class InterviewDoneCancelTests(TestCase):
         """HR deciding straight off the Hiring block, without ever clicking
         Done/Cancelled on the interview itself, must not leave it dangling
         Scheduled forever (see the interviewer portal's Result Pending tab)."""
-        self.client.post(reverse('candidate_reject', args=[self.candidate.pk]), {'reason': 'Test remarks.'})
+        self.client.post(reverse('candidate_reject', args=[self.candidate.pk]),
+                         {'reason': 'Test remarks.', 'reject_reason': 'ROLE_FIT'})
         self.interview.refresh_from_db()
         self.assertEqual(self.interview.status, Interview.Status.COMPLETED)
         self.assertEqual(self.interview.result, Interview.Result.FAIL)

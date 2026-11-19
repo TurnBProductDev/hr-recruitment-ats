@@ -487,6 +487,7 @@ html { scroll-behavior: smooth; }
         </div>
         {% if stage.decision %}
         <div class="pd-meta text-muted mt-2">{{ stage.decision.who|default:"Unknown" }} &middot; {{ stage.decision.when|date:"d M Y H:i" }}</div>
+        {% if stage.decision.reject_reason %}<div class="pd-body mt-1"><span class="text-muted">Reject Reason:</span> <strong>{{ stage.decision.reject_reason }}</strong></div>{% endif %}
         {% if stage.decision.remarks %}<div class="pd-body mt-1">{{ stage.decision.remarks }}</div>{% endif %}
         {% endif %}
         {% if stage.decided_interview %}
@@ -533,15 +534,13 @@ html { scroll-behavior: smooth; }
               {% csrf_token %}
               <input type="hidden" name="next" value="{{ request.get_full_path }}">
               <input type="hidden" name="performed_by" value="{{ user.get_full_name|default:user.get_username }}">
-              <textarea name="reason" class="form-control form-control-sm mb-2 js-stage-reason" rows="2" placeholder="Remarks (required)…"></textarea>
+              <textarea name="reason" class="js-stage-reason" hidden></textarea>
               <div class="stage-action-row">
-                <button type="button" class="stage-action-btn stage-tone-reject"
-                        data-bs-toggle="modal" data-bs-target="#rejectionModal"
-                        data-load-url="{% url 'candidate_rejection_draft' candidate.pk %}" data-require-reason="1" disabled>Reject</button>
+                <button type="button" class="stage-action-btn stage-tone-reject" data-decision="reject"
+                        data-load-url="{% url 'candidate_rejection_draft' candidate.pk %}">Reject</button>
                 {# A no-show/cancelled candidate usually doesn't need the "thank you for interviewing" email. #}
-                <button type="submit" formaction="{% url 'candidate_reject' candidate.pk %}" class="stage-action-btn stage-tone-reject" data-require-reason="1" disabled
-                        onclick="return confirm('Reject {{ candidate.full_name|escapejs }} without sending an email?');">Reject (No Email)</button>
-                <button type="submit" formaction="{% url 'candidate_screening_hold' candidate.pk %}" class="stage-action-btn stage-tone-hold" data-require-reason="1" disabled>Hold</button>
+                <button type="submit" formaction="{% url 'candidate_reject' candidate.pk %}" class="stage-action-btn stage-tone-reject" data-decision="reject">Reject (No Email)</button>
+                <button type="submit" formaction="{% url 'candidate_screening_hold' candidate.pk %}" class="stage-action-btn stage-tone-hold" data-decision="remarks">Hold</button>
               </div>
             </form>
           </div>
@@ -645,19 +644,17 @@ html { scroll-behavior: smooth; }
             {% csrf_token %}
             <input type="hidden" name="next" value="{{ request.get_full_path }}">
             <input type="hidden" name="performed_by" value="{{ user.get_full_name|default:user.get_username }}">
-            <textarea name="reason" class="form-control form-control-sm mb-2 js-stage-reason" rows="2" placeholder="Remarks (required)…"></textarea>
+            <textarea name="reason" class="js-stage-reason" hidden></textarea>
             <div class="stage-action-row">
               {% for action in stage.actions %}
               {% if action.tone == 'reject' %}
-              <button type="button" class="stage-action-btn stage-tone-reject"
-                      data-bs-toggle="modal" data-bs-target="#rejectionModal"
-                      data-load-url="{% url 'candidate_rejection_draft' candidate.pk %}" data-require-reason="1" disabled>
+              <button type="button" class="stage-action-btn stage-tone-reject" data-decision="reject"
+                      data-load-url="{% url 'candidate_rejection_draft' candidate.pk %}">
                 {{ action.label }}
               </button>
               {% else %}
               <button type="submit" formaction="{% url action.url candidate.pk %}"
-                      class="stage-action-btn stage-tone-{{ action.tone }}"
-                      data-require-reason="1" disabled>
+                      class="stage-action-btn stage-tone-{{ action.tone }}" data-decision="remarks">
                 {{ action.label }}
               </button>
               {% endif %}
@@ -697,17 +694,16 @@ html { scroll-behavior: smooth; }
             <input type="hidden" name="next" value="{{ request.get_full_path }}">
             <input type="hidden" name="performed_by" value="{{ user.get_full_name|default:user.get_username }}">
 
-            <div class="stage-subsection-title">Remarks</div>
-            <textarea name="reason" class="form-control form-control-sm mb-2 js-stage-reason" rows="2" placeholder="Remarks (required to update status)…"></textarea>
+            <textarea name="reason" class="js-stage-reason" hidden></textarea>
 
             <div class="stage-subsection-title">Update {{ stage.label }} Status</div>
             <div class="stage-action-row">
-              <button type="submit" formaction="{% url 'candidate_add_log' candidate.pk %}" name="outcome" value="UNABLE" class="btn btn-sm btn-outline-app">Unable to Connect</button>
-              <button type="submit" formaction="{% url 'candidate_add_log' candidate.pk %}" name="outcome" value="CALLBACK" class="btn btn-sm btn-outline-app">Call Back</button>
+              <button type="submit" formaction="{% url 'candidate_add_log' candidate.pk %}" name="outcome" value="UNABLE" class="btn btn-sm btn-outline-app" data-decision="optional">Unable to Connect</button>
+              <button type="submit" formaction="{% url 'candidate_add_log' candidate.pk %}" name="outcome" value="CALLBACK" class="btn btn-sm btn-outline-app" data-decision="optional">Call Back</button>
               {% for action in stage.actions %}
               <button type="submit" formaction="{% url action.url candidate.pk %}"
                       class="stage-action-btn stage-tone-{{ action.tone }}"
-                      data-require-reason="1" disabled>
+                      data-decision="{% if action.tone == 'reject' %}reject{% else %}remarks{% endif %}">
                 {{ action.label }}
               </button>
               {% endfor %}
@@ -760,8 +756,10 @@ html { scroll-behavior: smooth; }
               feedback in here rather than deciding the stage itself - pre-filled
               so HR/Recruiter sees it right where they make the actual call.
             {% endcomment %}
-            <textarea name="reason" class="form-control form-control-sm mb-2 js-stage-reason" rows="2"
-                      placeholder="Remarks (required)…">{{ stage.done_interview.feedback|default:"" }}</textarea>
+            <textarea name="reason" class="js-stage-reason" hidden>{{ stage.done_interview.feedback|default:"" }}</textarea>
+            {% if stage.done_interview.feedback %}
+            <div class="pd-meta text-muted mb-2"><i class="bi bi-chat-left-quote"></i> The interviewer's feedback is filled into the remarks when you pick an action.</div>
+            {% endif %}
             <div class="stage-action-row">
               {% for action in stage.actions %}
               {% if action.tone == 'reject' and stage.key != 'open' %}
@@ -773,15 +771,14 @@ html { scroll-behavior: smooth; }
                 immediate Reject (below, action.url branch) since the
                 candidate was never interviewed.
               {% endcomment %}
-              <button type="button" class="stage-action-btn stage-tone-reject"
-                      data-bs-toggle="modal" data-bs-target="#rejectionModal"
-                      data-load-url="{% url 'candidate_rejection_draft' candidate.pk %}" data-require-reason="1" disabled>
+              <button type="button" class="stage-action-btn stage-tone-reject" data-decision="reject"
+                      data-load-url="{% url 'candidate_rejection_draft' candidate.pk %}">
                 {{ action.label }}
               </button>
               {% else %}
               <button type="submit" formaction="{% url action.url candidate.pk %}"
                       class="stage-action-btn stage-tone-{{ action.tone }}"
-                      data-require-reason="1" disabled>
+                      data-decision="{% if action.tone == 'reject' %}reject{% else %}remarks{% endif %}">
                 {{ action.label }}
               </button>
               {% endif %}
@@ -800,14 +797,14 @@ html { scroll-behavior: smooth; }
       <div class="text-center" style="color:{{ final_status.color }}; font-size:1.05rem; font-weight:700;">{{ final_status.label }}</div>
       {% if is_on_hold %}
       <div class="stage-subsection">
-        <form method="post" class="js-stage-form js-confirm-reason-form">
+        <form method="post" class="js-stage-form">
           {% csrf_token %}
           <input type="hidden" name="next" value="{{ request.get_full_path }}">
           <input type="hidden" name="performed_by" value="{{ user.get_full_name|default:user.get_username }}">
-          <textarea name="reason" hidden class="form-control form-control-sm mb-2 js-stage-reason" rows="2" placeholder="Remarks (required)…"></textarea>
+          <textarea name="reason" class="js-stage-reason" hidden></textarea>
           <div class="stage-action-row justify-content-center final-status-actions">
-            <button type="submit" formaction="{% url candidate.resume_action.url_name candidate.pk %}" class="stage-action-btn stage-tone-advance">{{ candidate.resume_action.label }}</button>
-            <button type="submit" formaction="{% url 'candidate_reject' candidate.pk %}" class="stage-action-btn stage-tone-reject">Reject</button>
+            <button type="submit" formaction="{% url candidate.resume_action.url_name candidate.pk %}" class="stage-action-btn stage-tone-advance" data-decision="remarks">{{ candidate.resume_action.label }}</button>
+            <button type="submit" formaction="{% url 'candidate_reject' candidate.pk %}" class="stage-action-btn stage-tone-reject" data-decision="reject">Reject</button>
             {% if candidate.hold_from_status != 'OPEN' %}
             <button type="button" class="stage-action-btn stage-tone-hold" data-bs-toggle="modal" data-bs-target="#moveToFutureModal">Move to Future</button>
             {% endif %}
@@ -948,6 +945,37 @@ html { scroll-behavior: smooth; }
 </div>
 
 {% comment %}
+  Confirm popup for every stage action (Shortlist, Hold, Reject, Blacklist,
+  Cleared, Call Back, ...): the action buttons just open this; Confirm only
+  appears once the remarks are typed (or, for Reject, a Reject Reason is
+  picked - remarks are optional extra detail there). Confirm then fills the
+  stage form's hidden reason/reject fields and submits it with the clicked
+  button (or, for Reject with email, moves on to the email draft).
+{% endcomment %}
+<div class="modal fade" id="decisionModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="decisionTitle">Confirm</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3" id="decisionMsg"></p>
+        {% include "candidates/_reject_reason_fields.html" with hidden=True %}
+        <div class="mb-1">
+          <label class="form-label" for="decisionRemarks"><span id="decisionRemarksLabel">Remarks</span> <span class="text-danger" id="decisionRemarksReq">*</span></label>
+          <textarea id="decisionRemarks" class="form-control" rows="4"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-app btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-fill-app btn-sm" id="decisionConfirm" hidden>Confirm</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% comment %}
   Move to Future's modal is shared by two triggers: the Final Status
   section's resume-while-on-Hold action, and the Round 1/Round 2 schedule
   card's "Or Decide Without an Interview" quick action (candidate need not
@@ -1072,43 +1100,133 @@ document.querySelectorAll('.js-autosave').forEach(function (form) {
   form.addEventListener('change', show);
 });
 
-// Hiring stage cards: every decision needs remarks (enforced server-side
-// too - see candidates.views.REMARKS_REQUIRED) - keep the decision buttons
-// disabled until the shared remarks box has real content.
-document.querySelectorAll('.js-stage-form').forEach(function (form) {
-  var reason = form.querySelector('.js-stage-reason');
-  var gated = form.querySelectorAll('[data-require-reason]');
-  if (!reason || !gated.length) return;
-  var sync = function () {
-    var filled = reason.value.trim().length > 0;
-    gated.forEach(function (btn) { btn.disabled = !filled; });
-  };
-  reason.addEventListener('input', sync);
-  // The box can already be pre-filled on load (an Interviewer's feedback -
-  // see stage.done_interview.feedback above), so sync once immediately
-  // rather than waiting for the first edit.
-  sync();
-});
+// Stage actions -> Confirm popup (#decisionModal). Every action button
+// carries data-decision: "remarks" (remarks required), "reject" (a Reject
+// Reason required, "Other" needs the typed reason, remarks optional) or
+// "optional" (remarks optional - Call Back / Unable to Connect). Confirm stays
+// hidden until that's satisfied; Cancel is always there. The server enforces
+// the same rules (candidates.views / reject_reasons.from_post).
+(function () {
+  var modalEl = document.getElementById('decisionModal');
+  if (!modalEl) return;
+  var modal = new bootstrap.Modal(modalEl);
+  var title = document.getElementById('decisionTitle');
+  var msg = document.getElementById('decisionMsg');
+  var remarks = document.getElementById('decisionRemarks');
+  var remarksLabel = document.getElementById('decisionRemarksLabel');
+  var remarksReq = document.getElementById('decisionRemarksReq');
+  var confirmBtn = document.getElementById('decisionConfirm');
+  var rejectBox = modalEl.querySelector('.js-reject-fields');
+  var rejectSelect = modalEl.querySelector('.js-reject-reason');
+  var rejectOther = modalEl.querySelector('.js-reject-other');
+  var candidateName = '{{ candidate.full_name|escapejs }}';
+  var pending = null;  // {btn, form, kind}
+  var afterHide = null;  // runs once the popup has finished closing
 
-// Final Status actions (Move to Round 2/Reject/Move to Future while on
-// Hold): Remarks stays hidden until an action button is actually clicked -
-// that first click just reveals it instead of submitting, so the box isn't
-// cluttering the page for a decision that hasn't been made yet. Clicking
-// again (now that it's visible) submits as normal.
-document.querySelectorAll('.js-confirm-reason-form').forEach(function (form) {
-  var reason = form.querySelector('.js-stage-reason');
-  if (!reason) return;
-  form.addEventListener('submit', function (event) {
-    if (reason.hidden) {
-      event.preventDefault();
-      reason.hidden = false;
-      // Only now - a required field that's still hidden would block the
-      // submit with no visible message.
-      reason.required = true;
-      reason.focus();
+  function valid() {
+    if (!pending) return false;
+    if (pending.kind === 'reject') {
+      if (!rejectSelect.value) return false;
+      return rejectSelect.value !== 'OTHER' || rejectOther.value.trim().length > 0;
+    }
+    if (pending.kind === 'optional') return true;
+    return remarks.value.trim().length > 0;
+  }
+  function sync() {
+    rejectOther.hidden = rejectSelect.value !== 'OTHER';
+    confirmBtn.hidden = !valid();
+  }
+  [remarks, rejectSelect, rejectOther].forEach(function (el) {
+    el.addEventListener('input', sync);
+    el.addEventListener('change', sync);
+  });
+
+  function hiddenField(form, name) {
+    var el = form.querySelector('input[type="hidden"][name="' + name + '"]');
+    if (!el) {
+      el = document.createElement('input');
+      el.type = 'hidden'; el.name = name;
+      form.appendChild(el);
+    }
+    return el;
+  }
+
+  document.addEventListener('click', function (event) {
+    var btn = event.target.closest('[data-decision]');
+    if (!btn || !btn.closest('.js-stage-form')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    var form = btn.closest('form');
+    var kind = btn.getAttribute('data-decision');
+    var label = btn.textContent.replace(/\s+/g, ' ').trim();
+    pending = {btn: btn, form: form, kind: kind};
+    title.textContent = label;
+    msg.textContent = kind === 'reject'
+      ? 'Reject ' + candidateName + ' - pick a reason. Add any extra detail in the remarks.'
+      : label + ' for ' + candidateName + '.';
+    var prefill = form.querySelector('.js-stage-reason');
+    remarks.value = prefill ? prefill.value : '';
+    rejectBox.hidden = kind !== 'reject';
+    rejectSelect.value = '';
+    rejectOther.value = '';
+    remarksLabel.textContent = kind === 'reject' ? 'Additional remarks' : 'Remarks';
+    remarksReq.hidden = kind !== 'remarks';
+    remarks.placeholder = kind === 'remarks' ? 'Required' : 'Optional';
+    confirmBtn.className = 'btn btn-sm ' + (kind === 'reject' ? 'btn-danger' : 'btn-fill-app');
+    confirmBtn.textContent = kind === 'reject' ? 'Confirm Reject' : 'Confirm';
+    sync();
+    modal.show();
+  }, true);
+
+  modalEl.addEventListener('shown.bs.modal', function () {
+    confirmBtn.disabled = false;
+    (pending && pending.kind === 'reject' ? rejectSelect : remarks).focus();
+  });
+  modalEl.addEventListener('hidden.bs.modal', function () {
+    var run = afterHide;
+    afterHide = null;
+    if (run) { run(); }
+  });
+
+  // Move to Future's own popup follows the same rule: Confirm appears only
+  // once a role (and, for "Other", its name) and remarks are filled in.
+  var futureForm = document.querySelector('#moveToFutureModal form');
+  if (futureForm) {
+    var futureSubmit = futureForm.querySelector('button[type="submit"]');
+    var futureSync = function () {
+      var role = futureForm.elements['suggested_role'].value;
+      var other = futureForm.elements['suggested_role_other'];
+      var ok = role && (role !== '__other__' || (other && other.value.trim()))
+               && futureForm.elements['reason'].value.trim();
+      futureSubmit.hidden = !ok;
+    };
+    futureForm.addEventListener('input', futureSync);
+    futureForm.addEventListener('change', futureSync);
+    document.getElementById('moveToFutureModal').addEventListener('shown.bs.modal', futureSync);
+    futureSync();
+  }
+
+  confirmBtn.addEventListener('click', function () {
+    if (!valid()) return;
+    var p = pending;
+    var reasonEl = p.form.querySelector('.js-stage-reason');
+    if (reasonEl) { reasonEl.value = remarks.value.trim(); }
+    hiddenField(p.form, 'reject_reason').value = p.kind === 'reject' ? rejectSelect.value : '';
+    hiddenField(p.form, 'reject_reason_other').value =
+      p.kind === 'reject' && rejectSelect.value === 'OTHER' ? rejectOther.value.trim() : '';
+    confirmBtn.disabled = true;
+    if (p.btn.dataset.loadUrl) {
+      // Reject with email: on to the editable email draft, which carries
+      // these values over (see the rejectionModal script below).
+      afterHide = function () {
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('rejectionModal')).show(p.btn);
+      };
+      modal.hide();
+    } else {
+      p.form.requestSubmit(p.btn);
     }
   });
-});
+})();
 
 // Re-score runs in the background (it calls an external AI service and can
 // take a while) - poll until it finishes, then reload so the fresh result
@@ -1320,6 +1438,11 @@ pollCandidateAction("{% url 'candidate_rescore_status' candidate.pk %}");
         if (f.elements['next']) { f.elements['next'].value = next; }
         if (f.elements['performed_by']) { f.elements['performed_by'].value = performedBy; }
         if (f.elements['reason']) { f.elements['reason'].value = reason; }
+        // The Reject Reason picked in the Confirm popup (stored on the stage form).
+        ['reject_reason', 'reject_reason_other'].forEach(function (name) {
+          var src = stageForm && stageForm.querySelector('input[name="' + name + '"]');
+          if (f.elements[name]) { f.elements[name].value = src ? src.value : ''; }
+        });
       })
       .catch(function () { body.innerHTML = '<div class="alert alert-danger">Could not load the email draft. Please try again.</div>'; });
   });

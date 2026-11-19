@@ -219,6 +219,15 @@
           {% endfor %}
         </select>
       </div>
+      <div>
+        <label class="form-label mb-0 d-block">Reject Reason</label>
+        <select name="reject_reason" class="form-select form-select-sm" onchange="this.form.submit()" style="min-width:220px;">
+          <option value="">All reasons</option>
+          {% for value, label in reject_reason_options %}
+          <option value="{{ value }}" {% if reject_reason_filter == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
       {% endif %}
       {% if show_applied_filter %}
       <div>
@@ -274,7 +283,7 @@
             {% if show_interview_cols %}<th>Interviewer</th>{% endif %}
             {% if show_interview_score %}<th>Interview Score <span class="text-muted fw-normal">(/10)</span></th>{% endif %}
             {% if show_previous_round_remarks %}<th>Previous Round Remarks</th>{% endif %}
-            {% if show_rejection_cols %}<th>Rejected At</th><th>Remarks</th>{% endif %}
+            {% if show_rejection_cols %}<th>Rejected At</th><th>Reject Reason</th><th>Remarks</th>{% endif %}
             <th>Status</th><th class="text-end no-export">Actions</th>
           </tr>
         </thead>
@@ -325,6 +334,7 @@
             {% endif %}
             {% if show_rejection_cols %}
             <td>{{ c.rejection_stage|default:"-" }}</td>
+            <td>{% if c.reject_reason_label %}{{ c.reject_reason_label }}{% else %}<span class="text-muted">Not recorded</span>{% endif %}</td>
             <td class="repo-remarks" title="{{ c.rej_remarks|default:'' }}">{{ c.rej_remarks|default:"-"|truncatechars:80 }}</td>
             {% endif %}
             <td>
@@ -386,6 +396,7 @@
         <div class="modal-body">
           <p id="actionModalMsg" class="text-muted small mb-3"></p>
           <div id="actionFields">
+            {% include "candidates/_reject_reason_fields.html" with hidden=True %}
             <div class="mb-3 d-none" id="actionRoleField">
               <label class="form-label">Suggested Role <span class="text-danger">*</span></label>
               <select name="suggested_role" id="actionRoleSelect" class="form-select">
@@ -503,4 +514,5 @@ $(function () {
   });
 });
 </script>
+{% include "candidates/_action_modal_rules.html" %}
 {% endblock %}

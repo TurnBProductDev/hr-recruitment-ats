@@ -24,7 +24,7 @@ from interviews.models import Interview, InterviewReschedule, InterviewRequest
 from jobs.models import Job
 
 from . import (
-    bulk, cv_extraction, cv_parser, cv_preview, cv_storage, match_scoring, rejection_emails,
+    bulk, cv_extraction, cv_parser, cv_preview, cv_storage, match_scoring, reject_reasons, rejection_emails,
     screening_questions, scoring, services,
 )
 from .forms import (
@@ -209,6 +209,7 @@ def _build_hiring_stages(candidate, history):
                     'label': action['label'] if action else labels.get(row.new_status, row.new_status),
                     'tone': action['tone'] if action else 'advance',
                     'remarks': row.remarks, 'who': row.performed_by or row.changed_by, 'when': row.changed_at,
+                    'reject_reason': row.reject_reason_label,
                 }
         stages.append(entry)
     return stages, active_index
@@ -335,6 +336,9 @@ REJECTED_AT_FILTERS = (
     + [('HOLD:' + value, label) for value, label in HOLD_STAGE_FILTERS]
     + [('HOLD:' + STATUS.OPEN, 'Future Prospects')]
 )
+# Rejected tab's Reject Reason filter: rejections with no reason recorded
+# (made before reasons existed, and not consolidated yet).
+NO_REASON_FILTER = '__none__'
 # Tabs where the Applied date range isn't offered (or applied).
 NO_APPLIED_FILTER_TABS = (REJECTED_TAB, HOLD_TAB, 'round1', 'interview')
 
@@ -394,6 +398,9 @@ def _with_rejection_info(qs):
     return qs.annotate(
         rej_from=Subquery(rejected.values('old_status')[:1]),
         rej_remarks=Subquery(rejected.values('remarks')[:1]),
+        rej_reason=Subquery(rejected.values('reject_reason')[:1]),
+        rej_at=Subquery(rejected.values('changed_at')[:1]),
+        rej_reason_other=Subquery(rejected.values('reject_reason_other')[:1]),
         rej_hold_from=Subquery(held.values('old_status')[:1]),
         rej_hold_kind=Subquery(held.values('hold_kind')[:1]),
     )
@@ -713,6 +720,11 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
                     qs = qs.filter(rej_hold_kind=kind)
             elif rejected_at:
                 qs = qs.filter(rej_from=rejected_at)
+            reject_reason = self.request.GET.get('reject_reason', '')
+            if reject_reason == NO_REASON_FILTER:
+                qs = qs.filter(Q(rej_reason__isnull=True) | Q(rej_reason=''))
+            elif reject_reason:
+                qs = qs.filter(rej_reason=reject_reason)
 
         # Tab-specific switches: hide reapplicants (Open list) / hide already-called (Shortlisted)
         if self.request.GET.get('hide_reapply'):
@@ -784,6 +796,8 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
         if ctx['show_rejection_cols']:
             ctx['rejected_at_options'] = REJECTED_AT_FILTERS
             ctx['rejected_at_filter'] = self.request.GET.get('rejected_at', '')
+            ctx['reject_reason_options'] = reject_reasons.ALL_CHOICES + [(NO_REASON_FILTER, 'Not recorded')]
+            ctx['reject_reason_filter'] = self.request.GET.get('reject_reason', '')
         if ctx['show_interview_cols']:
             # Anyone who has interviewed, or been allocated to interview, a candidate.
             ids = (set(Interview.objects.exclude(interviewer=None).values_list('interviewer_id', flat=True))
@@ -795,11 +809,12 @@ class CandidateRepositoryListView(RemembersListUrlMixin, GroupRequiredMixin, Lis
         if ctx['show_rejection_cols']:
             for c in ctx['candidates']:
                 c.rejection_stage = rejection_stage(c)
+                c.reject_reason_label = reject_reasons.label(c.rej_reason, c.rej_reason_other)
         # every current filter except the tab, so switching tabs keeps the vacancy/scope/search
         # (the tab-specific switches are dropped so they reset when you leave their tab;
         # so is the status, which means a different thing on the Hold tab)
         params = self.request.GET.copy()
-        for key in ('tab', 'hide_reapply', 'hide_called', 'status', 'interviewer', 'rejected_at'):
+        for key in ('tab', 'hide_reapply', 'hide_called', 'status', 'interviewer', 'rejected_at', 'reject_reason'):
             params.pop(key, None)
         ctx['preserved_qs'] = params.urlencode()
         ctx['querystring'] = _querystring_without_page(self.request)
@@ -986,6 +1001,8 @@ class CandidateRepositoryExportView(GroupRequiredMixin, _ExcelExportMixin, View)
         ('Interview Score (/10)', lambda c: getattr(c, 'iv_score', None)),
         ('Previous Round Remarks', previous_round_remarks),
         ('Rejected At', rejection_stage),
+        ('Reject Reason', lambda c: reject_reasons.label(getattr(c, 'rej_reason', None),
+                                                         getattr(c, 'rej_reason_other', None))),
         ('Rejection Remarks', lambda c: getattr(c, 'rej_remarks', None) or ''),
         ('Status', 'status_label'),
     )
@@ -1072,6 +1089,8 @@ class CandidateTimelineView(GroupRequiredMixin, DetailView):
         for h in ctx['history']:
             was = status_label(h.old_status, *hold_source[h.id]) if h.old_status else '—'
             title = f"Status: {was} → {status_label(h.new_status, h.old_status, h.hold_kind)}"
+            if h.reject_reason:
+                title += f' · Reason: {h.reject_reason_label}'
             if h.is_undone:
                 title += ' (Undone)'
             events.append({
@@ -1647,7 +1666,14 @@ class CandidateStatusActionView(GroupRequiredMixin, View):
         candidate = get_object_or_404(Candidate, pk=pk)
         reason = request.POST.get('reason', '').strip()
         performed_by = _performed_by(request)
-        if not reason:
+        reject_code = reject_other = None
+        if self.target_status == STATUS.REJECTED:
+            # Reject needs a Reject Reason; the remarks are optional extra detail.
+            reject_code, reject_other, error = reject_reasons.from_post(request.POST)
+            if error:
+                messages.error(request, error)
+                return redirect(request.POST.get('next') or reverse('candidate_timeline', args=[pk]))
+        elif not reason:
             messages.error(request, REMARKS_REQUIRED)
             return redirect(request.POST.get('next') or reverse('candidate_timeline', args=[pk]))
 
@@ -1660,7 +1686,8 @@ class CandidateStatusActionView(GroupRequiredMixin, View):
             services.blacklist_candidate(candidate, reason, user=request.user, performed_by=performed_by)
         else:
             services.change_status(candidate, self.target_status, user=request.user,
-                                   remarks=reason or None, performed_by=performed_by)
+                                   remarks=reason or None, performed_by=performed_by,
+                                   reject_reason=reject_code, reject_reason_other=reject_other)
         messages.success(request, f'{candidate.full_name} moved to "{candidate.status_label}".')
         next_url = request.POST.get('next')
         return redirect(next_url or reverse('candidate_timeline', args=[pk]))
@@ -1706,16 +1733,18 @@ class CandidateSendRejectionView(GroupRequiredMixin, View):
         performed_by = _performed_by(request)
         next_url = request.POST.get('next') or reverse('candidate_timeline', args=[pk])
 
-        if not reason:
+        reject_code, reject_other, error = reject_reasons.from_post(request.POST)
+        if error:
             if is_ajax:
-                return JsonResponse({'ok': False, 'error': REMARKS_REQUIRED}, status=400)
-            messages.error(request, REMARKS_REQUIRED)
+                return JsonResponse({'ok': False, 'error': error}, status=400)
+            messages.error(request, error)
             return redirect(next_url)
+        reject_kwargs = dict(remarks=reason or None, performed_by=performed_by,
+                             reject_reason=reject_code, reject_reason_other=reject_other)
 
         if skip_email:
             _settle_round_interview(candidate, STATUS.REJECTED)
-            services.change_status(candidate, STATUS.REJECTED, user=request.user,
-                                   remarks=reason or None, performed_by=performed_by)
+            services.change_status(candidate, STATUS.REJECTED, user=request.user, **reject_kwargs)
             if is_ajax:
                 return JsonResponse({'ok': True})
             messages.success(request, f'{candidate.full_name} moved to "Rejected" (no email sent).')
@@ -1732,8 +1761,7 @@ class CandidateSendRejectionView(GroupRequiredMixin, View):
         # failed send shouldn't leave the pipeline decision half-made, since
         # the decision itself (not the email) is the part HR can't easily redo.
         _settle_round_interview(candidate, STATUS.REJECTED)
-        services.change_status(candidate, STATUS.REJECTED, user=request.user,
-                               remarks=reason or None, performed_by=performed_by)
+        services.change_status(candidate, STATUS.REJECTED, user=request.user, **reject_kwargs)
         try:
             rejection_emails.send_rejection_email(
                 to_email=to_email, cc_emails=rejection_emails.default_cc_list(),
@@ -1940,8 +1968,9 @@ class CandidateBulkRejectView(GroupRequiredMixin, View):
         ids = request.POST.getlist('ids')
         reason = request.POST.get('reason', '').strip()
         performed_by = _performed_by(request)
-        if not reason:
-            messages.error(request, REMARKS_REQUIRED)
+        reject_code, reject_other, error = reject_reasons.from_post(request.POST)
+        if error:
+            messages.error(request, error)
             return redirect(request.POST.get('next') or _remembered_list_url(request)
                             or reverse('candidate_repository'))
         candidates = Candidate.objects.filter(pk__in=ids).exclude(
@@ -1950,7 +1979,8 @@ class CandidateBulkRejectView(GroupRequiredMixin, View):
         rejected = 0
         for candidate in candidates:
             services.change_status(candidate, STATUS.REJECTED, user=request.user,
-                                   remarks=reason or None, performed_by=performed_by)
+                                   remarks=reason or None, performed_by=performed_by,
+                                   reject_reason=reject_code, reject_reason_other=reject_other)
             rejected += 1
 
         skipped = len(ids) - rejected

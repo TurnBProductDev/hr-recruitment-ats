@@ -777,8 +777,10 @@ class InterviewResultView(GroupRequiredMixin, UpdateView):
                                    remarks=remark(f'{round_label} interview passed.'), performed_by=performed_by)
             messages.success(self.request, f'{candidate.full_name} passed — moved to "{candidate.status_label}".')
         elif interview.result == Interview.Result.FAIL:
+            from candidates import reject_reasons  # local: keeps this module's imports as they were
             services.change_status(candidate, Candidate.Status.REJECTED, user=self.request.user,
-                                   remarks=remark(f'{round_label} interview failed.'), performed_by=performed_by)
+                                   remarks=remark(f'{round_label} interview failed.'), performed_by=performed_by,
+                                   reject_reason=reject_reasons.INTERVIEW_PERFORMANCE)
             messages.success(self.request, f'{candidate.full_name} failed and was moved to Rejected.')
         elif interview.result == Interview.Result.HOLD:
             # Hold pauses the candidate - it doesn't decide the interview, so

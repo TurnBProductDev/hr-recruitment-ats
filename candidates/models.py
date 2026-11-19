@@ -386,11 +386,23 @@ class CandidateStatusHistory(models.Model):
     # hold, so the Activity History and Undo name that hold the same way the
     # candidate's own badge did. Null otherwise.
     hold_kind = models.CharField(max_length=20, blank=True, null=True)
+    # On a row that rejected the candidate: which Reject Reason HR picked
+    # (candidates/reject_reasons.py - a code, e.g. 'TECHNICAL_GAP') and, for
+    # "Other", the reason they typed. `remarks` holds any extra detail.
+    # Nullable on purpose: the careers-intake stored procedure inserts history
+    # rows with an explicit column list that doesn't include these.
+    reject_reason = models.CharField(max_length=40, blank=True, null=True, db_index=True)
+    reject_reason_other = models.CharField(max_length=255, blank=True, null=True)
 
     class Meta:
         ordering = ['-changed_at']
         verbose_name_plural = 'Candidate status histories'
         indexes = [models.Index(fields=['new_status', 'changed_at'])]
+
+    @property
+    def reject_reason_label(self):
+        from .reject_reasons import label
+        return label(self.reject_reason, self.reject_reason_other)
 
     def __str__(self):
         return f"{self.candidate.full_name}: {self.old_status} -> {self.new_status}"

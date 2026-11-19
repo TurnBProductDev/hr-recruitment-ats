@@ -13,7 +13,10 @@ from django.views.generic import TemplateView
 from candidates.flows import flow_count
 from candidates.models import Candidate, CandidateStatusHistory
 from candidates.permissions import ANY_STAFF, GroupRequiredMixin
-from candidates.views import GENERAL_APPLICATION
+from candidates import reject_reasons
+from candidates.views import (
+    GENERAL_APPLICATION, NO_REASON_FILTER, REJECTION_STAGE_NAMES, _with_rejection_info, rejection_stage,
+)
 from interviews import kpis as iv_kpis
 from interviews.models import Interview
 from jobs.models import Job
@@ -564,6 +567,83 @@ def _months_for_chart(date_from, date_to):
     return _months_between(start, end)[-36:]
 
 
+NOT_RECORDED = 'Not recorded'
+# Matrix columns: the five pipeline stages, then every hold rolled into one.
+REJECTION_STAGE_COLUMNS = list(REJECTION_STAGE_NAMES.values()) + ['On Hold', NOT_RECORDED]
+
+
+def _rejections_report(job_id, date_from, date_to):
+    """Reports > Rejections: candidates currently Rejected, by the stage they
+    were rejected at and by Reject Reason (candidates/reject_reasons.py).
+    Same Job Code/Vacancy filter as the other tabs; From/To filter by the
+    date they were rejected. General Application is left out, as everywhere
+    on Reports."""
+    qs = Candidate.objects.filter(status=STATUS.REJECTED).exclude(job__title__iexact=GENERAL_APPLICATION)
+    if job_id:
+        qs = qs.filter(job_id=job_id)
+    qs = _with_rejection_info(qs).only('id', 'status', 'job_id')
+    if date_from:
+        qs = qs.filter(rej_at__date__gte=date_from)
+    if date_to:
+        qs = qs.filter(rej_at__date__lte=date_to)
+
+    repo = reverse('candidate_repository')
+    base_params = f'tab=rejected&scoped=1&scope=&job={job_id}'
+
+    stage_counts, stage_filters, reason_counts, matrix = Counter(), {}, Counter(), {}
+    rows = list(qs)
+    for c in rows:
+        stage = rejection_stage(c) or NOT_RECORDED
+        stage_counts[stage] += 1
+        if c.rej_from == STATUS.SCREENING_HOLD:
+            stage_filters[stage] = 'HOLD:' + (c.rej_hold_from or '') + (
+                f':{c.rej_hold_kind}' if c.rej_hold_kind and c.rej_hold_from != STATUS.OPEN else '')
+            column = 'On Hold'
+        elif c.rej_from in REJECTION_STAGE_NAMES:
+            stage_filters[stage] = c.rej_from
+            column = stage
+        else:
+            column = NOT_RECORDED
+        reason = c.rej_reason or ''
+        reason_counts[reason] += 1
+        matrix.setdefault(reason, Counter())[column] += 1
+
+    total = len(rows)
+
+    def pct(n):
+        return round(n * 100 / total) if total else 0
+
+    stage_order = {name: i for i, name in enumerate(REJECTION_STAGE_NAMES.values())}
+    by_stage = [{'name': name, 'count': n, 'pct': pct(n),
+                 'url': f'{repo}?{base_params}&rejected_at={stage_filters[name]}' if name in stage_filters else ''}
+                for name, n in sorted(stage_counts.items(),
+                                      key=lambda kv: (stage_order.get(kv[0], 50 if kv[0] != NOT_RECORDED else 99),
+                                                      -kv[1]))]
+    order = {code: i for i, (code, _) in enumerate(reject_reasons.ALL_CHOICES)}
+    by_reason = [{'code': code, 'name': reject_reasons.LABELS.get(code, code) if code else NOT_RECORDED,
+                  'count': n, 'pct': pct(n),
+                  'url': f'{repo}?{base_params}&reject_reason={code or NO_REASON_FILTER}',
+                  'cells': [matrix[code].get(col, 0) for col in REJECTION_STAGE_COLUMNS]}
+                 for code, n in sorted(reason_counts.items(), key=lambda kv: (-kv[1], order.get(kv[0], 99)))]
+    recorded = total - reason_counts.get('', 0)
+    used_columns = [i for i, col in enumerate(REJECTION_STAGE_COLUMNS) if any(r['cells'][i] for r in by_reason)]
+    for r in by_reason:
+        r['cells'] = [r['cells'][i] for i in used_columns]
+    top_reason = next((r for r in by_reason if r['code']), None)
+    top_stage = next((s for s in by_stage if s['name'] != NOT_RECORDED), None)
+    return {
+        'rej_total': total,
+        'rej_recorded': recorded,
+        'rej_recorded_pct': pct(recorded),
+        'rej_top_reason': top_reason,
+        'rej_top_stage': top_stage,
+        'rej_by_stage': by_stage,
+        'rej_by_reason': by_reason,
+        'rej_matrix_columns': [REJECTION_STAGE_COLUMNS[i] for i in used_columns],
+        'rej_all_url': f'{repo}?{base_params}',
+    }
+
+
 class ReportsView(GroupRequiredMixin, TemplateView):
     template_name = 'dashboard/reports.html'
     allowed_groups = ANY_STAFF
@@ -594,6 +674,7 @@ class ReportsView(GroupRequiredMixin, TemplateView):
         ctx['date_to'] = date_to
 
         ctx.update(_report_metrics(base))
+        ctx.update(_rejections_report(job_id, date_from, date_to))
 
         # Every Job (job code) under a title, individually - the Role row's
         # own "+" expands to these (see reports.html/_reports_row.html).

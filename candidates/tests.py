@@ -950,7 +950,7 @@ class GeneralApplicationsTests(TestCase):
     def test_bulk_reject_moves_each_candidate_and_logs_history(self):
         response = self.client.post(reverse('candidate_bulk_reject'), {
             'ids': [self.designer.pk, self.tester.pk],
-            'reason': 'No suitable opening',
+            'reason': 'No suitable opening', 'reject_reason': 'ROLE_FIT',
             'next': self.url,
         })
         self.assertRedirects(response, self.url, fetch_redirect_response=False)
@@ -967,7 +967,7 @@ class GeneralApplicationsTests(TestCase):
         self.designer.status = Candidate.Status.REJECTED
         self.designer.save(update_fields=['status'])
         self.client.post(reverse('candidate_bulk_reject'),
-                         {'ids': [self.designer.pk, self.tester.pk], 'reason': 'x'})
+                         {'ids': [self.designer.pk, self.tester.pk], 'reason': 'x', 'reject_reason': 'ROLE_FIT'})
         self.assertEqual(self.designer.history.count(), 0)
         self.tester.refresh_from_db()
         self.assertEqual(self.tester.status, Candidate.Status.REJECTED)
@@ -2437,7 +2437,7 @@ class RejectionEmailPopupTests(TestCase):
         with mock.patch('candidates.views.rejection_emails.send_rejection_email') as send:
             response = self.client.post(reverse('candidate_send_rejection', args=[self.candidate.pk]), {
                 'to_email': 'rose@example.com', 'subject': 'Custom subject', 'body': 'Custom body.',
-                'reason': 'Did not meet the bar.', 'next': reverse('candidate_timeline', args=[self.candidate.pk]),
+                'reason': 'Did not meet the bar.', 'reject_reason': 'ROLE_FIT', 'next': reverse('candidate_timeline', args=[self.candidate.pk]),
             })
         self.assertRedirects(response, reverse('candidate_timeline', args=[self.candidate.pk]))
         self.candidate.refresh_from_db()
@@ -2458,7 +2458,7 @@ class RejectionEmailPopupTests(TestCase):
             status=Interview.Status.COMPLETED, result=Interview.Result.PENDING,
             scheduled_date=timezone.now() - timezone.timedelta(days=1))
         self.client.post(reverse('candidate_send_rejection', args=[self.candidate.pk]), {'reason': 'Test remarks.', 
-            'to_email': 'rose@example.com', 'subject': 'S', 'body': 'B',
+            'reject_reason': 'ROLE_FIT', 'to_email': 'rose@example.com', 'subject': 'S', 'body': 'B',
         })
         interview.refresh_from_db()
         self.assertEqual(interview.result, Interview.Result.FAIL)
@@ -2477,7 +2477,7 @@ class RejectionEmailPopupTests(TestCase):
         stick even if the email send itself blows up."""
         with mock.patch('candidates.views.rejection_emails.send_rejection_email', side_effect=ValueError('boom')):
             response = self.client.post(reverse('candidate_send_rejection', args=[self.candidate.pk]), {'reason': 'Test remarks.', 
-                'to_email': 'rose@example.com', 'subject': 'S', 'body': 'B',
+                'reject_reason': 'ROLE_FIT', 'to_email': 'rose@example.com', 'subject': 'S', 'body': 'B',
             })
         self.assertRedirects(response, reverse('candidate_timeline', args=[self.candidate.pk]))
         self.candidate.refresh_from_db()
@@ -2487,7 +2487,8 @@ class RejectionEmailPopupTests(TestCase):
         with mock.patch('candidates.views.rejection_emails.send_rejection_email'):
             response = self.client.post(
                 reverse('candidate_send_rejection', args=[self.candidate.pk]),
-                {'reason': 'Test remarks.', 'to_email': 'rose@example.com', 'subject': 'S', 'body': 'B'},
+                {'reason': 'Test remarks.', 'reject_reason': 'ROLE_FIT', 'to_email': 'rose@example.com',
+                 'subject': 'S', 'body': 'B'},
                 HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {'ok': True})
@@ -2511,7 +2512,8 @@ class RejectionEmailPopupTests(TestCase):
             status=Interview.Status.COMPLETED, result=Interview.Result.PENDING,
             scheduled_date=timezone.now() - timezone.timedelta(days=1))
         response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
-        self.assertContains(response, 'data-bs-target="#rejectionModal"')
+        # Reject opens the Confirm popup (Reject Reason) and then the email draft.
+        self.assertContains(response, 'data-decision="reject"')
         self.assertContains(response, reverse('candidate_rejection_draft', args=[self.candidate.pk]))
 
     def test_tele_screening_reject_button_stays_plain(self):
@@ -2522,13 +2524,13 @@ class RejectionEmailPopupTests(TestCase):
         services.change_status(c2, Candidate.Status.SHORTLISTED)
         response = self.client.get(reverse('candidate_timeline', args=[c2.pk]))
         self.assertContains(response, reverse('candidate_reject', args=[c2.pk]))
-        self.assertNotContains(response, 'data-bs-target="#rejectionModal"')
+        self.assertNotContains(response, reverse('candidate_rejection_draft', args=[c2.pk]))
 
     def test_reject_without_email_rejects_but_sends_nothing(self):
         with mock.patch('candidates.views.rejection_emails.send_rejection_email') as send:
             response = self.client.post(
                 reverse('candidate_send_rejection', args=[self.candidate.pk]),
-                {'skip_email': '1', 'to_email': '', 'reason': 'No-show.'},
+                {'skip_email': '1', 'to_email': '', 'reason': 'No-show.', 'reject_reason': 'ROLE_FIT'},
                 HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(response.json(), {'ok': True})
         send.assert_not_called()

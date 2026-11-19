@@ -1,0 +1,12 @@
+{% load candidates_extras %}{% reject_reason_choices as reasons %}
+{# Reject Reason dropdown + "Other" text box. Used by the candidate page's #}
+{# Confirm popup and the list pages' action popup - candidates/reject_reasons.py. #}
+<div class="mb-3 js-reject-fields" {% if hidden %}hidden{% endif %}>
+  <label class="form-label">Reject Reason <span class="text-danger">*</span></label>
+  <select name="reject_reason" class="form-select js-reject-reason">
+    <option value="">Select a reason…</option>
+    {% for code, label in reasons %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
+  </select>
+  <input type="text" name="reject_reason_other" class="form-control mt-2 js-reject-other" maxlength="255"
+         placeholder="Type the reason…" hidden>
+</div>

@@ -3,6 +3,19 @@ from django import template
 register = template.Library()
 
 
+@register.simple_tag
+def reject_reason_choices():
+    """[(code, label), ...] HR can pick when rejecting - see candidates/reject_reasons.py."""
+    from candidates.reject_reasons import CHOICES
+    return CHOICES
+
+
+@register.filter
+def reject_reason_label(code, other=''):
+    from candidates.reject_reasons import label
+    return label(code, other or '')
+
+
 @register.filter
 def badge_class(status):
     return f"badge-status badge-{str(status).lower()}"

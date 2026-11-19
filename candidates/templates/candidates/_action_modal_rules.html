@@ -1,0 +1,55 @@
+{% comment %}
+  Shared by the list pages' #actionModal (Candidate Repository, Future
+  Prospects, General Applications). Included after each page's own
+  show.bs.modal handler, so it runs once that has reset the fields:
+  - a Reject trigger (data-reject="1") shows the Reject Reason dropdown
+    (required, "Other" needs the typed reason) and makes remarks optional;
+  - Confirm stays hidden until whatever is required is filled in; Cancel is
+    always visible.
+{% endcomment %}
+<script>
+$(function () {
+  var $modal = $('#actionModal');
+  if (!$modal.length) { return; }
+  var $form = $('#actionForm');
+  var $reject = $modal.find('.js-reject-fields');
+  var $select = $modal.find('.js-reject-reason');
+  var $other = $modal.find('.js-reject-other');
+  var $reason = $('#actionReason');
+  var $submit = $('#actionSubmit');
+  var state = {reject: false, required: false, nofields: false, needsRole: false};
+
+  function valid() {
+    if (state.nofields) { return true; }
+    if (state.needsRole && !$('#actionRoleSelect').val()) { return false; }
+    if (state.reject) {
+      if (!$select.val()) { return false; }
+      return $select.val() !== 'OTHER' || $.trim($other.val()).length > 0;
+    }
+    return !state.required || $.trim($reason.val()).length > 0;
+  }
+  function sync() {
+    $other.prop('hidden', $select.val() !== 'OTHER');
+    $submit.prop('hidden', !valid());
+  }
+  $modal.on('show.bs.modal', function (event) {
+    var b = event.relatedTarget;
+    state.reject = b.getAttribute('data-reject') === '1';
+    state.required = b.getAttribute('data-require') === '1';
+    state.nofields = b.getAttribute('data-nofields') === '1';
+    state.needsRole = b.getAttribute('data-role-field') === '1';
+    $reject.prop('hidden', !state.reject);
+    $select.val('').prop('required', state.reject);
+    $other.val('');
+    if (state.reject) {
+      // Remarks are optional extra detail once a reason is picked.
+      $reason.prop('required', false).attr('placeholder', 'Additional remarks (optional)');
+      $('#reasonReq').addClass('d-none');
+    } else {
+      $reason.attr('placeholder', '');
+    }
+    sync();
+  });
+  $form.on('input change', sync);
+});
+</script>

@@ -290,7 +290,8 @@ class MandatoryRemarksTests(_Base):
         response = self.client.post(reverse('candidate_send_rejection', args=[self.candidate.pk]),
                                     {'skip_email': '1', 'to_email': ''}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(response.status_code, 400)
-        self.assertIn('Remarks are required', response.json()['error'])
+        # Reject needs a Reject Reason (remarks are optional extra detail there).
+        self.assertIn('Pick a Reject Reason', response.json()['error'])
         self._assert_blocked(response)
 
     def test_bulk_actions_need_remarks(self):
@@ -304,12 +305,14 @@ class MandatoryRemarksTests(_Base):
         services.change_status(self.candidate, S.SHORTLISTED)
         response = self.client.get(reverse('candidate_timeline', args=[self.candidate.pk]))
         content = response.content.decode()
+        # Every decision opens the Confirm popup, which requires remarks
+        # before Confirm shows (the server enforces it too).
         for url_name in ('candidate_round1', 'candidate_screening_hold'):
             url = reverse(url_name, args=[self.candidate.pk])
             tag = content[content.index(f'formaction="{url}"'):]
-            self.assertIn('data-require-reason="1" disabled', tag[:tag.index('>')])
-        # Logging an unanswered call is not a decision - stays clickable.
-        self.assertNotIn('data-require-reason', content[content.index('value="UNABLE"'):][:200])
+            self.assertIn('data-decision="remarks"', tag[:tag.index('>')])
+        # Logging an unanswered call is not a decision - remarks optional.
+        self.assertIn('data-decision="optional"', content[content.index('value="UNABLE"'):][:200])
 
 
 class RejectionListTests(_Base):
@@ -317,9 +320,11 @@ class RejectionListTests(_Base):
 
     def test_rejected_tab_shows_stage_and_remarks(self):
         services.change_status(self.candidate, S.ROUND1)
-        self._post('candidate_reject', self.candidate, reason='Weak SQL fundamentals.')
+        self._post('candidate_reject', self.candidate, reason='Weak SQL fundamentals.',
+                   reject_reason='TECHNICAL_GAP')
         response = self._tab('rejected')
-        self.assertContains(response, '<th>Rejected At</th><th>Remarks</th>')
+        self.assertContains(response, '<th>Rejected At</th><th>Reject Reason</th><th>Remarks</th>')
+        self.assertContains(response, 'Technical Skills Gap')
         row = response.context['candidates'][0]
         self.assertEqual(row.rejection_stage, 'Round 1')
         self.assertContains(response, 'Weak SQL fundamentals.')

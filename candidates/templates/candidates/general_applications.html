@@ -106,7 +106,7 @@
       <div class="bulk-actions">
         <button type="button" class="btn btn-sm btn-outline-secondary" id="bulkClear">Clear</button>
         <button type="button" class="btn btn-sm btn-outline-danger bulk-act" id="bulkReject"
-                data-action="{% url 'candidate_bulk_reject' %}" data-title="Reject the selected candidates" data-require="1">Reject</button>
+                data-action="{% url 'candidate_bulk_reject' %}" data-title="Reject the selected candidates" data-reject="1">Reject</button>
         <button type="button" class="btn btn-sm btn-danger" id="bulkDelete">Delete</button>
       </div>
     </div>
@@ -158,7 +158,7 @@
                   {% if c.status != 'REJECTED' and c.status != 'BLACKLISTED' %}
                   <li><button type="button" class="dropdown-item text-danger act"
                               data-action="{% url 'candidate_reject' c.id %}"
-                              data-title="Reject {{ c.full_name }}" data-require="1"
+                              data-title="Reject {{ c.full_name }}" data-reject="1"
                               data-btn="btn-outline-danger" data-label="Reject">Reject</button></li>
                   {% endif %}
                   {% if is_hr_admin or is_recruiter or is_hiring_manager %}
@@ -198,6 +198,7 @@
         <div class="modal-body">
           <p id="actionModalMsg" class="text-muted small mb-3"></p>
           <div id="actionFields">
+            {% include "candidates/_reject_reason_fields.html" with hidden=True %}
             <div class="mb-3">
               <label class="form-label">Remarks / Reason <span id="reasonReq" class="text-danger d-none">*</span></label>
               <textarea name="reason" id="actionReason" class="form-control" rows="3"></textarea>
@@ -305,4 +306,5 @@ $(function () {
   refreshRoleLabel();
 });
 </script>
+{% include "candidates/_action_modal_rules.html" %}
 {% endblock %}

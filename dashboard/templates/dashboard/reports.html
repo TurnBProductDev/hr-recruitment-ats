@@ -16,6 +16,15 @@
 
 .rep-panel { background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 12px; padding: 22px 24px 18px; height: 100%; }
 .rep-panel h5 { margin: 0 0 14px; }
+.rej-bar-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(60px, 1fr) auto; gap: 12px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--border-color); font-size: .8rem; }
+.rej-bar-row:last-child { border-bottom: none; }
+.rej-bar-label { min-width: 0; overflow-wrap: anywhere; color: var(--text-primary); }
+.rej-bar-track { height: 8px; border-radius: 4px; background: var(--bg-hover); overflow: hidden; }
+.rej-bar-fill { height: 100%; background: #b02a37; border-radius: 4px; }
+.rej-bar-fill.rej-bar-muted { background: #9aa5a5; }
+.rej-bar-num { white-space: nowrap; font-weight: 600; text-align: right; min-width: 64px; }
+.rej-matrix th { font-size: .66rem; text-transform: uppercase; letter-spacing: .3px; color: var(--text-muted); white-space: nowrap; }
+.rej-matrix td { font-size: .8rem; }
 
 /* Grid, not flex: a fixed track per column keeps every row's numbers lined
    up under the header no matter how long a Role/Source name is, and keeps
@@ -141,12 +150,13 @@
 </div>
 
 <ul class="nav nav-tabs mb-3" id="repTabs">
-  <li class="nav-item"><button class="nav-link {% if view != 'roles' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#applicationsPane">Applications</button></li>
+  <li class="nav-item"><button class="nav-link {% if view != 'roles' and view != 'rejections' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#applicationsPane">Applications</button></li>
   <li class="nav-item"><button class="nav-link {% if view == 'roles' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#rolesPane">Roles</button></li>
+  <li class="nav-item"><button class="nav-link {% if view == 'rejections' %}active{% endif %}" data-bs-toggle="tab" data-bs-target="#rejectionsPane">Rejections</button></li>
 </ul>
 
 <div class="tab-content">
-  <div class="tab-pane fade {% if view != 'roles' %}show active{% endif %}" id="applicationsPane">
+  <div class="tab-pane fade {% if view != 'roles' and view != 'rejections' %}show active{% endif %}" id="applicationsPane">
 
     <div class="row g-3 mb-4">
       <div class="col-lg-2 col-md-4 col-6">
@@ -333,6 +343,86 @@
       </div>
     </div>
   </div>
+
+  <!-- ===================== REJECTIONS ===================== -->
+  <div class="tab-pane fade {% if view == 'rejections' %}show active{% endif %}" id="rejectionsPane">
+    <div class="row g-3 mb-3">
+      <div class="col-lg-3 col-md-6 col-6">
+        <div class="rep-kpi">
+          <div class="lbl">Total Rejections</div>
+          <div class="val-row"><a class="val" href="{{ rej_all_url }}" style="text-decoration:none;color:inherit">{{ rej_total }}</a></div>
+          <div class="rep-kpi-subval"><span class="lbl">Reason recorded</span><span class="val">{{ rej_recorded }} <span class="rep-pct">({{ rej_recorded_pct }}%)</span></span></div>
+        </div>
+      </div>
+      <div class="col-lg-3 col-md-6 col-6">
+        <div class="rep-kpi">
+          <div class="lbl">Top Reason</div>
+          <div class="val-row"><span class="val" style="font-size:1.05rem">{{ rej_top_reason.name|default:"-" }}</span></div>
+          {% if rej_top_reason %}<div class="rep-kpi-subval"><span class="lbl">Rejections</span><span class="val">{{ rej_top_reason.count }} <span class="rep-pct">({{ rej_top_reason.pct }}%)</span></span></div>{% endif %}
+        </div>
+      </div>
+      <div class="col-lg-3 col-md-6 col-6">
+        <div class="rep-kpi">
+          <div class="lbl">Top Stage</div>
+          <div class="val-row"><span class="val" style="font-size:1.05rem">{{ rej_top_stage.name|default:"-" }}</span></div>
+          {% if rej_top_stage %}<div class="rep-kpi-subval"><span class="lbl">Rejections</span><span class="val">{{ rej_top_stage.count }} <span class="rep-pct">({{ rej_top_stage.pct }}%)</span></span></div>{% endif %}
+        </div>
+      </div>
+      <div class="col-lg-3 col-md-6 col-6">
+        <div class="rep-kpi">
+          <div class="lbl">About these numbers</div>
+          <div class="small text-muted mt-2">Candidates currently Rejected. From/To filter by the date they were rejected. Click a number to open those candidates.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+      <div class="col-lg-5">
+        <div class="rep-panel">
+          <h5>By Stage</h5>
+          {% for r in rej_by_stage %}
+          <div class="rej-bar-row">
+            <div class="rej-bar-label">{{ r.name }}</div>
+            <div class="rej-bar-track"><div class="rej-bar-fill" style="width:{{ r.pct }}%"></div></div>
+            <div class="rej-bar-num">{% if r.url %}<a href="{{ r.url }}">{{ r.count }}</a>{% else %}{{ r.count }}{% endif %} <span class="rep-pct">{{ r.pct }}%</span></div>
+          </div>
+          {% empty %}<div class="text-muted text-center py-3">No rejections.</div>{% endfor %}
+        </div>
+      </div>
+      <div class="col-lg-7">
+        <div class="rep-panel">
+          <h5>By Reject Reason</h5>
+          {% for r in rej_by_reason %}
+          <div class="rej-bar-row">
+            <div class="rej-bar-label">{% if r.code %}{{ r.name }}{% else %}<span class="text-muted">{{ r.name }}</span>{% endif %}</div>
+            <div class="rej-bar-track"><div class="rej-bar-fill {% if not r.code %}rej-bar-muted{% endif %}" style="width:{{ r.pct }}%"></div></div>
+            <div class="rej-bar-num"><a href="{{ r.url }}">{{ r.count }}</a> <span class="rep-pct">{{ r.pct }}%</span></div>
+          </div>
+          {% empty %}<div class="text-muted text-center py-3">No rejections.</div>{% endfor %}
+        </div>
+      </div>
+    </div>
+
+    {% if rej_by_reason %}
+    <div class="rep-panel">
+      <h5>Reason by Stage</h5>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0 rej-matrix">
+          <thead><tr><th>Reason</th>{% for col in rej_matrix_columns %}<th class="text-center">{{ col }}</th>{% endfor %}<th class="text-center">Total</th></tr></thead>
+          <tbody>
+            {% for r in rej_by_reason %}
+            <tr>
+              <td>{% if r.code %}{{ r.name }}{% else %}<span class="text-muted">{{ r.name }}</span>{% endif %}</td>
+              {% for n in r.cells %}<td class="text-center {% if not n %}text-muted{% endif %}">{{ n|default:"-" }}</td>{% endfor %}
+              <td class="text-center fw-semibold">{{ r.count }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+  </div>
 </div>
 {% endblock %}
 
@@ -345,7 +435,7 @@
 <script>
 // Keep the Applications/Roles choice in the URL + filter form, so applying a
 // filter stays on the current tab and the browser back button returns to it.
-var REP_TAB_VIEWS = {'#applicationsPane': 'applications', '#rolesPane': 'roles'};
+var REP_TAB_VIEWS = {'#applicationsPane': 'applications', '#rolesPane': 'roles', '#rejectionsPane': 'rejections'};
 document.querySelectorAll('#repTabs button[data-bs-toggle="tab"]').forEach(function (btn) {
   btn.addEventListener('shown.bs.tab', function (e) {
     var v = REP_TAB_VIEWS[e.target.getAttribute('data-bs-target')] || 'applications';
@@ -354,10 +444,10 @@ document.querySelectorAll('#repTabs button[data-bs-toggle="tab"]').forEach(funct
     var url = new URL(window.location);
     url.searchParams.set('view', v);
     window.history.replaceState(null, '', url);
-    document.getElementById('repRatioWrap').hidden = (v === 'roles');
+    document.getElementById('repRatioWrap').hidden = (v !== 'applications');
   });
 });
-document.getElementById('repRatioWrap').hidden = {% if view == 'roles' %}true{% else %}false{% endif %};
+document.getElementById('repRatioWrap').hidden = {% if view == 'roles' or view == 'rejections' %}true{% else %}false{% endif %};
 
 // Each By Job/Role row's left "+" expands to that role's individual job
 // codes; the right "+" (existing) expands the %-of-Applicants breakdown -
