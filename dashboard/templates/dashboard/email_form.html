@@ -1,0 +1,43 @@
+{% extends "hr_base.html" %}
+{% block title %}Edit Email{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-9">
+    <div class="card app-card p-4">
+      <h4 class="mb-1">{{ object.label }}</h4>
+      <p class="text-muted small mb-3">{{ object.description }}</p>
+      {% if form.errors %}
+      <div class="alert alert-danger py-2">Please fix the highlighted field and save again.</div>
+      {% endif %}
+      <form method="post">
+        {% csrf_token %}
+        <div class="mb-3">
+          <label class="form-label fw-semibold" for="{{ form.subject.id_for_label }}">Subject</label>
+          {{ form.subject }}
+          {% for e in form.subject.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold" for="{{ form.body.id_for_label }}">Message</label>
+          {{ form.body }}
+          {% for e in form.body.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
+        </div>
+        {% if placeholders %}
+        <div class="alert alert-light border small mb-3">
+          <strong>Placeholders</strong> - filled in automatically when the email is sent. Type them exactly, with the curly braces:
+          <div class="mt-1">{% for p in placeholders %}<code class="me-2">{{ "{" }}{{ p }}{{ "}" }}</code>{% endfor %}</div>
+        </div>
+        {% endif %}
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <span class="text-muted small">
+            Last edited {{ object.updated_at|date:"d M Y, H:i" }}{% if object.updated_by %} by {{ object.updated_by.get_full_name|default:object.updated_by.username }}{% endif %}
+          </span>
+          <span class="d-flex gap-2">
+            <a href="{% url 'email_template_list' %}" class="btn btn-outline-app">Cancel</a>
+            <button type="submit" class="btn btn-fill-app">Save</button>
+          </span>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

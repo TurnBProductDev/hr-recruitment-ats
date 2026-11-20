@@ -1,0 +1,53 @@
+{% extends "hr_base.html" %}
+{% block title %}Emails{% endblock %}
+
+{% block extra_css %}
+<style>
+.em-head { display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:16px; margin-bottom:18px; }
+.em-title { font-size:1.5rem; font-weight:700; color:var(--text-primary); margin:0; }
+.em-subtitle { font-size:.8rem; color:var(--text-muted); margin-top:2px; }
+.em-name a { font-weight:600; }
+.em-meta { font-size:.72rem; color:var(--text-muted); }
+.em-subject { font-size:.8rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="em-head">
+  <div>
+    <h3 class="em-title mb-0">Emails</h3>
+    <div class="em-subtitle">
+      {{ templates|length }} email template{{ templates|length|pluralize }} &middot;
+      the wording of every email TurnB ATS sends. An edit applies to the next email sent.
+    </div>
+  </div>
+</div>
+
+<div class="app-card">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr><th>Email</th><th>Subject</th><th>Last edited</th><th class="text-end">Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for t in templates %}
+        <tr>
+          <td class="em-name">
+            <a href="{% url 'email_template_edit' t.pk %}">{{ t.label }}</a>
+            <div class="em-meta">{{ t.description|truncatechars:110 }}</div>
+          </td>
+          <td class="em-subject">{{ t.subject }}</td>
+          <td class="em-meta text-nowrap">
+            {{ t.updated_at|date:"d M Y, H:i" }}
+            {% if t.updated_by %}<div>{{ t.updated_by.get_full_name|default:t.updated_by.username }}</div>{% endif %}
+          </td>
+          <td class="text-end"><a href="{% url 'email_template_edit' t.pk %}" class="btn btn-sm btn-outline-app">Edit</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" class="text-center text-muted py-4">No email templates.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

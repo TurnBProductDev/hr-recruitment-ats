@@ -58,10 +58,44 @@ _DEFAULT_BODY = (
 )
 
 
+# In-person (Onsite) interviews use their own template - no join link and no
+# "stable internet connection" line, the office address instead. Video and
+# Phone interviews use the online one ('interview_invite').
+OFFICE_ADDRESS = 'TurnB\nLevel 3, Oberon Mall, Edapally, Cochin'
+_DEFAULT_OFFLINE_SUBJECT = _DEFAULT_SUBJECT
+_DEFAULT_OFFLINE_BODY = (
+    'Hello {candidate_name},\n'
+    'Greetings from TurnB!\n'
+    'We are pleased to invite you for {interview_kind} for the position of {role}.\n'
+    'Please find the interview details below:\n'
+    'Date: {date_str}\n'
+    'Time: {time_str}\n'
+    'Location:\n'
+    'TurnB\n'
+    'Level 3, Oberon Mall, Edapally, Cochin\n'
+    'Please confirm your availability by accepting the invite.\n'
+    'Looking forward to meeting you.\n'
+    '\n'
+    'Regards,\n'
+    '{sender_name}\n'
+    'HR Business Partner\n'
+    'TurnB Business Services Pvt. Ltd – Edapally, Kochi\n'
+    '(+91 9567558557)\n'
+    'http://www.turnb.com/'
+)
+
+
+def _template_for(interview):
+    """(template key, default subject, default body) for this interview's mode."""
+    if interview.mode == 'ONSITE':
+        return 'interview_invite_offline', _DEFAULT_OFFLINE_SUBJECT, _DEFAULT_OFFLINE_BODY
+    return 'interview_invite', _DEFAULT_SUBJECT, _DEFAULT_BODY
+
+
 def default_subject(interview):
     role = _role_name(interview)
     subject, _ = render_email(
-        'interview_invite', _DEFAULT_SUBJECT, _DEFAULT_BODY,
+        *_template_for(interview),
         role=role, round_type=interview.get_round_type_display())
     return subject
 
@@ -77,10 +111,10 @@ def default_body(interview, sender):
     meeting_link_line = f'Join link: {interview.meeting_link}\n' if interview.meeting_link else ''
 
     _, body = render_email(
-        'interview_invite', _DEFAULT_SUBJECT, _DEFAULT_BODY,
+        *_template_for(interview),
         candidate_name=candidate.full_name, role=role, round_type=interview.get_round_type_display(),
         interview_kind=interview_kind, date_str=date_str, time_str=time_str,
-        meeting_link_line=meeting_link_line, sender_name=sender_name)
+        meeting_link_line=meeting_link_line, sender_name=sender_name, location=OFFICE_ADDRESS)
     return body
 
 
