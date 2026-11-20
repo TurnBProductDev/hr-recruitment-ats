@@ -28,7 +28,7 @@ Inert until LOGIC_APP_CALENDAR_URL is set.
 """
 import html
 import logging
-from datetime import timezone as dt_timezone
+from zoneinfo import ZoneInfo
 
 import requests
 from django.conf import settings
@@ -62,9 +62,19 @@ def _post(payload):
         raise CalendarError('Calendar service returned a non-JSON response.')
 
 
+# The meeting's own time zone. Outlook prints it on the invite ("When: ...
+# (UTC+05:30) Chennai, Kolkata, Mumbai, New Delhi") - sending UTC made every
+# invite read "(UTC) Coordinated Universal Time" even though the calendar entry
+# itself showed the right local time. Windows zone name, as Graph expects.
+CALENDAR_TIME_ZONE = 'India Standard Time'
+IST = ZoneInfo('Asia/Kolkata')
+
+
 def _utc(dt):
-    return {'dateTime': timezone.localtime(dt, dt_timezone.utc).strftime('%Y-%m-%dT%H:%M:%S'),
-            'timeZone': 'UTC'}
+    """Graph dateTime for `dt`, as wall-clock time in CALENDAR_TIME_ZONE (the
+    same instant - only the time zone the meeting is labelled with changes)."""
+    return {'dateTime': timezone.localtime(dt, IST).strftime('%Y-%m-%dT%H:%M:%S'),
+            'timeZone': CALENDAR_TIME_ZONE}
 
 
 def _name(user):

@@ -6,6 +6,7 @@ Run against sqlite so the live Azure DB is never touched:
     DB_ENGINE=sqlite python manage.py test interviews
 """
 from datetime import timedelta
+from zoneinfo import ZoneInfo
 from unittest import mock
 
 from django.contrib.auth import get_user_model
@@ -177,7 +178,12 @@ class CalendarBlockTests(_Base):
         self.assertEqual(payload['op'], 'create')
         self.assertEqual(event['attendees'][0]['emailAddress']['address'], 'panel@turnb.com')
         self.assertTrue(event['isOnlineMeeting'])
-        self.assertEqual(event['start']['timeZone'], 'UTC')
+        # Created in India time (not UTC), so Outlook's invite reads
+        # "(UTC+05:30) Chennai, Kolkata, ..." - same instant either way.
+        self.assertEqual(event['start']['timeZone'], 'India Standard Time')
+        self.assertEqual(event['start']['dateTime'],
+                         timezone.localtime(self.start, ZoneInfo('Asia/Kolkata')).strftime('%Y-%m-%dT%H:%M:%S'))
+        self.assertEqual(event['end']['timeZone'], 'India Standard Time')
         request_obj.refresh_from_db()
         self.assertEqual(request_obj.status, InterviewRequest.Status.AWAITING_HR_APPROVAL)
         self.assertEqual(request_obj.calendar_event_id, 'EVT-5')
