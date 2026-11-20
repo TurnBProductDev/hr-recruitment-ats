@@ -27,6 +27,7 @@
 <link href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
 <link href="{% static 'css/theme.css' %}?v=2" rel="stylesheet">
+<link href="{% static 'css/mobile.css' %}?v=1" rel="stylesheet">
 <style>
 /* ===== Top navigation (self-contained so it never depends on cached CSS) ===== */
 .app-nav { background: var(--primary-green); padding: 0; }
@@ -65,9 +66,18 @@
 .app-breadcrumb .breadcrumb-item.active { color: var(--text-primary); font-weight: 600; }
 .app-breadcrumb .breadcrumb-item + .breadcrumb-item::before { content: "\203A"; color: var(--text-muted); font-weight: 600; }
 @media (max-width: 991.98px) {
+  .app-nav-inner { gap: 10px; padding: 9px 14px; flex-wrap: wrap; }
   .app-nav-collapse { flex-basis: 100%; order: 3; }
   .app-nav-links { flex-direction: column; align-items: stretch; padding: 8px 0 4px; }
   .app-nav-link, .app-nav-drop { width: 100%; }
+  .app-nav-link { padding: 11px 13px; font-size: 14px; }  /* finger-sized menu rows */
+  .app-nav-right { gap: 6px; }
+  .app-nav-username { display: none; }  /* the initials avatar is the account button */
+  .app-nav-account-toggle { padding: 4px; gap: 4px; }
+}
+@media (max-width: 400px) {
+  .app-nav-title { font-size: 15px; }
+  .app-nav-mark { display: none; }
 }
 </style>
 {% block extra_css %}{% endblock %}

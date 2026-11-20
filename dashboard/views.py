@@ -477,26 +477,32 @@ def _report_metrics(qs):
     r1_cleared = flow_count(qs, 'r1_cleared')
     r2_cleared = flow_count(qs, 'r2_cleared')
     hired = flow_count(qs, 'hired')
-    return {
-        'applicants': applicants,
-        'qualified': qualified,
-        'qualified_pct': pct(qualified, applicants),
-        'shortlisted': shortlisted,
-        'shortlisted_pct': pct(shortlisted, qualified),
-        'r1_cleared': r1_cleared,
-        'r1_cleared_pct': pct(r1_cleared, shortlisted),
-        'r2_cleared': r2_cleared,
-        'r2_cleared_pct': pct(r2_cleared, r1_cleared),
-        'hired': hired,
-        'hired_pct': pct(hired, r2_cleared),
-        # Same 5 stages, each against Applicants instead of the stage right
-        # before it - shown only once a row is expanded (see reports.html).
-        'qualified_pct_total': pct(qualified, applicants),
-        'shortlisted_pct_total': pct(shortlisted, applicants),
-        'r1_cleared_pct_total': pct(r1_cleared, applicants),
-        'r2_cleared_pct_total': pct(r2_cleared, applicants),
-        'hired_pct_total': pct(hired, applicants),
-    }
+    # Each stage's "total" = candidates who got a decision AT that stage:
+    # moved on (converted) or rejected there. Candidates still pending there
+    # (not yet called/interviewed/decided, or on Hold) are left out, so the
+    # conversion % is converted / decided. Future Prospects (held before
+    # screening) count as rejected at CV screening, as everywhere else.
+    stages = [
+        ('qualified', 'Qualified', qualified, applicants),
+        ('shortlisted', 'Shortlisted', shortlisted, shortlisted + flow_count(qs, 'rejected_after_call')),
+        ('r1_cleared', 'Round 1 Cleared', r1_cleared, r1_cleared + flow_count(qs, 'rejected_after_round1')),
+        ('r2_cleared', 'Round 2 Cleared', r2_cleared, r2_cleared + flow_count(qs, 'rejected_after_round2')),
+        ('hired', 'Hired', hired, hired + flow_count(qs, 'rejected_after_final')),
+    ]
+    metrics = {'applicants': applicants, 'stages': []}
+    for key, label, converted, total in stages:
+        stage = {
+            'key': key, 'label': label, 'count': converted, 'total': total,
+            'pct': pct(converted, total),
+            # Against Applicants overall - shown once a row is expanded.
+            'pct_total': pct(converted, applicants),
+        }
+        metrics['stages'].append(stage)
+        metrics[key] = converted
+        metrics[f'{key}_total'] = total
+        metrics[f'{key}_pct'] = stage['pct']
+        metrics[f'{key}_pct_total'] = stage['pct_total']
+    return metrics
 
 
 def _last_12_months():

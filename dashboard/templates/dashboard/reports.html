@@ -45,6 +45,10 @@
 .rep-row .col.hired .rep-num { color: var(--accent-teal); }
 .rep-num { font-weight: 600; }
 .rep-pct { font-size: .66rem; color: var(--text-muted); margin-left: 1px; }
+/* "converted /total": the total (everyone decided at that stage - moved on
+   or rejected there, pending/on-hold left out) as a small, muted suffix. */
+.rep-of { font-size: .62rem; font-weight: 500; color: var(--text-muted); margin-left: 1px; }
+.rep-kpi .val .rep-of { font-size: .8rem; font-weight: 600; }
 
 .rep-toggle {
   justify-self: end; flex: 0 0 22px; width: 22px; height: 22px; border-radius: 999px;
@@ -165,51 +169,17 @@
           <div class="val-row"><span class="val">{{ applicants }}</span></div>
         </div>
       </div>
+      {% for s in stages %}
       <div class="col-lg-2 col-md-4 col-6">
         <div class="rep-kpi">
-          <div class="lbl">Qualified</div>
+          <div class="lbl">{{ s.label }}</div>
           <div class="val-row">
-            <span class="val">{{ qualified }}</span>
-            <span class="rep-pct">{% if qualified_pct_total is not None %}<span class="rep-pctval" data-pct="{{ qualified_pct_total }}" data-denom="{{ applicants }}">{{ qualified_pct_total|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span>
+            <span class="val{% if s.key == 'hired' %} accent{% endif %}">{{ s.count }}<span class="rep-of">/{{ s.total }}</span></span>
+            <span class="rep-pct">{% if s.pct is not None %}<span class="rep-pctval" data-pct="{{ s.pct }}" data-denom="{{ s.total }}">{{ s.pct|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span>
           </div>
         </div>
       </div>
-      <div class="col-lg-2 col-md-4 col-6">
-        <div class="rep-kpi">
-          <div class="lbl">Shortlisted</div>
-          <div class="val-row">
-            <span class="val">{{ shortlisted }}</span>
-            <span class="rep-pct">{% if shortlisted_pct_total is not None %}<span class="rep-pctval" data-pct="{{ shortlisted_pct_total }}" data-denom="{{ applicants }}">{{ shortlisted_pct_total|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span>
-          </div>
-        </div>
-      </div>
-      <div class="col-lg-2 col-md-4 col-6">
-        <div class="rep-kpi">
-          <div class="lbl">Round 1 Cleared</div>
-          <div class="val-row">
-            <span class="val">{{ r1_cleared }}</span>
-            <span class="rep-pct">{% if r1_cleared_pct_total is not None %}<span class="rep-pctval" data-pct="{{ r1_cleared_pct_total }}" data-denom="{{ applicants }}">{{ r1_cleared_pct_total|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span>
-          </div>
-        </div>
-      </div>
-      <div class="col-lg-2 col-md-4 col-6">
-        <div class="rep-kpi">
-          <div class="lbl">Round 2 Cleared</div>
-          <div class="val-row">
-            <span class="val">{{ r2_cleared }}</span>
-            <span class="rep-pct">{% if r2_cleared_pct_total is not None %}<span class="rep-pctval" data-pct="{{ r2_cleared_pct_total }}" data-denom="{{ applicants }}">{{ r2_cleared_pct_total|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span>
-          </div>
-        </div>
-      </div>
-      <div class="col-lg-2 col-md-4 col-6">
-        <div class="rep-kpi">
-          <div class="lbl">Hired</div>
-          <div class="val-row">
-            <span class="val accent">{{ hired }}</span>
-            <span class="rep-pct">{% if hired_pct_total is not None %}<span class="rep-pctval" data-pct="{{ hired_pct_total }}" data-denom="{{ applicants }}">{{ hired_pct_total|floatformat:0 }}%</span>{% else %}&ndash;{% endif %}</span>
-          </div>
-        </div>
-      </div>
+      {% endfor %}
     </div>
 
     <div class="rep-panel mb-3">

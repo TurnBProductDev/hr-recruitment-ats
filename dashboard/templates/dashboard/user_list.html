@@ -77,7 +77,7 @@
           </td>
           <td class="text-nowrap text-end">
             <a href="{% url 'user_edit' account.pk %}" class="btn btn-sm btn-outline-app">Edit</a>
-            <a href="{% url 'user_history' %}?account={{ account.pk }}" class="btn btn-sm btn-outline-app" title="Who changed this account, and when"><i class="bi bi-clock-history"></i><span class="visually-hidden">History</span></a>
+            <a href="{% url 'user_history' %}?account={{ account.pk }}" class="btn btn-sm btn-outline-app position-relative" title="Who changed this account, and when"><i class="bi bi-clock-history"></i><span class="visually-hidden">History</span></a>
             <form method="post" action="{% url 'user_toggle_active' account.pk %}" class="d-inline"
                   onsubmit="return confirm('{% if account.is_active %}Deactivate{% else %}Activate{% endif %} {{ account.get_full_name|default:account.username }}?');">
               {% csrf_token %}

@@ -842,11 +842,33 @@ class ReportsViewTests(TestCase):
         self.assertEqual(response.context['qualified'], 4)
         self.assertEqual(response.context['qualified_pct'], 100.0)  # 4 of 4 applicants
 
-    def test_r1_cleared_pct_is_based_on_those_who_reached_round1(self):
+    def test_stage_total_counts_only_decided_candidates(self):
+        """Round 1's total = cleared it + rejected at it. 'Round1' (still
+        waiting on their interview) is pending, so it's left out."""
         response = self._get()
-        # 3 reached Round 1 (Round1/ClearedR1/Hired); 2 of those cleared it.
         self.assertEqual(response.context['shortlisted'], 3)
+        self.assertEqual(response.context['r1_cleared'], 2)
+        self.assertEqual(response.context['r1_cleared_total'], 2)
+        self.assertEqual(response.context['r1_cleared_pct'], 100.0)
+
+    def test_rejection_at_a_stage_lowers_its_conversion(self):
+        S = Candidate.Status
+        c = Candidate.objects.create(job=self.job, full_name='RejR1', email='rejr1@example.com')
+        services.record_creation(c)
+        for status in (S.SHORTLISTED, S.ROUND1, S.REJECTED):
+            services.change_status(c, status)
+        response = self._get()
+        self.assertEqual(response.context['r1_cleared_total'], 3)
         self.assertEqual(response.context['r1_cleared_pct'], round(2 / 3 * 100, 4))
+        self.assertContains(response, '<span class="rep-of">/3</span>')
+
+    def test_on_hold_is_pending_not_rejected(self):
+        S = Candidate.Status
+        c = Candidate.objects.create(job=self.job, full_name='HeldR1', email='heldr1@example.com')
+        services.record_creation(c)
+        for status in (S.SHORTLISTED, S.ROUND1, S.SCREENING_HOLD):
+            services.change_status(c, status)
+        self.assertEqual(self._get().context['r1_cleared_total'], 2)
 
     def test_r2_cleared(self):
         response = self._get()
@@ -928,10 +950,12 @@ class ReportsViewTests(TestCase):
         reports.html/_reports_row.html."""
         response = self._get()
         row = next(r for r in response.context['by_job'] if r['name'] == 'Program Manager')
-        self.assertEqual(row['shortlisted_pct'], round(3 / 4 * 100, 4))        # vs Qualified
-        self.assertEqual(row['shortlisted_pct_total'], round(3 / 4 * 100, 4))  # vs Applicants (same here)
-        self.assertEqual(row['r2_cleared_pct'], round(1 / 2 * 100, 4))         # vs Round 1 Cleared
-        self.assertEqual(row['r2_cleared_pct_total'], round(1 / 4 * 100, 4))   # vs Applicants
+        # Default view: converted / decided at that stage (nobody rejected
+        # after the call or at Round 2 here, so 100%); expanded: vs Applicants.
+        self.assertEqual(row['shortlisted_pct'], 100.0)
+        self.assertEqual(row['shortlisted_pct_total'], round(3 / 4 * 100, 4))
+        self.assertEqual(row['r2_cleared_pct'], 100.0)
+        self.assertEqual(row['r2_cleared_pct_total'], round(1 / 4 * 100, 4))
 
     def test_reports_page_renders_the_new_columns_and_expand_toggle(self):
         response = self._get()
@@ -1253,4 +1277,5 @@ class ReportsRatioPrecisionTests(TestCase):
         # The Round 1 Cleared cell renders a bare dash, never wrapped as a
         # toggleable .rep-pctval - so the %/Ratio switch can't turn it into
         # "0%"/"0:0" on its own.
-        self.assertContains(response, '<span class="rep-num">0</span> <span class="rep-pct">(&ndash;)</span>')
+        self.assertContains(response, '<span class="rep-of">/0</span>')
+        self.assertNotContains(response, 'data-denom="0"')
