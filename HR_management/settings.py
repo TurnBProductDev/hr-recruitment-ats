@@ -97,6 +97,15 @@ WSGI_APPLICATION = 'HR_management.wsgi.application'
 # switch to PostgreSQL, or use an Azure SQL compatible ODBC engine the same way.
 DB_ENGINE = os.environ.get("DB_ENGINE", "sqlite")
 
+# `manage.py test` ALWAYS uses SQLite, whatever .env says. Running it against
+# Azure SQL makes Django create a `test_hr_recruitment` database there, which
+# Azure provisions as General Purpose 2 vCore (~Rs.1,450/day) and which is
+# left behind if the run is interrupted. That happened on 2026-09-09 and again
+# on 2026-11-12 (billed until 2026-11-25) - this guard makes it impossible.
+import sys as _sys
+if len(_sys.argv) > 1 and _sys.argv[1] == "test":
+    DB_ENGINE = "sqlite"
+
 if DB_ENGINE == "postgres":
     DATABASES = {
         'default': {
