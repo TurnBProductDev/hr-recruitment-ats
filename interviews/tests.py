@@ -6,8 +6,6 @@ Run against sqlite so the live Azure DB is never touched:
 from datetime import datetime
 from unittest import mock
 
-import requests
-
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.cache import cache
@@ -959,22 +957,24 @@ class InterviewerPortalTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b'%PDF-1.4 upload')
 
-    def test_sharepoint_only_cv_explains_instead_of_bare_404(self):
+    def test_sharepoint_only_cv_sends_the_interviewer_to_sharepoint(self):
+        """No copy of our own: the server can't sign in to SharePoint, so the
+        Interviewer's browser goes to the org-wide link and their own turnb.com
+        sign-in opens it (as for HR)."""
         self.candidate.resume_url = 'https://netorg519925.sharepoint.com/:b:/s/TeamHR/abc'
         self.candidate.save()
         self.client.force_login(self.interviewer)
-        for upstream in (mock.Mock(status_code=200, content=b'<html>Sign in</html>',
-                                   headers={'Content-Type': 'text/html; charset=utf-8'}), None):
-            with self.subTest(sign_in_page=upstream is not None):
-                with mock.patch('candidates.views.requests.get') as get:
-                    if upstream is None:
-                        get.side_effect = requests.ConnectionError()
-                    else:
-                        get.return_value = upstream
-                        upstream.raise_for_status = mock.Mock()
-                    response = self.client.get(reverse('candidate_cv', args=[self.candidate.pk]))
-                self.assertEqual(response.status_code, 404)
-                self.assertContains(response, 'ask HR to upload the CV', status_code=404)
+        with mock.patch('candidates.views.requests.get') as get:
+            response = self.client.get(reverse('candidate_cv', args=[self.candidate.pk]))
+        self.assertRedirects(response, self.candidate.resume_url, fetch_redirect_response=False)
+        get.assert_not_called()
+
+    def test_still_cannot_open_an_unrelated_candidates_sharepoint_cv(self):
+        self.other_candidate.resume_url = 'https://netorg519925.sharepoint.com/:b:/s/TeamHR/xyz'
+        self.other_candidate.save()
+        self.client.force_login(self.interviewer)
+        response = self.client.get(reverse('candidate_cv', args=[self.other_candidate.pk]))
+        self.assertEqual(response.status_code, 404)
 
     def test_hr_still_goes_straight_to_sharepoint(self):
         self.candidate.resume_url = 'https://netorg519925.sharepoint.com/:b:/s/TeamHR/abc'

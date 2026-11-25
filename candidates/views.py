@@ -2,6 +2,7 @@ import base64
 import json
 import logging
 import mimetypes
+from urllib.parse import urlparse
 
 import openpyxl
 import requests
@@ -1371,6 +1372,11 @@ class CandidateUpdateView(GroupRequiredMixin, UpdateView):
         return reverse('candidate_timeline', args=[self.object.pk])
 
 
+def _is_sharepoint(url):
+    host = (urlparse(url).hostname or '').lower()
+    return host == 'sharepoint.com' or host.endswith('.sharepoint.com')
+
+
 @method_decorator(xframe_options_exempt, name='dispatch')
 class CandidateCvView(GroupRequiredMixin, View):
     """The one place any template links to view a candidate's CV. Resolves
@@ -1449,13 +1455,17 @@ class CandidateCvView(GroupRequiredMixin, View):
                 if response is not None:
                     return response
 
+        if is_interviewer and local_file is None and _is_sharepoint(target):
+            # A SharePoint CV goes to the Interviewer's own browser, exactly as
+            # for HR: the intake makes "anyone in the organisation" links, so
+            # their own turnb.com sign-in opens it. Fetching it server-side
+            # (below) can never work - the server has no SharePoint login, so
+            # this 404'd for every SharePoint CV. Agreed with HR 2026-11-25
+            # that interviewers seeing the CV in SharePoint is fine.
+            return redirect(target)
         if is_interviewer:
-            # Keep the Interviewer entirely on our own domain rather than
-            # sending their browser to the CV's actual storage location - for
-            # a SharePoint-hosted CV that's a sharing link into the wider
-            # Careers document library (breadcrumbs/"back to folder" and
-            # all), which is well outside what this restricted role should
-            # browse. Fetch and stream the bytes instead of redirecting.
+            # Otherwise keep the Interviewer on our own domain: fetch and
+            # stream the bytes instead of redirecting.
             if local_file is not None:
                 # Our own upload: read it off storage - its .url is a relative
                 # /media/ path, which requests.get can't fetch.
@@ -1472,18 +1482,8 @@ class CandidateCvView(GroupRequiredMixin, View):
                 upstream = requests.get(target, timeout=(10, 30))
                 upstream.raise_for_status()
             except requests.RequestException:
-                upstream = None
-            content_type = (upstream.headers.get('Content-Type') or 'application/pdf') if upstream else ''
-            # An external link the server can't open - typically SharePoint,
-            # which refuses us or answers with its sign-in page (HTML) since
-            # the server has no SharePoint login - gets an explanation rather
-            # than a bare 404 or Microsoft's login page in the CV tab.
-            if upstream is None or (content_type.startswith('text/html')
-                                    and not cv_storage.is_our_blob_url(target)):
-                return HttpResponse(
-                    '<p style="font-family:sans-serif;padding:24px">This CV couldn\'t be opened here - '
-                    'it is stored in SharePoint, which the interviewer portal can\'t access. Please ask HR '
-                    'to upload the CV on the candidate\'s Edit page; it will then open here.</p>', status=404)
+                raise Http404('Could not load the CV.')
+            content_type = upstream.headers.get('Content-Type') or 'application/pdf'
             response = HttpResponse(upstream.content, content_type=content_type)
             response['Content-Disposition'] = 'inline; filename="candidate-cv"'
             return response
