@@ -148,14 +148,19 @@ BEGIN
         RETURN;
     END
 
-    -- Duplicate + blacklist detection
+    -- Duplicate + blacklist detection. Mirror of candidates.services.email_blacklisted:
+    -- the registry flag survives the blacklisted record being deleted.
     DECLARE @is_dup bit = CASE WHEN EXISTS (
         SELECT 1 FROM dbo.candidates_emailregistry WHERE LOWER(email) = @email_norm) THEN 1 ELSE 0 END;
     DECLARE @is_black bit = CASE WHEN EXISTS (
+        SELECT 1 FROM dbo.candidates_emailregistry
+        WHERE LOWER(email) = @email_norm AND blacklisted_at IS NOT NULL) OR EXISTS (
         SELECT 1 FROM dbo.candidates_blacklist b
         JOIN dbo.candidates_candidate c ON c.id = b.candidate_id
         WHERE LOWER(c.email) = @email_norm) THEN 1 ELSE 0 END;
-    DECLARE @status nvarchar(30) = CASE WHEN @is_black = 1 THEN 'BLACKLISTED' ELSE 'OPEN' END;
+    -- Always lands Open: the web app's blacklist rule (candidates/duplicate_rule.py,
+    -- run before any signed-in page) rejects a blacklisted email straight away.
+    DECLARE @status nvarchar(30) = 'OPEN';
 
     -- Candidate code: ID + current year + 5-digit sequence (resets each year), e.g. ID202600001
     DECLARE @prefix nvarchar(10) = 'ID' + CAST(YEAR(@now) AS nvarchar(4));

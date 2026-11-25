@@ -4,11 +4,13 @@ Rejected status-history row (CandidateStatusHistory.reject_reason); "Other"
 also needs the typed reason (reject_reason_other). Any extra remarks stay
 in the row's normal `remarks`.
 
-DUPLICATE is system-only: the 6-month same-vacancy rule
-(candidates/duplicate_rule.py) uses it; it's never offered to HR.
+DUPLICATE and BLACKLISTED_EARLIER are system-only: the 6-month same-vacancy
+rule and the blacklist rule (candidates/duplicate_rule.py) use them; they're
+never offered to HR.
 """
 OTHER = 'OTHER'
 DUPLICATE = 'DUPLICATE'
+BLACKLISTED_EARLIER = 'BLACKLISTED_EARLIER'
 INTERVIEW_PERFORMANCE = 'INTERVIEW_PERFORMANCE'
 
 # (code, label) in the order HR sees them.
@@ -28,7 +30,8 @@ CHOICES = [
     ('POSITION_CLOSED', 'Position Closed / Filled'),
     (OTHER, 'Other'),
 ]
-SYSTEM_CHOICES = [(DUPLICATE, 'Duplicate Application')]
+SYSTEM_CHOICES = [(DUPLICATE, 'Duplicate Application'),
+                  (BLACKLISTED_EARLIER, 'Blacklisted Earlier')]
 ALL_CHOICES = CHOICES + SYSTEM_CHOICES
 LABELS = dict(ALL_CHOICES)
 SELECTABLE = {code for code, _ in CHOICES}

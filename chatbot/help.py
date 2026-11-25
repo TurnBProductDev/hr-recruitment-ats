@@ -35,7 +35,7 @@ CANDIDATE PIPELINE (statuses, in order)
 - Round 2 (status INTERVIEW): cleared Round 1; final interview round.
 - Final Selection: cleared Round 2; awaiting the hire decision.
 - Hired.
-- Rejected / Blacklisted: out of the process (Blacklisted also blocks future applications).
+- Rejected / Blacklisted: out of the process (Blacklisted also blocks future applications: any later application from that email, for any vacancy and with no time limit, is auto-rejected with reason "Blacklisted Earlier" and can't be reopened - even if the blacklisted record is deleted. Undoing the original blacklisting lifts it).
 - Hold: paused at whatever stage they were at; resuming continues from the next stage. A Hold taken before
   screening makes them a Future Prospect.
 

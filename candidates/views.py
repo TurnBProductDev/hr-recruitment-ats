@@ -1540,6 +1540,9 @@ class CandidateSetStatusView(GroupRequiredMixin, View):
         if not reason:
             messages.error(request, REMARKS_REQUIRED)
             return redirect('candidate_timeline', pk=pk)
+        if target not in (STATUS.REJECTED, STATUS.BLACKLISTED) and services.locked_by_blacklist(candidate):
+            messages.error(request, services.BLACKLIST_LOCKED)
+            return redirect('candidate_timeline', pk=pk)
 
         _settle_round_interview(candidate, target)
 
@@ -1667,6 +1670,10 @@ class CandidateStatusActionView(GroupRequiredMixin, View):
         reason = request.POST.get('reason', '').strip()
         performed_by = _performed_by(request)
         reject_code = reject_other = None
+        if (self.target_status not in (STATUS.REJECTED, STATUS.BLACKLISTED)
+                and services.locked_by_blacklist(candidate)):
+            messages.error(request, services.BLACKLIST_LOCKED)
+            return redirect(request.POST.get('next') or reverse('candidate_timeline', args=[pk]))
         if self.target_status == STATUS.REJECTED:
             # Reject needs a Reject Reason; the remarks are optional extra detail.
             reject_code, reject_other, error = reject_reasons.from_post(request.POST)
@@ -1858,6 +1865,9 @@ class CandidateRevertLastActionView(GroupRequiredMixin, View):
             return redirect(next_url)
         kind, obj, _ = max(candidates_for_latest, key=lambda c: c[2])
 
+        if kind == 'status' and services.locked_by_blacklist(candidate):
+            messages.error(request, services.BLACKLIST_LOCKED)
+            return redirect(next_url)
         if kind == 'status':
             self._undo_status(request, candidate, obj)
         elif kind == 'interview':
@@ -1883,6 +1893,7 @@ class CandidateRevertLastActionView(GroupRequiredMixin, View):
             bl = candidate.blacklist_entries.order_by('-blacklisted_at').first()
             if bl:
                 bl.delete()
+            services.unblacklist_email_if_clear(candidate.email)
         # The status being undone may have had an interview allocated/scheduled
         # for it (e.g. Round 1 -> an interview, then Undo back to Tele Screening)
         # - that interview was only ever justified by the status change that no

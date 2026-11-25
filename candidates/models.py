@@ -429,6 +429,12 @@ class EmailRegistry(models.Model):
     )
     application_count = models.PositiveIntegerField(default=1)
     last_applied_at = models.DateTimeField(auto_now=True)
+    # Set the first time any application from this email is blacklisted;
+    # cleared only when that blacklisting is undone. Lives here rather than
+    # only in Blacklist (which cascades away with its candidate) so deleting
+    # the blacklisted record never lets the email back in - see
+    # candidates/duplicate_rule.py.
+    blacklisted_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.email} ({self.application_count} applications)"

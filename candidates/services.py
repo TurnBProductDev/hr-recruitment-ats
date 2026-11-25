@@ -27,18 +27,39 @@ def check_email(email):
     """Look up an applicant's email before creating a Candidate row.
 
     Returns (is_duplicate, is_blacklisted):
-      - blacklisted: this email has an active Blacklist entry -> new
-        application is auto-blacklisted too.
-      - duplicate: email already exists in the registry (a "Reapply") but
-        is not blacklisted.
+      - blacklisted: this email was blacklisted before (email_blacklisted) ->
+        the new application is flagged, and the blacklist rule in
+        candidates/duplicate_rule.py auto-rejects it.
+      - duplicate: email already exists in the registry (a "Reapply").
       - neither: brand new applicant.
     """
     registry_entry = EmailRegistry.objects.filter(email__iexact=email).first()
     if registry_entry is None:
         return False, False
+    return True, email_blacklisted(email)
 
-    is_blacklisted = Blacklist.objects.filter(candidate__email__iexact=email).exists()
-    return True, is_blacklisted
+
+def email_blacklisted(email):
+    """True if any application from this email was ever blacklisted (and that
+    wasn't undone) - even if that candidate record has since been deleted."""
+    if not email:
+        return False
+    return (EmailRegistry.objects.filter(email__iexact=email, blacklisted_at__isnull=False).exists()
+            or Blacklist.objects.filter(candidate__email__iexact=email).exists())
+
+
+def locked_by_blacklist(candidate):
+    """A later application auto-rejected because its email is blacklisted:
+    it must stay Rejected (no reopen, no moving it on, no undo). The record
+    HR actually blacklisted isn't locked here - its Undo is how a mistaken
+    blacklisting is lifted."""
+    return (candidate.status == STATUS.REJECTED
+            and not candidate.blacklist_entries.exists()
+            and email_blacklisted(candidate.email))
+
+
+BLACKLIST_LOCKED = ('This email address was blacklisted earlier, so this application stays Rejected. '
+                    'To lift it, undo the blacklisting on the original application.')
 
 
 def register_application(candidate):
@@ -161,11 +182,24 @@ def _last_hold_row(candidate):
 
 
 def blacklist_candidate(candidate, reason, user=None, performed_by=None):
-    Blacklist.objects.create(candidate=candidate, reason=reason, blacklisted_by=user)
+    entry = Blacklist.objects.create(candidate=candidate, reason=reason, blacklisted_by=user)
     candidate.is_blacklisted = True
     candidate.save(update_fields=['is_blacklisted'])
+    if candidate.email and not candidate.email.lower().endswith('@' + PLACEHOLDER_EMAIL_DOMAIN):
+        registry = EmailRegistry.objects.filter(email__iexact=candidate.email).first()
+        if registry is None:  # e.g. a record imported without a registry row
+            registry = EmailRegistry.objects.create(email=candidate.email.lower(), first_candidate=candidate)
+        if registry.blacklisted_at is None:
+            EmailRegistry.objects.filter(pk=registry.pk).update(blacklisted_at=entry.blacklisted_at)
     change_status(candidate, STATUS.BLACKLISTED, user=user, remarks=reason, performed_by=performed_by)
     return candidate
+
+
+def unblacklist_email_if_clear(email):
+    """After a blacklisting is undone: clear the email's flag unless another
+    of its applications is still blacklisted."""
+    if not Blacklist.objects.filter(candidate__email__iexact=email).exists():
+        EmailRegistry.objects.filter(email__iexact=email).update(blacklisted_at=None)
 
 
 def create_from_parsed_cv(fields, job, source, user=None, performed_by=None, remarks=None):
@@ -207,7 +241,9 @@ def create_from_parsed_cv(fields, job, source, user=None, performed_by=None, rem
         source=source,
         is_duplicate=is_duplicate,
         is_blacklisted=is_blacklisted,
-        status=STATUS.BLACKLISTED if is_blacklisted else STATUS.OPEN,
+        # A blacklisted email still arrives Open, then duplicate_rule's
+        # blacklist check (run straight after, see bulk.py) rejects it.
+        status=STATUS.OPEN,
     )
     candidate.save()
 
@@ -267,11 +303,11 @@ def submit_application(candidate):
     is_duplicate, is_blacklisted = check_email(candidate.email)
     candidate.is_duplicate = is_duplicate
     candidate.is_blacklisted = is_blacklisted
-    candidate.status = STATUS.BLACKLISTED if is_blacklisted else STATUS.OPEN
+    candidate.status = STATUS.OPEN
     candidate.save()
     register_application(candidate)
     record_creation(candidate)
-    # 6-month same-vacancy repeat rule (candidates/duplicate_rule.py).
+    # Blacklist rule + 6-month same-vacancy repeat rule (candidates/duplicate_rule.py).
     from . import duplicate_rule  # local: duplicate_rule imports services
     duplicate_rule.run_pending()
     candidate.refresh_from_db()

@@ -1,4 +1,12 @@
-"""Auto-reject repeat applications for the same vacancy within 6 months.
+"""Auto-reject applications from blacklisted emails, and repeat applications
+for the same vacancy within 6 months.
+
+Blacklist rule (checked first, no time limit, any vacancy incl. General
+Application): if this email was ever blacklisted (services.email_blacklisted
+- survives the blacklisted record being deleted), the new application is
+rejected straight away with reason "Blacklisted Earlier", Done by "Blacklist
+Check", and is locked there (services.locked_by_blacklist) - it can't be
+reopened, moved on, or undone back to Open.
 
 When the same email applies again for the same vacancy within 6 months of an
 earlier application, the earlier application decides what happens:
@@ -55,16 +63,43 @@ def months_before(dt, months):
     return dt.replace(year=year, month=month, day=day)
 
 
+BLACKLIST_PERFORMED_BY = 'Blacklist Check'
+
+
 def _reject(candidate, remarks):
     from .services import change_status  # local: services imports models, keep this importable
     from .reject_reasons import DUPLICATE
     change_status(candidate, STATUS.REJECTED, remarks=remarks, performed_by=PERFORMED_BY, reject_reason=DUPLICATE)
 
 
+def _apply_blacklist(candidate):
+    """Reject a new application whose email was blacklisted before. Also
+    catches one the careers-mailbox stored procedure inserted already marked
+    Blacklisted - but never the record HR blacklisted themselves."""
+    from . import services
+    from .reject_reasons import BLACKLISTED_EARLIER
+    if candidate.status not in (STATUS.OPEN, STATUS.BLACKLISTED) or not candidate.email:
+        return None
+    if candidate.email.lower().endswith('@' + PLACEHOLDER_EMAIL_DOMAIN):
+        return None
+    if candidate.blacklist_entries.exists() or not services.email_blacklisted(candidate.email):
+        return None
+    if not candidate.is_blacklisted:
+        candidate.is_blacklisted = True
+        candidate.save(update_fields=['is_blacklisted'])
+    services.change_status(
+        candidate, STATUS.REJECTED, performed_by=BLACKLIST_PERFORMED_BY, reject_reason=BLACKLISTED_EARLIER,
+        remarks='Auto-rejected: this email address was blacklisted on an earlier application.')
+    return 'rejected (email blacklisted earlier)'
+
+
 def apply_to(candidate):
-    """Apply the rule to one newly arrived candidate. Returns a short
+    """Apply the rules to one newly arrived candidate. Returns a short
     description of what was done, or None."""
     from .views import GENERAL_APPLICATION  # local: avoids an import cycle
+    result = _apply_blacklist(candidate)
+    if result:
+        return result
     if candidate.status != STATUS.OPEN or not candidate.job_id or not candidate.email:
         return None
     if candidate.email.lower().endswith('@' + PLACEHOLDER_EMAIL_DOMAIN):
