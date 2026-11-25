@@ -1,6 +1,7 @@
 import base64
 import json
 import logging
+import mimetypes
 
 import openpyxl
 import requests
@@ -1405,6 +1406,14 @@ class CandidateCvView(GroupRequiredMixin, View):
         ):
             raise Http404('No CV on file.')
         resume_url = (candidate.resume_url or '').strip()
+        local_file = None  # the app's own uploaded copy, when that's what we serve
+        if (is_interviewer and resume_url and not cv_storage.is_our_blob_url(resume_url)
+                and candidate.resume_blob_url
+                and candidate.resume_blob_url.storage.exists(candidate.resume_blob_url.name)):
+            # An Interviewer's CV is fetched server-side (below), and the server
+            # has no SharePoint sign-in - a SharePoint link always failed for
+            # them (404). Bulk Upload also keeps its own copy, so serve that.
+            resume_url = ''
         load_bytes = None  # set when we can read the file ourselves (Word preview)
         if resume_url:
             if cv_storage.is_our_blob_url(resume_url):
@@ -1418,6 +1427,7 @@ class CandidateCvView(GroupRequiredMixin, View):
                 target = resume_url
         elif candidate.resume_blob_url:
             target = candidate.resume_blob_url.url
+            local_file = candidate.resume_blob_url
             if cv_preview.is_docx(candidate.resume_blob_url.name):
                 def load_bytes():
                     with candidate.resume_blob_url.open('rb') as f:
@@ -1446,12 +1456,34 @@ class CandidateCvView(GroupRequiredMixin, View):
             # Careers document library (breadcrumbs/"back to folder" and
             # all), which is well outside what this restricted role should
             # browse. Fetch and stream the bytes instead of redirecting.
+            if local_file is not None:
+                # Our own upload: read it off storage - its .url is a relative
+                # /media/ path, which requests.get can't fetch.
+                try:
+                    with local_file.open('rb') as f:
+                        body = f.read()
+                except OSError:
+                    raise Http404('Could not load the CV.')
+                content_type = mimetypes.guess_type(local_file.name)[0] or 'application/pdf'
+                response = HttpResponse(body, content_type=content_type)
+                response['Content-Disposition'] = 'inline; filename="candidate-cv"'
+                return response
             try:
                 upstream = requests.get(target, timeout=(10, 30))
                 upstream.raise_for_status()
             except requests.RequestException:
-                raise Http404('Could not load the CV.')
-            content_type = upstream.headers.get('Content-Type') or 'application/pdf'
+                upstream = None
+            content_type = (upstream.headers.get('Content-Type') or 'application/pdf') if upstream else ''
+            # An external link the server can't open - typically SharePoint,
+            # which refuses us or answers with its sign-in page (HTML) since
+            # the server has no SharePoint login - gets an explanation rather
+            # than a bare 404 or Microsoft's login page in the CV tab.
+            if upstream is None or (content_type.startswith('text/html')
+                                    and not cv_storage.is_our_blob_url(target)):
+                return HttpResponse(
+                    '<p style="font-family:sans-serif;padding:24px">This CV couldn\'t be opened here - '
+                    'it is stored in SharePoint, which the interviewer portal can\'t access. Please ask HR '
+                    'to upload the CV on the candidate\'s Edit page; it will then open here.</p>', status=404)
             response = HttpResponse(upstream.content, content_type=content_type)
             response['Content-Disposition'] = 'inline; filename="candidate-cv"'
             return response

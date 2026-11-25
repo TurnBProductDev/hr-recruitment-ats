@@ -6,6 +6,8 @@ Run against sqlite so the live Azure DB is never touched:
 from datetime import datetime
 from unittest import mock
 
+import requests
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.cache import cache
@@ -923,6 +925,64 @@ class InterviewerPortalTests(TestCase):
         self.assertNotIn('Location', response)
         self.assertEqual(response.content, b'%PDF-1.4 fake')
         get.assert_called_once_with('https://example.com/cv.pdf', timeout=(10, 30))
+
+    def _media(self):
+        import shutil
+        import tempfile
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        return override_settings(MEDIA_ROOT=tmp)
+
+    def test_sharepoint_cv_with_our_own_copy_serves_the_copy(self):
+        """Bulk Upload files the CV in SharePoint (resume_url) AND keeps a copy
+        (resume_blob_url). The server can't sign in to SharePoint, so an
+        Interviewer gets the copy - this used to 404 (Dijitha Davis)."""
+        from django.core.files.base import ContentFile
+        with self._media():
+            self.candidate.resume_url = 'https://netorg519925.sharepoint.com/:b:/s/TeamHR/abc'
+            self.candidate.resume_blob_url.save('resume.pdf', ContentFile(b'%PDF-1.4 our copy'), save=True)
+            self.client.force_login(self.interviewer)
+            with mock.patch('candidates.views.requests.get') as get:
+                response = self.client.get(reverse('candidate_cv', args=[self.candidate.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b'%PDF-1.4 our copy')
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+        get.assert_not_called()
+
+    def test_uploaded_cv_only_is_read_from_storage(self):
+        from django.core.files.base import ContentFile
+        with self._media():
+            self.candidate.resume_url = ''
+            self.candidate.resume_blob_url.save('resume.pdf', ContentFile(b'%PDF-1.4 upload'), save=True)
+            self.client.force_login(self.interviewer)
+            response = self.client.get(reverse('candidate_cv', args=[self.candidate.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b'%PDF-1.4 upload')
+
+    def test_sharepoint_only_cv_explains_instead_of_bare_404(self):
+        self.candidate.resume_url = 'https://netorg519925.sharepoint.com/:b:/s/TeamHR/abc'
+        self.candidate.save()
+        self.client.force_login(self.interviewer)
+        for upstream in (mock.Mock(status_code=200, content=b'<html>Sign in</html>',
+                                   headers={'Content-Type': 'text/html; charset=utf-8'}), None):
+            with self.subTest(sign_in_page=upstream is not None):
+                with mock.patch('candidates.views.requests.get') as get:
+                    if upstream is None:
+                        get.side_effect = requests.ConnectionError()
+                    else:
+                        get.return_value = upstream
+                        upstream.raise_for_status = mock.Mock()
+                    response = self.client.get(reverse('candidate_cv', args=[self.candidate.pk]))
+                self.assertEqual(response.status_code, 404)
+                self.assertContains(response, 'ask HR to upload the CV', status_code=404)
+
+    def test_hr_still_goes_straight_to_sharepoint(self):
+        self.candidate.resume_url = 'https://netorg519925.sharepoint.com/:b:/s/TeamHR/abc'
+        self.candidate.save()
+        hr = get_user_model().objects.create_superuser('hrboss', 'hrboss@turnb.com', 'pw')
+        self.client.force_login(hr)
+        response = self.client.get(reverse('candidate_cv', args=[self.candidate.pk]))
+        self.assertRedirects(response, self.candidate.resume_url, fetch_redirect_response=False)
 
     def test_a_later_round_interviewer_sees_the_earlier_rounds_feedback(self):
         self.interview.status = Interview.Status.COMPLETED
