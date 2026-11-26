@@ -25,7 +25,7 @@ class Interview(models.Model):
     class RoundType(models.TextChoices):
         ROUND1 = 'ROUND1', 'Round 1'
         # Plain "Round 2" - what Allocate Interviewer/Manual Slot Allocate
-        # actually offer now (see interviews.forms._simplified_round_type_choices).
+        # actually offer now (new ones only ever get ROUND1/ROUND2 - see interviews.forms._fix_round_field).
         # TECHNICAL/MANAGERIAL/FINAL/HR below predate this: HR could label
         # *what kind* of Round 2 it was, but offering all 4 alongside Round 1
         # just read as "a lot of rounds" with no clear meaning - kept only so

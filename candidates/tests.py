@@ -1279,6 +1279,7 @@ class HoldNamingTests(TestCase):
         return interviewer
 
     def test_undo_right_after_scheduling_deletes_the_interview(self):
+        services.change_status(self.candidate, Candidate.Status.ROUND1)  # interviews are allocated at Round 1/2
         self.client.post(reverse('interview_schedule', args=[self.candidate.pk]), {
             'round_type': Interview.RoundType.ROUND1, 'interviewer': '',
             'scheduled_date': '2026-09-01T10:00', 'mode': Interview.Mode.VIDEO, 'meeting_link': ''})
@@ -1287,6 +1288,7 @@ class HoldNamingTests(TestCase):
         self.assertEqual(self.candidate.interviews.count(), 0)
 
     def test_undo_right_after_allocating_deletes_the_request(self):
+        services.change_status(self.candidate, Candidate.Status.ROUND1)  # interviews are allocated at Round 1/2
         interviewer = self._interviewer()
         self.client.post(reverse('interview_allocate', args=[self.candidate.pk]), {
             'round_type': Interview.RoundType.ROUND1, 'interviewer': interviewer.pk,

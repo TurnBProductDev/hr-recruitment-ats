@@ -3,8 +3,8 @@
   {% for e in form.non_field_errors %}<div class="alert alert-danger py-2 small">{{ e }}</div>{% endfor %}
   <div class="row g-3">
     <div class="col-md-6">
-      <label class="form-label">Round Type</label>
-      {{ form.round_type }}
+      <label class="form-label">Round</label>
+      <div class="form-control bg-light" aria-readonly="true" title="Set from the candidate's current stage"><strong>{{ form.round_label }}</strong></div>
       {% for e in form.round_type.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
     </div>
     <div class="col-md-6">

@@ -100,7 +100,7 @@ class EditableCcTests(_HR):
 class VideoInterviewMeetingTests(_HR):
     def setUp(self):
         super().setUp()
-        self.candidate = Candidate.objects.create(full_name='Riya Paul', email='riya@example.com', job=self.job)
+        self.candidate = Candidate.objects.create(status=Candidate.Status.ROUND1, full_name='Riya Paul', email='riya@example.com', job=self.job)
         self.when = timezone.localtime(timezone.now() + timedelta(days=1)).replace(
             hour=17, minute=30, second=0, microsecond=0)
 

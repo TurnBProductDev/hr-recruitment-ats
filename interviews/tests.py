@@ -109,7 +109,7 @@ class OneOpenInterviewTests(TestCase):
         self.client.force_login(self.user)
         self.job = Job.objects.create(job_code='J1', title='Program Manager')
         self.other_job = Job.objects.create(job_code='J2', title='Analytics Consultant')
-        self.candidate = Candidate.objects.create(
+        self.candidate = Candidate.objects.create(status=Candidate.Status.ROUND1, 
             full_name='Rose E G', email='rose@example.com', job=self.job)
         self.interview = Interview.objects.create(
             candidate=self.candidate, round_type=Interview.RoundType.ROUND1,
@@ -164,7 +164,7 @@ class OneOpenInterviewTests(TestCase):
         self.assertEqual(self.candidate.interviews.count(), 2)
 
     def test_another_candidate_is_unaffected(self):
-        other = Candidate.objects.create(
+        other = Candidate.objects.create(status=Candidate.Status.ROUND1,
             full_name='Nikhil Shaji', email='nikhil@example.com', job=self.job)
         self.client.post(reverse('interview_schedule', args=[other.pk]), {
             'round_type': Interview.RoundType.ROUND1, 'interviewer': '',
@@ -223,12 +223,12 @@ class InterviewerFieldIncludesHiringManagerTests(TestCase):
 
 
 class RoundTypeChoicesTests(TestCase):
-    """Allocate Interviewer / Manual Slot Allocate only offer Round 1 /
-    Round 2 - the older Technical/Managerial/Final/HR Round sub-types
-    (Interview.RoundType) used to all show up alongside Round 1 as if they
-    were 5 independent rounds, which just read as confusing clutter with no
-    clear meaning. The model keeps them so existing records with one still
-    work; see interviews.forms._simplified_round_type_choices."""
+    """Round is never picked by hand - it used to be a dropdown that always
+    started on Round 1, so a Round 2 interview got saved as Round 1 and
+    blocked every later Round 2 allocation (Anna Theresa Antony, 2026-11-25).
+    It is shown read-only and set from the candidate's stage, the allocation
+    being resolved, or (editing) the record's own round - see
+    interviews.forms._fix_round_field."""
 
     def setUp(self):
         self.job = Job.objects.create(job_code='J1', title='Program Manager')
@@ -238,29 +238,84 @@ class RoundTypeChoicesTests(TestCase):
             'panel', 'panel@turnb.com', 'pw', first_name='Sreejith', last_name='K R')
         self.interviewer.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
 
-    def test_new_interview_form_only_offers_round1_and_round2(self):
-        form = InterviewForm(candidate=self.candidate)
-        values = [c[0] for c in form.fields['round_type'].choices]
-        self.assertEqual(values, [Interview.RoundType.ROUND1, Interview.RoundType.ROUND2])
+    def _at(self, status, hold_from=''):
+        Candidate.objects.filter(pk=self.candidate.pk).update(status=status, hold_from_status=hold_from)
+        self.candidate.refresh_from_db()
 
-    def test_new_allocation_form_only_offers_round1_and_round2(self):
-        form = InterviewAllocationForm(candidate=self.candidate)
-        values = [c[0] for c in form.fields['round_type'].choices]
-        self.assertEqual(values, [Interview.RoundType.ROUND1, Interview.RoundType.ROUND2])
+    def _future(self, days=2):
+        return (timezone.now() + timezone.timedelta(days=days)).strftime('%Y-%m-%dT%H:%M')
 
-    def test_editing_an_existing_legacy_subtype_keeps_it_selectable(self):
-        """Resaving an interview that already has one of the older
-        Technical/Managerial/Final/HR Round values (from before this
-        change) must not fail with "not a valid choice" just because the
-        dropdown no longer offers it to everyone by default."""
+    def test_round_is_fixed_to_the_candidates_stage(self):
+        S = Candidate.Status
+        for status, hold_from, expected, label in (
+                (S.ROUND1, '', Interview.RoundType.ROUND1, 'Round 1'),
+                (S.INTERVIEW, '', Interview.RoundType.ROUND2, 'Round 2'),
+                (S.SCREENING_HOLD, S.ROUND1, Interview.RoundType.ROUND1, 'Round 1'),
+                (S.SCREENING_HOLD, S.INTERVIEW, Interview.RoundType.ROUND2, 'Round 2')):
+            with self.subTest(status=status, hold_from=hold_from):
+                self._at(status, hold_from)
+                for form in (InterviewForm(candidate=self.candidate),
+                             InterviewAllocationForm(candidate=self.candidate)):
+                    self.assertTrue(form.fields['round_type'].disabled)
+                    self.assertEqual(form.fields['round_type'].initial, expected)
+                    self.assertEqual(form.round_label, label)
+
+    def test_a_posted_round_is_ignored_and_the_stage_round_saved(self):
+        """Even a tampered POST asking for Round 1 saves Round 2 for a
+        candidate at Round 2 - the exact mistake from 2026-11-25."""
+        self._at(Candidate.Status.INTERVIEW)
+        form = InterviewAllocationForm(candidate=self.candidate, data={
+            'round_type': Interview.RoundType.ROUND1, 'interviewer': self.interviewer.pk, 'mode': 'VIDEO'})
+        self.assertTrue(form.is_valid(), form.errors)
+        form.instance.candidate = self.candidate
+        self.assertEqual(form.save().round_type, Interview.RoundType.ROUND2)
+        form = InterviewForm(candidate=self.candidate, data={
+            'round_type': Interview.RoundType.ROUND1, 'interviewer': '', 'mode': 'VIDEO',
+            'scheduled_date': self._future()})
+        # The allocation above is open, so scheduling is refused - but never
+        # because of the round.
+        form.is_valid()
+        self.assertNotIn('round_type', form.errors)
+
+    def test_schedule_view_saves_the_stage_round(self):
+        self._at(Candidate.Status.INTERVIEW)
+        hr = get_user_model().objects.create_superuser('hr', 'hr@turnb.com', 'pw')
+        self.client.force_login(hr)
+        self.client.post(reverse('interview_schedule', args=[self.candidate.pk]), {
+            'round_type': Interview.RoundType.ROUND1, 'interviewer': '',
+            'scheduled_date': self._future(), 'mode': Interview.Mode.VIDEO, 'meeting_link': ''})
+        self.assertEqual(list(self.candidate.interviews.values_list('round_type', flat=True)),
+                         [Interview.RoundType.ROUND2])
+
+    def test_candidate_not_at_a_round_is_refused(self):
+        for status in (Candidate.Status.OPEN, Candidate.Status.SHORTLISTED, Candidate.Status.FINAL_SELECTION):
+            with self.subTest(status=status):
+                self._at(status)
+                form = InterviewAllocationForm(candidate=self.candidate, data={
+                    'interviewer': self.interviewer.pk, 'mode': 'VIDEO'})
+                self.assertFalse(form.is_valid())
+                self.assertIn("isn't at Round 1 or Round 2", ' '.join(form.non_field_errors()))
+
+    def test_editing_keeps_the_records_own_round_even_a_legacy_subtype(self):
+        """Rescheduling an interview made before this change - one of the
+        older Technical/Managerial/Final/HR values, or saved as the 'wrong'
+        round - keeps that round instead of re-deriving it."""
+        self._at(Candidate.Status.INTERVIEW)
         interview = Interview.objects.create(
             candidate=self.candidate, interviewer=self.interviewer,
             round_type=Interview.RoundType.TECHNICAL,
             scheduled_date=timezone.now() + timezone.timedelta(days=1))
-        form = InterviewForm(instance=interview, candidate=self.candidate)
-        values = [c[0] for c in form.fields['round_type'].choices]
-        self.assertIn(Interview.RoundType.TECHNICAL, values)
-        self.assertIn(Interview.RoundType.ROUND2, values)
+        form = InterviewForm(instance=interview, candidate=self.candidate, data={
+            'interviewer': self.interviewer.pk, 'mode': 'VIDEO', 'scheduled_date': self._future(3)})
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.save().round_type, Interview.RoundType.TECHNICAL)
+
+    def test_manual_slot_allocate_uses_the_allocations_round(self):
+        self._at(Candidate.Status.INTERVIEW)
+        req = InterviewRequest.objects.create(
+            candidate=self.candidate, round_type=Interview.RoundType.ROUND2, interviewer=self.interviewer)
+        form = InterviewForm(candidate=self.candidate, resolving_request=req)
+        self.assertEqual(form.fields['round_type'].initial, Interview.RoundType.ROUND2)
 
     def test_round2_counts_as_a_non_r1_round_everywhere_it_used_to(self):
         """The three hardcoded Round-2 tuples (candidates.views.ROUND2_TYPES,
@@ -302,7 +357,7 @@ class InterviewerConflictTests(TestCase):
         self.other_interviewer = get_user_model().objects.create_user(
             'panel2', 'panel2@example.com', 'pw', first_name='Amrita', last_name='S')
         self.other_interviewer.groups.add(interviewer_group)
-        self.candidate = Candidate.objects.create(
+        self.candidate = Candidate.objects.create(status=Candidate.Status.ROUND1, 
             full_name='Rose E G', email='rose@example.com', job=self.job)
         # Occupies 10:00-11:00 local time - matching how the form interprets
         # the naive datetime-local strings posted below.
@@ -310,7 +365,7 @@ class InterviewerConflictTests(TestCase):
             candidate=self.candidate, interviewer=self.interviewer,
             round_type=Interview.RoundType.ROUND1,
             scheduled_date=timezone.make_aware(datetime(2026, 9, 1, 10, 0)))
-        self.other = Candidate.objects.create(
+        self.other = Candidate.objects.create(status=Candidate.Status.ROUND1, 
             full_name='Nikhil Shaji', email='nikhil@example.com', job=self.job)
 
     def _schedule(self, candidate, **overrides):
@@ -373,7 +428,7 @@ class GraphSchedulingIntegrationTests(TestCase):
         self.interviewer = get_user_model().objects.create_user(
             'panel', 'panel@turnb.com', 'pw', first_name='Sreejith', last_name='K R')
         self.interviewer.groups.add(Group.objects.get_or_create(name=INTERVIEWER)[0])
-        self.candidate = Candidate.objects.create(
+        self.candidate = Candidate.objects.create(status=Candidate.Status.ROUND1, 
             full_name='Rose E G', email='rose@example.com', job=self.job)
 
     def _schedule(self, **overrides):

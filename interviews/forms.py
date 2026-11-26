@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.db import models
 from django.utils import timezone
 
+from candidates.models import Candidate
 from candidates.permissions import HIRING_MANAGER, INTERVIEWER
 
 from . import graph_client
@@ -37,23 +38,55 @@ class BootstrapFormMixin:
                 widget.attrs.setdefault('class', 'form-control')
 
 
-def _simplified_round_type_choices(current_value):
-    """Round Type as just Round 1 / Round 2 - the model still supports the
-    older Technical/Managerial/Final/HR Round sub-types (see
-    Interview.RoundType), but offering all 5 side by side as if they were
-    independent rounds read as "a lot of rounds" with no clear meaning.
-    `current_value` (the bound instance's existing round_type, or None for a
-    new one) stays selectable too if it's one of those older sub-types, so
-    editing/resaving an existing interview/request that already has one
-    doesn't fail with a "not a valid choice" error - only new allocations
-    ever see just the two."""
-    choices = [
-        (Interview.RoundType.ROUND1, Interview.RoundType.ROUND1.label),
-        (Interview.RoundType.ROUND2, Interview.RoundType.ROUND2.label),
-    ]
-    if current_value and current_value not in (Interview.RoundType.ROUND1, Interview.RoundType.ROUND2):
-        choices.append((current_value, dict(Interview.RoundType.choices).get(current_value, current_value)))
-    return choices
+def stage_round(candidate):
+    """The round a candidate at Round 1 / Round 2 (or on hold from one) is
+    due for - ROUND1/ROUND2 - else None (any other stage: no constraint)."""
+    if candidate is None:
+        return None
+    S = Candidate.Status
+    status = candidate.hold_from_status if candidate.status == S.SCREENING_HOLD else candidate.status
+    return {S.ROUND1: Interview.RoundType.ROUND1, S.INTERVIEW: Interview.RoundType.ROUND2}.get(status)
+
+
+NOT_AT_A_ROUND = '{name} isn\'t at Round 1 or Round 2, so there is no interview round to allocate.'
+
+
+def _fix_round_field(form, candidate, resolving_request=None):
+    """Round is never picked by hand - it used to be a dropdown that always
+    started on Round 1, so a Round 2 interview got saved as Round 1, stayed
+    'open' and blocked every later Round 2 allocation (Anna Theresa Antony,
+    2026-11-25). It is shown read-only and decided here:
+      - editing an existing interview/allocation: keeps its own round
+      - Manual Slot Allocate resolving an allocation: that allocation's round
+      - otherwise: the candidate's current stage (stage_round)
+    A disabled field ignores whatever is posted and saves this value."""
+    field = form.fields['round_type']
+    if form.instance.pk:
+        value = form.instance.round_type
+    elif resolving_request is not None:
+        value = resolving_request.round_type
+    else:
+        value = stage_round(candidate)
+    form.fixed_round = value
+    form.round_label = dict(Interview.RoundType.choices).get(value, value) if value else '-'
+    field.disabled = True
+    field.required = False
+    if value:
+        field.initial = value
+        field.choices = [(value, dict(Interview.RoundType.choices).get(value, value))]
+        # Set on the instance too: Django's construct_instance skips a field
+        # absent from POST when the model has a default - and this field's
+        # default is ROUND1, the very mistake this prevents.
+        form.instance.round_type = value
+    else:
+        field.choices = [('', '-')]
+
+
+def _clean_fixed_round(form, cleaned):
+    if not form.fixed_round:
+        raise forms.ValidationError(NOT_AT_A_ROUND.format(
+            name=form.candidate.full_name if form.candidate else 'This candidate'))
+    cleaned['round_type'] = form.fixed_round
 
 
 def _setup_interviewer_field(field, current_id=None):
@@ -139,12 +172,10 @@ class InterviewForm(BootstrapFormMixin, forms.ModelForm):
         # (status=SCHEDULED, interview=...) by whoever saves this form -
         # see InterviewScheduleView.form_valid.
         self.resolving_request = resolving_request
-        self.fields['round_type'].choices = _simplified_round_type_choices(
-            self.instance.round_type if self.instance.pk else None)
+        _fix_round_field(self, self.candidate, resolving_request)
         if self.candidate and not self.is_bound:
             self.fields['candidate_email'].initial = self.candidate.email
             if resolving_request and not self.instance.pk:
-                self.fields['round_type'].initial = resolving_request.round_type
                 self.fields['interviewer'].initial = resolving_request.interviewer_id
                 self.fields['co_interviewer'].initial = resolving_request.co_interviewer_id
                 self.fields['mode'].initial = resolving_request.mode
@@ -165,6 +196,7 @@ class InterviewForm(BootstrapFormMixin, forms.ModelForm):
         # One open interview per candidate. Rescheduling the open interview is
         # fine (it is excluded), scheduling a second one alongside it is not.
         cleaned = super().clean()
+        _clean_fixed_round(self, cleaned)
         if self.candidate:
             clash = Interview.open_for(self.candidate)
             if self.instance.pk:
@@ -237,8 +269,7 @@ class InterviewAllocationForm(BootstrapFormMixin, forms.ModelForm):
     def __init__(self, *args, candidate=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.candidate = candidate
-        self.fields['round_type'].choices = _simplified_round_type_choices(
-            self.instance.round_type if self.instance.pk else None)
+        _fix_round_field(self, candidate)
         # Interviewer group + Hiring Manager - see InterviewForm's __init__ above.
         _setup_interviewer_field(self.fields['interviewer'], self.instance.interviewer_id)
         _setup_co_interviewer_field(self.fields['co_interviewer'], self.instance.co_interviewer_id)
@@ -247,6 +278,7 @@ class InterviewAllocationForm(BootstrapFormMixin, forms.ModelForm):
     def clean(self):
         cleaned = super().clean()
         _clean_co_interviewer(cleaned)
+        _clean_fixed_round(self, cleaned)
         if self.candidate:
             clash = Interview.open_for(self.candidate).first()
             if clash:
