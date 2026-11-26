@@ -1,5 +1,7 @@
-"""Auto-reject applications from blacklisted emails, and repeat applications
-for the same vacancy within 6 months.
+"""Checks run once on every new application: auto-reject applications from
+blacklisted emails and repeat applications for the same vacancy within 6
+months, then auto-score whatever is left in Open on a real vacancy
+(candidates/scoring.auto_score_eligible).
 
 Blacklist rule (checked first, no time limit, any vacancy incl. General
 Application): if this email was ever blacklisted (services.email_blacklisted
@@ -165,7 +167,23 @@ def run_pending():
             done += 1
         if pending:
             state.save(update_fields=['last_candidate_id'])
+            _queue_auto_scoring([c.pk for c in pending])
     return done
+
+
+def _queue_auto_scoring(pks):
+    """Score the new applications still worth scoring - decided only after the
+    whole batch, since a later one can reject an earlier one - once this
+    transaction has committed (so the scoring thread sees the final rows)."""
+    from . import scoring
+    try:
+        eligible = [c.pk for c in Candidate.objects.select_related('job').filter(pk__in=pks).order_by('pk')
+                    if scoring.auto_score_eligible(c)]
+    except Exception:  # noqa: BLE001 - scoring must never block intake
+        logger.exception('Could not pick new applications to auto-score')
+        return
+    if eligible:
+        transaction.on_commit(lambda: scoring.start_scoring(eligible))
 
 
 class DuplicateRuleMiddleware:

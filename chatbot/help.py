@@ -53,8 +53,10 @@ CANDIDATE PROFILE PAGE (open a candidate from the Repository)
 HOW DO I...
 - Add a candidate: Actions > Bulk Upload (CV files), or they arrive automatically from the careers site /
   careers mailbox intake.
-- Score candidates: Actions > Score Candidates and pick the vacancy; or open a candidate and click Re-score on
-  the CV Score card. Re-score uses the latest scoring rules.
+- Score candidates: new applications on a real vacancy (careers mailbox, careers form, Bulk Upload) are scored
+  automatically within about a minute of arriving - not General Application, and not ones auto-rejected as
+  duplicates/blacklisted. To score others: Actions > Score Candidates and pick the vacancy; or open a candidate
+  and click Re-score on the CV Score card. Re-score uses the latest scoring rules.
 - Change how a role is scored: Actions > Scoring Criteria (extra instructions per role), or set the vacancy's
   Must-have requirements under Vacancies; then "Rescore This Role".
 - Move a candidate forward or reject them: open their profile and use the buttons on the current stage card in

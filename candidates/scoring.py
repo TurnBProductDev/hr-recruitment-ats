@@ -92,6 +92,34 @@ def _run_scope(pks):
         connection.close()
 
 
+def auto_score_eligible(candidate):
+    """A newly arrived application that should be scored automatically: still
+    Open after the duplicate/blacklist rules (rejected ones would waste an AI
+    call), on a real vacancy (General Application has nothing to score
+    against), never scored yet, and scoring is configured."""
+    from .views import GENERAL_APPLICATION  # local import - views.py imports this module
+    return bool(
+        candidate.status == STATUS.OPEN
+        and candidate.job_id
+        and (candidate.job.title or '').strip().lower() != GENERAL_APPLICATION.lower()
+        and candidate.match_state == MS.PENDING
+        and match_scoring.is_configured())
+
+
+def start_scoring(pks):
+    """Score these candidates once each, in the background - used for new
+    applications by candidates/duplicate_rule.run_pending (every intake
+    route: careers mailbox, careers form, Bulk Upload). Same per-candidate
+    work as the Score button (score_one), which also makes two overlapping
+    runs safe: each row is claimed before it's scored."""
+    pks = list(pks)
+    if not pks:
+        return None
+    thread = threading.Thread(target=_run_scope, args=(pks,), name='auto-score', daemon=True)
+    thread.start()
+    return thread
+
+
 def start_one(candidate):
     """Kick off (or resume) scoring for exactly one candidate in the
     background - the profile page's manual Re-score action. The caller is
