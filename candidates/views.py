@@ -2365,13 +2365,18 @@ class ScoreCandidatesView(GroupRequiredMixin, View):
         jobs = (Job.objects.exclude(title__iexact=GENERAL_APPLICATION)
                 .annotate(
                     candidate_total=Count('candidates'),
-                    candidate_pending=Count('candidates', filter=Q(
-                        candidates__match_state__in=scoring.PENDING_STATES)),
                     candidate_scored=Count('candidates', filter=Q(
                         candidates__match_state=Candidate.MatchState.DONE)),
                 )
                 .filter(candidate_total__gt=0)
                 .order_by('-created_on'))
+        # Pending = unscored AND still worth scoring (scoring.SCORING_SCOPE) -
+        # what the Score button will actually work through.
+        pending = dict(Candidate.objects.filter(scoring.SCORING_SCOPE, match_state__in=scoring.PENDING_STATES)
+                       .values_list('job_id').annotate(n=Count('id')))
+        jobs = list(jobs)
+        for job in jobs:
+            job.candidate_pending = pending.get(job.pk, 0)
         return render(request, self.template_name, {
             'jobs': jobs,
             'scoring_configured': match_scoring.is_configured(),

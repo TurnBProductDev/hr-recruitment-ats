@@ -99,6 +99,44 @@ class AutoScoringTests(TestCase):
         start.assert_called_once_with([c.pk])
 
 
+class ScoreButtonScopeTests(TestCase):
+    """The Score button, its pending count and progress bar skip candidates
+    already decided (Rejected/Blacklisted/Hired/screened-out hold)."""
+
+    def setUp(self):
+        self.job = Job.objects.create(title='Program Manager', job_code='PM1', status=Job.Status.OPEN)
+        mk = lambda status, **kw: Candidate.objects.create(  # noqa: E731
+            full_name=status, email=f'{status}{len(kw)}@example.com', job=self.job, status=status, **kw)
+        self.open = mk(S.OPEN)
+        self.round1 = mk(S.ROUND1)
+        self.later_hold = mk(S.SCREENING_HOLD, hold_from_status=S.ROUND1)
+        for status in (S.REJECTED, S.BLACKLISTED, S.HIRED):
+            mk(status)
+        mk(S.SCREENING_HOLD, hold_from_status=S.OPEN)  # screened out
+
+    def test_pending_count_and_progress_cover_only_live_candidates(self):
+        self.assertEqual(scoring.pending_count(self.job.pk), 3)
+        counts = scoring.summarise(self.job.pk)
+        self.assertEqual((counts['total'], counts['waiting']), (3, 3))
+
+    def test_score_button_scores_only_live_candidates(self):
+        scored = []
+        with mock.patch('candidates.scoring.score_one',
+                        side_effect=lambda c: (scored.append(c.pk), Candidate.objects.filter(pk=c.pk).update(
+                            match_state=MS.DONE))), mock.patch('candidates.scoring.connection'):
+            scoring._run(self.job.pk)
+        self.assertEqual(sorted(scored), sorted([self.open.pk, self.round1.pk, self.later_hold.pk]))
+        self.assertTrue(scoring.summarise(self.job.pk)['finished'])
+
+    def test_score_candidates_page_shows_the_live_pending_count(self):
+        from django.contrib.auth import get_user_model
+        from django.urls import reverse
+        self.client.force_login(get_user_model().objects.create_superuser('hr', 'hr@example.com', 'pw'))
+        response = self.client.get(reverse('candidate_score'))
+        job = next(j for j in response.context['jobs'] if j.pk == self.job.pk)
+        self.assertEqual(job.candidate_pending, 3)
+
+
 class StartScoringTests(TestCase):
     def test_scores_each_candidate_once(self):
         job = Job.objects.create(title='HRBP', job_code='HR1', status=Job.Status.OPEN)

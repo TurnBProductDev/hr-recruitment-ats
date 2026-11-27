@@ -37,6 +37,11 @@ _INITIAL_HOLD = Q(status=STATUS.SCREENING_HOLD, hold_from_status=STATUS.OPEN)
 ACTIVE_POOL = Q(status__in=(STATUS.SHORTLISTED, STATUS.ROUND1, STATUS.INTERVIEW,
                             STATUS.FINAL_SELECTION)) | (Q(status=STATUS.SCREENING_HOLD) & ~_INITIAL_HOLD)
 OPEN_APPLICATIONS = Q(status=STATUS.OPEN)
+# Who the Score button (start_job_scoring), its pending count and progress
+# bar cover: Open + everyone still in process. Rejected, Blacklisted, Hired
+# and screened-out holds are already decided - scoring them only spends AI
+# calls (Program Manager had 82 of its 83 "pending" in that state).
+SCORING_SCOPE = ACTIVE_POOL | OPEN_APPLICATIONS
 
 
 def start_job_scoring(job):
@@ -145,7 +150,7 @@ def _run_one(candidate_id):
 def _run(job_id):
     try:
         while True:
-            candidate = (Candidate.objects.filter(job_id=job_id, match_state__in=PENDING_STATES)
+            candidate = (Candidate.objects.filter(SCORING_SCOPE, job_id=job_id, match_state__in=PENDING_STATES)
                         .order_by('pk').first())
             if candidate is None:
                 break
@@ -214,7 +219,7 @@ def summarise(job_id):
     counts = {
         'total': 0, 'done': 0, 'error': 0, 'waiting': 0,
     }
-    for row in Candidate.objects.filter(job_id=job_id).values('match_state'):
+    for row in Candidate.objects.filter(SCORING_SCOPE, job_id=job_id).values('match_state'):
         counts['total'] += 1
         if row['match_state'] == MS.DONE:
             counts['done'] += 1
@@ -230,4 +235,4 @@ def summarise(job_id):
 
 
 def pending_count(job_id):
-    return Candidate.objects.filter(job_id=job_id, match_state__in=PENDING_STATES).count()
+    return Candidate.objects.filter(SCORING_SCOPE, job_id=job_id, match_state__in=PENDING_STATES).count()
